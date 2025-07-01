@@ -333,7 +333,31 @@ class TicketService:
                     # Require resolution notes when resolving
                     if 'resolution_notes' not in ticket_data or not ticket_data['resolution_notes']:
                         return {'success': False, 'errors': {'resolution_notes': 'Se requieren notas de resolución'}}
-                    update_data['resolution_notes'] = ticket_data['resolution_notes'].strip()
+
+                    # HISTORIAL REAL: Crear entrada en tabla de resoluciones
+                    resolution_text = ticket_data['resolution_notes'].strip()
+
+                    # Insertar en historial de resoluciones
+                    try:
+                        resolution_data = {
+                            'ticket_id': ticket_id,
+                            'resolution_notes': resolution_text,
+                            'resolved_by': updated_by,
+                            'resolved_at': datetime.utcnow(),
+                            'created_at': datetime.utcnow()
+                        }
+
+                        result = self.db.execute_insert('ticket_resolutions', resolution_data)
+                        if result:
+                            self.logger.info(f"Resolution added to history for ticket {ticket_id}")
+                        else:
+                            self.logger.error(f"Failed to insert resolution for ticket {ticket_id}")
+                    except Exception as e:
+                        self.logger.error(f"Error adding resolution to history: {e}")
+                        # Continuar sin fallar el proceso principal
+
+                    # NO actualizar resolution_notes - Solo usar historial
+                    # update_data['resolution_notes'] = resolution_text  # COMENTADO PARA MANTENER HISTORIAL
                 elif ticket_data['status'] == 'cerrado':
                     update_data['closed_at'] = datetime.utcnow()
                 elif ticket_data['status'] == 'reabierto':
@@ -504,15 +528,43 @@ class TicketService:
             )
 
             if result:
-                # Update ticket's updated_at
+                # LÓGICA AUTOMÁTICA: Si ticket está en "espera_cliente" y cliente comenta → reabrir
+                # Obtener info del usuario que comenta
+                user_info = self.db.execute_query(
+                    'SELECT role FROM users WHERE user_id = %s',
+                    (created_by,),
+                    fetch='one'
+                )
+                is_client_user = user_info and user_info.get('role') in ['client_admin', 'solicitante']
+
+                update_data = {'updated_at': datetime.utcnow()}
+
+                if (ticket['status'] == 'espera_cliente' and
+                    is_client_user and
+                    not new_comment_data['is_internal']):
+
+                    # Reabrir automáticamente el ticket
+                    update_data['status'] = 'reabierto'
+
+                    # Log de actividad para la reapertura automática
+                    self._create_activity_log(
+                        ticket_id,
+                        created_by,
+                        'auto_reopened',
+                        f"Ticket reabierto automáticamente por respuesta del cliente"
+                    )
+
+                    self.logger.info(f"Ticket {ticket['ticket_number']} automatically reopened by client response")
+
+                # Update ticket
                 self.db.execute_update(
                     'tickets',
-                    {'updated_at': datetime.utcnow()},
+                    update_data,
                     'ticket_id = %s',
                     (ticket_id,)
                 )
 
-                # Create activity log
+                # Create activity log for comment
                 comment_type = "nota interna" if new_comment_data['is_internal'] else "comentario"
                 self._create_activity_log(
                     ticket_id,

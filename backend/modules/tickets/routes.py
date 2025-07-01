@@ -518,7 +518,6 @@ def search_tickets():
 
 @tickets_bp.route('/<ticket_id>/status', methods=['PATCH'])
 @jwt_required()
-@require_role(['superadmin', 'admin', 'technician'])
 def update_ticket_status(ticket_id):
     """Update ticket status"""
     try:
@@ -529,10 +528,25 @@ def update_ticket_status(ticket_id):
             return current_app.response_manager.bad_request('status is required')
 
         current_user_id = get_jwt_identity()
+        claims = get_jwt()
+        user_role = claims.get('role')
+        new_status = data['status']
+
+        # Validar permisos por estado
+        if user_role in ['client_admin', 'solicitante']:
+            # Clientes solo pueden cerrar y reabrir
+            if new_status not in ['cerrado', 'reabierto']:
+                return current_app.response_manager.forbidden('Clients can only close or reopen tickets')
+        elif user_role in ['superadmin', 'technician']:
+            # Técnicos pueden cambiar a cualquier estado
+            pass
+        else:
+            return current_app.response_manager.forbidden('Insufficient permissions')
+
         ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
 
         # Update status and resolution notes if provided
-        update_data = {'status': data['status']}
+        update_data = {'status': new_status}
         if 'resolution_notes' in data:
             update_data['resolution_notes'] = data['resolution_notes']
 
@@ -546,3 +560,64 @@ def update_ticket_status(ticket_id):
     except Exception as e:
         current_app.logger.error(f"Update ticket status error: {e}")
         return current_app.response_manager.server_error('Failed to update ticket status')
+
+@tickets_bp.route('/<ticket_id>/resolutions', methods=['GET'])
+@jwt_required()
+def get_ticket_resolutions(ticket_id):
+    """Get ticket resolution history"""
+    try:
+        # Validate ticket ID
+        if not current_app.db_manager.validate_uuid(ticket_id):
+            return current_app.response_manager.bad_request('Invalid ticket ID format')
+
+        # Check if ticket exists and user has access
+        ticket = current_app.db_manager.execute_query(
+            "SELECT ticket_id, client_id FROM tickets WHERE ticket_id = %s",
+            (ticket_id,),
+            fetch='one'
+        )
+
+        if not ticket:
+            return current_app.response_manager.not_found('Ticket')
+
+        # Check access permissions
+        claims = get_jwt()
+        current_user_role = claims.get('role')
+        current_user_client_id = claims.get('client_id')
+
+        if current_user_role in ['client_admin', 'solicitante']:
+            if ticket['client_id'] != current_user_client_id:
+                return current_app.response_manager.forbidden('Access denied')
+
+        # Get resolution history
+        query = """
+        SELECT tr.resolution_id, tr.ticket_id, tr.resolution_notes,
+               tr.resolved_by, tr.resolved_at, tr.created_at,
+               u.name as resolved_by_name, u.role as resolved_by_role
+        FROM ticket_resolutions tr
+        LEFT JOIN users u ON tr.resolved_by = u.user_id
+        WHERE tr.ticket_id = %s
+        ORDER BY tr.resolved_at DESC
+        """
+
+        resolutions = current_app.db_manager.execute_query(query, (ticket_id,))
+
+        # Format resolutions manually since format_resolution_data doesn't exist
+        formatted_resolutions = []
+        for resolution in (resolutions or []):
+            formatted_resolutions.append({
+                'resolution_id': str(resolution['resolution_id']),
+                'ticket_id': str(resolution['ticket_id']),
+                'resolution_notes': resolution['resolution_notes'],
+                'resolved_by': str(resolution['resolved_by']),
+                'resolved_by_name': resolution['resolved_by_name'],
+                'resolved_by_role': resolution['resolved_by_role'],
+                'resolved_at': resolution['resolved_at'].isoformat() if resolution['resolved_at'] else None,
+                'created_at': resolution['created_at'].isoformat() if resolution['created_at'] else None
+            })
+
+        return current_app.response_manager.success(formatted_resolutions)
+
+    except Exception as e:
+        current_app.logger.error(f"Get ticket resolutions error: {e}")
+        return current_app.response_manager.server_error('Failed to get ticket resolutions')
