@@ -91,15 +91,7 @@ class UsersService {
     }
   }
 
-  async getUsersByClient(clientId: string) {
-    try {
-      const response = await apiService.get(`/users/client/${clientId}`);
-      return response;
-    } catch (error: any) {
-      console.error('Error fetching client users:', error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch client users');
-    }
-  }
+
 
   async createSolicitante(userData: CreateSolicitanteData, siteIds: string[] = []) {
     try {
@@ -223,15 +215,7 @@ class UsersService {
     }
   }
 
-  async assignUserToSites(userId: string, siteIds: string[]) {
-    try {
-      const response = await apiService.post(`/users/${userId}/assign-sites`, { site_ids: siteIds });
-      return response;
-    } catch (error: any) {
-      console.error('Error assigning user to sites:', error);
-      throw new Error(error.response?.data?.message || 'Failed to assign user to sites');
-    }
-  }
+
 }
 
 export const usersService = new UsersService();
