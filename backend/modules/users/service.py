@@ -501,9 +501,11 @@ class UserService:
             # For technicians, show all sites
             if user['role'] in ['solicitante', 'client_admin'] and user['client_id']:
                 query = """
-                SELECT s.site_id, s.name, s.address, s.city, s.state,
-                       CASE WHEN usa.user_id IS NOT NULL THEN true ELSE false END as is_assigned
+                SELECT s.site_id, s.name, s.address, s.city, s.state, c.name as client_name,
+                       CASE WHEN usa.user_id IS NOT NULL THEN true ELSE false END as is_assigned,
+                       usa.created_at as assigned_at
                 FROM sites s
+                JOIN clients c ON s.client_id = c.client_id
                 LEFT JOIN user_site_assignments usa ON s.site_id = usa.site_id AND usa.user_id = %s
                 WHERE s.client_id = %s AND s.is_active = true
                 ORDER BY s.name
@@ -513,7 +515,8 @@ class UserService:
                 # Technicians can be assigned to any site
                 query = """
                 SELECT s.site_id, s.name, s.address, s.city, s.state, c.name as client_name,
-                       CASE WHEN usa.user_id IS NOT NULL THEN true ELSE false END as is_assigned
+                       CASE WHEN usa.user_id IS NOT NULL THEN true ELSE false END as is_assigned,
+                       usa.created_at as assigned_at
                 FROM sites s
                 JOIN clients c ON s.client_id = c.client_id
                 LEFT JOIN user_site_assignments usa ON s.site_id = usa.site_id AND usa.user_id = %s
@@ -533,3 +536,51 @@ class UserService:
         except Exception as e:
             self.logger.error(f"Error getting available sites for user {user_id}: {e}")
             return {'success': False, 'error': 'Failed to retrieve available sites'}
+
+    def unassign_user_from_sites(self, user_id: str, site_ids: List[str], unassigned_by: str) -> Dict[str, Any]:
+        """Unassign a user from specific sites"""
+        try:
+            # Validate user exists
+            user = self.db.execute_query(
+                "SELECT user_id, name, role FROM users WHERE user_id = %s AND is_active = true",
+                (user_id,),
+                fetch='one'
+            )
+            if not user:
+                return {'success': False, 'errors': {'user': 'User not found'}}
+
+            # Validate site_ids
+            if not site_ids or not isinstance(site_ids, list):
+                return {'success': False, 'errors': {'sites': 'Site IDs must be provided as a list'}}
+
+            # Remove assignments
+            removed_count = 0
+            for site_id in site_ids:
+                # Check if assignment exists
+                existing = self.db.execute_query(
+                    "SELECT assignment_id FROM user_site_assignments WHERE user_id = %s AND site_id = %s",
+                    (user_id, site_id),
+                    fetch='one'
+                )
+
+                if existing:
+                    # Remove the assignment
+                    self.db.execute_query(
+                        "DELETE FROM user_site_assignments WHERE user_id = %s AND site_id = %s",
+                        (user_id, site_id)
+                    )
+                    removed_count += 1
+
+            self.logger.info(f"User {user['name']} unassigned from {removed_count} sites by {unassigned_by}")
+
+            return {
+                'success': True,
+                'user_id': user_id,
+                'user_name': user['name'],
+                'removed_assignments': removed_count,
+                'message': f'User unassigned from {removed_count} site(s) successfully'
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error unassigning user from sites: {e}")
+            return {'success': False, 'errors': {'general': 'Failed to unassign user from sites'}}

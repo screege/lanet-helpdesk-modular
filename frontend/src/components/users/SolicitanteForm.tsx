@@ -186,8 +186,11 @@ const SolicitanteForm: React.FC<SolicitanteFormProps> = ({
       };
 
       const response = await usersService.createSolicitante(solicitanteData, formData.site_ids);
-      
+
+      console.log('Solicitante creation response:', response);
+
       if (response.success) {
+        console.log('Success! Calling onSuccess...');
         onSuccess();
         // Reset form
         setFormData({
@@ -200,6 +203,7 @@ const SolicitanteForm: React.FC<SolicitanteFormProps> = ({
           site_ids: siteId ? [siteId] : []
         });
       } else {
+        console.log('Failed response:', response);
         setError(response.message || 'Error al crear solicitante');
       }
     } catch (error: any) {

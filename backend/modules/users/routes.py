@@ -516,6 +516,33 @@ def assign_user_to_sites(user_id):
         logger.error(f"Assign user to sites error: {e}")
         return current_app.response_manager.server_error('Failed to assign user to sites')
 
+@users_bp.route('/<user_id>/unassign-sites', methods=['POST'])
+@jwt_required()
+@require_role(['superadmin'])
+def unassign_user_from_sites(user_id):
+    """Unassign a user from sites"""
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        if not data or 'site_ids' not in data:
+            return current_app.response_manager.bad_request('Site IDs are required')
+
+        site_ids = data['site_ids']
+
+        from .service import UserService
+        user_service = UserService(current_app.db_manager, current_app.auth_manager)
+        result = user_service.unassign_user_from_sites(user_id, site_ids, current_user_id)
+
+        if result['success']:
+            return current_app.response_manager.success(result, 'User unassigned from sites successfully')
+        else:
+            return current_app.response_manager.error('Failed to unassign user from sites', 400, details=result.get('errors'))
+
+    except Exception as e:
+        logger.error(f"Unassign user from sites error: {e}")
+        return current_app.response_manager.server_error('Failed to unassign user from sites')
+
 @users_bp.route('/by-client/<client_id>', methods=['GET'])
 @jwt_required()
 def get_client_users(client_id):

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, MapPin, Users, Calendar, User, Mail, Phone, Plus, UserPlus } from 'lucide-react';
+import { X, Building2, MapPin, Users, Calendar, User, Mail, Phone, Plus, UserPlus, UserMinus } from 'lucide-react';
 import { sitesService, Site, SiteUser } from '../../services/sitesService';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 import SolicitanteForm from '../users/SolicitanteForm';
 import AssignUserToSiteModal from '../users/AssignUserToSiteModal';
+import UnassignUserFromSiteModal from '../users/UnassignUserFromSiteModal';
 
 interface SiteDetailProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showCreateSolicitanteForm, setShowCreateSolicitanteForm] = useState(false);
   const [showAssignUserModal, setShowAssignUserModal] = useState(false);
+  const [showUnassignUserModal, setShowUnassignUserModal] = useState(false);
 
   // Check permissions
   const canManageUsers = user?.role === 'superadmin';
@@ -43,6 +45,11 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   const handleAssignUserSuccess = () => {
     setShowAssignUserModal(false);
     loadSiteDetails(); // Reload to show assigned users
+  };
+
+  const handleUnassignUserSuccess = () => {
+    setShowUnassignUserModal(false);
+    loadSiteDetails(); // Reload to show updated users
   };
 
   const loadSiteDetails = async () => {
@@ -199,6 +206,15 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
                 </h4>
                 {canManageUsers && (
                   <div className="flex space-x-2">
+                    {assignedUsers.length > 0 && (
+                      <button
+                        onClick={() => setShowUnassignUserModal(true)}
+                        className="inline-flex items-center px-3 py-2 border border-red-300 text-sm leading-4 font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        <UserMinus className="w-4 h-4 mr-1" />
+                        Quitar Usuarios
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowAssignUserModal(true)}
                       className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

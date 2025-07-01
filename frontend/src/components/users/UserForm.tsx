@@ -185,10 +185,14 @@ const UserForm: React.FC<UserFormProps> = ({
         };
 
         const response = await usersService.createUser(createData);
-        
+
+        console.log('User creation response:', response);
+
         if (response.success) {
+          console.log('Success! Calling onSuccess...');
           onSuccess();
         } else {
+          console.log('Failed response:', response);
           setError(response.message || 'Error al crear usuario');
         }
       }

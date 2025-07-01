@@ -53,7 +53,20 @@ const UserDetail: React.FC<UserDetailProps> = ({
       }
 
       if (sitesResponse.success) {
-        setUserSites(sitesResponse.data || []);
+        console.log('Sites response:', sitesResponse);
+        // Filter only assigned sites and map to expected format
+        const assignedSites = (sitesResponse.data.sites || [])
+          .filter((site: any) => site.is_assigned)
+          .map((site: any) => ({
+            site_id: site.site_id,
+            site_name: site.name,
+            client_name: site.client_name || 'Cliente',
+            city: site.city,
+            state: site.state,
+            assigned_at: site.assigned_at || new Date().toISOString()
+          }));
+        console.log('Mapped assigned sites:', assignedSites);
+        setUserSites(assignedSites);
       }
     } catch (error) {
       console.error('Error loading user details:', error);

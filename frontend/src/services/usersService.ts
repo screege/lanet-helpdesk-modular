@@ -141,6 +141,18 @@ class UsersService {
     }
   }
 
+  async unassignUserFromSites(userId: string, siteIds: string[]) {
+    try {
+      const response = await apiService.post(`/users/${userId}/unassign-sites`, {
+        site_ids: siteIds
+      });
+      return response;
+    } catch (error: any) {
+      console.error('Error unassigning user from sites:', error);
+      throw new Error(error.response?.data?.message || 'Failed to unassign user from sites');
+    }
+  }
+
   async createTechnician(userData: CreateTechnicianData) {
     try {
       const response = await apiService.post('/users/technician', userData);
