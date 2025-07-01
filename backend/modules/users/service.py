@@ -565,8 +565,9 @@ class UserService:
 
                 if existing:
                     # Remove the assignment
-                    self.db.execute_query(
-                        "DELETE FROM user_site_assignments WHERE user_id = %s AND site_id = %s",
+                    self.db.execute_delete(
+                        "user_site_assignments",
+                        "user_id = %s AND site_id = %s",
                         (user_id, site_id)
                     )
                     removed_count += 1

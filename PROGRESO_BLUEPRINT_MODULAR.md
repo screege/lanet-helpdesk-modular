@@ -70,9 +70,12 @@ El blueprint define una transformación de arquitectura monolítica a **100% mod
 - ✅ Workflow paso a paso para solicitantes
 - ✅ Validación de teléfono obligatorio
 - ✅ Asignación a múltiples sitios
-- ✅ Integración con módulo Sites
+- ✅ Desasignación de sitios
+- ✅ Vista detallada de sitios asignados
+- ✅ Integración completa con módulo Sites
 - ✅ Permisos por rol (solo superadmin crea)
 - ✅ UI responsive y profesional
+- ✅ Modales de asignación/desasignación
 
 ---
 
@@ -105,7 +108,7 @@ El blueprint define una transformación de arquitectura monolítica a **100% mod
 ---
 
 ### **4. SITES MODULE ✅ COMPLETADO**
-**Estado:** 100% Implementado con Integración Avanzada
+**Estado:** 100% Implementado con Gestión Completa de Usuarios
 
 #### **Backend Implementado:**
 - ✅ `backend/modules/sites/routes.py` - CRUD + asignaciones
@@ -120,13 +123,16 @@ El blueprint define una transformación de arquitectura monolítica a **100% mod
 - ✅ `frontend/src/components/sites/SiteDetail.tsx` - Detalle + integración
 - ✅ `frontend/src/components/sites/SiteForm.tsx` - CRUD
 - ✅ `frontend/src/services/sitesService.ts` - API service
-- ✅ Integración con módulo Users
+- ✅ Integración completa con módulo Users
 
 #### **Funcionalidades Avanzadas:**
 - ✅ CRUD completo de sitios
-- ✅ Asignación de usuarios a sitios
+- ✅ Asignación de usuarios existentes a sitios
+- ✅ Desasignación de usuarios de sitios
 - ✅ Vista de usuarios asignados por sitio
 - ✅ Botón "Agregar Solicitante" integrado
+- ✅ Botón "Asignar Existente" para solicitantes del cliente
+- ✅ Botón "Quitar Usuarios" para desasignar
 - ✅ Filtrado automático por cliente
 - ✅ Validaciones de campos requeridos
 
@@ -289,9 +295,16 @@ frontend/src/
 
 ### **UX/UI:**
 - ✅ Responsive design profesional
-- ✅ Workflow intuitivo
+- ✅ Workflow intuitivo y completo
 - ✅ Validaciones en tiempo real
 - ✅ Iconografía consistente
+- ✅ Modales interactivos profesionales
+
+### **Gestión de Usuarios-Sitios:**
+- ✅ Flujo completo de asignación/desasignación
+- ✅ Múltiples formas de crear solicitantes
+- ✅ Vista detallada de relaciones usuario-sitio
+- ✅ Validaciones de integridad de datos
 
 ---
 

@@ -342,6 +342,18 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
             siteName={siteDetails.name}
           />
         )}
+
+        {/* Unassign User Modal */}
+        {showUnassignUserModal && siteDetails && (
+          <UnassignUserFromSiteModal
+            isOpen={showUnassignUserModal}
+            onClose={() => setShowUnassignUserModal(false)}
+            onSuccess={handleUnassignUserSuccess}
+            siteId={site.site_id}
+            siteName={siteDetails.name}
+            assignedUsers={assignedUsers}
+          />
+        )}
       </div>
     </div>
   );
