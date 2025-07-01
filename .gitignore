@@ -55,8 +55,7 @@ backend/logs/
 .Python
 
 # Database backup files
-*.sql
-lanet_helpdesk_backup_*.sql
+
 
 # vercel
 .vercel
