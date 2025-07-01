@@ -260,6 +260,161 @@ CREATE TABLE file_attachments (
     )
 );
 
+-- Ticket activities table (for audit trail)
+CREATE TABLE ticket_activities (
+    activity_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ticket_id UUID NOT NULL REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(user_id),
+    action VARCHAR(50) NOT NULL, -- 'created', 'updated', 'assigned', 'commented', 'status_changed', etc.
+    description TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Categories table for ticket classification
+CREATE TABLE categories (
+    category_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    parent_id UUID REFERENCES categories(category_id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    color VARCHAR(7) DEFAULT '#6B7280', -- Hex color for UI
+    icon VARCHAR(50) DEFAULT 'folder', -- Icon name for UI
+    is_active BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0,
+    auto_assign_to UUID REFERENCES users(user_id), -- Auto-assign tickets to specific technician
+    sla_response_hours INTEGER DEFAULT 24, -- Default SLA response time
+    sla_resolution_hours INTEGER DEFAULT 72, -- Default SLA resolution time
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT categories_name_unique UNIQUE (name, parent_id),
+    CONSTRAINT categories_no_self_parent CHECK (category_id != parent_id)
+);
+
+-- Email configurations table for SMTP/IMAP settings
+CREATE TABLE email_configurations (
+    config_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+
+    -- SMTP Configuration
+    smtp_host VARCHAR(255) NOT NULL,
+    smtp_port INTEGER NOT NULL DEFAULT 587,
+    smtp_username VARCHAR(255) NOT NULL,
+    smtp_password_encrypted TEXT NOT NULL,
+    smtp_use_tls BOOLEAN DEFAULT true,
+    smtp_use_ssl BOOLEAN DEFAULT false,
+
+    -- IMAP Configuration for email-to-ticket
+    imap_host VARCHAR(255),
+    imap_port INTEGER DEFAULT 993,
+    imap_username VARCHAR(255),
+    imap_password_encrypted TEXT,
+    imap_use_ssl BOOLEAN DEFAULT true,
+    imap_folder VARCHAR(100) DEFAULT 'INBOX',
+
+    -- Email-to-ticket settings
+    enable_email_to_ticket BOOLEAN DEFAULT false,
+    default_client_id UUID REFERENCES clients(client_id),
+    default_category_id UUID REFERENCES categories(category_id),
+    default_priority VARCHAR(20) DEFAULT 'media',
+    auto_assign_to UUID REFERENCES users(user_id),
+
+    -- Email parsing settings
+    subject_prefix VARCHAR(50) DEFAULT '[LANET]',
+    ticket_number_regex VARCHAR(255) DEFAULT '\[LANET-(\d+)\]',
+
+    is_active BOOLEAN DEFAULT true,
+    is_default BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT email_config_one_default CHECK (
+        NOT is_default OR (
+            SELECT COUNT(*) FROM email_configurations
+            WHERE is_default = true AND config_id != email_configurations.config_id
+        ) = 0
+    )
+);
+
+-- Email templates table for notifications and auto-responses
+CREATE TABLE email_templates (
+    template_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    template_type VARCHAR(50) NOT NULL, -- 'ticket_created', 'ticket_updated', 'ticket_assigned', 'auto_response', etc.
+
+    subject_template TEXT NOT NULL,
+    body_template TEXT NOT NULL,
+    is_html BOOLEAN DEFAULT true,
+
+    -- Template variables available: {{ticket_number}}, {{client_name}}, {{technician_name}}, etc.
+    available_variables TEXT[], -- JSON array of available variables
+
+    is_active BOOLEAN DEFAULT true,
+    is_default BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Email queue table for outgoing emails
+CREATE TABLE email_queue (
+    queue_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    config_id UUID NOT NULL REFERENCES email_configurations(config_id),
+
+    to_email VARCHAR(255) NOT NULL,
+    cc_emails TEXT[], -- Array of CC emails
+    bcc_emails TEXT[], -- Array of BCC emails
+
+    subject TEXT NOT NULL,
+    body_text TEXT,
+    body_html TEXT,
+
+    -- Related entities
+    ticket_id UUID REFERENCES tickets(ticket_id),
+    user_id UUID REFERENCES users(user_id),
+
+    -- Queue status
+    status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'sending', 'sent', 'failed', 'cancelled'
+    priority INTEGER DEFAULT 5, -- 1 (highest) to 10 (lowest)
+
+    -- Retry logic
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 3,
+    next_attempt_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- Results
+    sent_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Email processing log for incoming emails
+CREATE TABLE email_processing_log (
+    log_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    config_id UUID NOT NULL REFERENCES email_configurations(config_id),
+
+    -- Email details
+    message_id VARCHAR(255) NOT NULL,
+    from_email VARCHAR(255) NOT NULL,
+    to_email VARCHAR(255) NOT NULL,
+    subject TEXT NOT NULL,
+    body_text TEXT,
+    body_html TEXT,
+
+    -- Processing results
+    processing_status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'processed', 'failed', 'ignored'
+    ticket_id UUID REFERENCES tickets(ticket_id),
+    action_taken VARCHAR(50), -- 'created_ticket', 'updated_ticket', 'added_comment', 'ignored'
+
+    -- Error handling
+    error_message TEXT,
+
+    processed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- =====================================================
 -- SLA MANAGEMENT TABLES
 -- =====================================================

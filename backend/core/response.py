@@ -164,3 +164,154 @@ class ResponseManager:
                 safe_ticket[field] = safe_ticket[field].isoformat()
                 
         return safe_ticket
+
+    def format_comment_data(self, comment: Dict) -> Dict:
+        """Format comment data for API response"""
+        if not comment:
+            return None
+
+        safe_comment = comment.copy()
+
+        # Convert datetime objects to ISO format
+        datetime_fields = ['created_at', 'updated_at']
+        for field in datetime_fields:
+            if field in safe_comment and safe_comment[field]:
+                safe_comment[field] = safe_comment[field].isoformat()
+
+        return safe_comment
+
+    def format_activity_data(self, activity: Dict) -> Dict:
+        """Format activity data for API response"""
+        if not activity:
+            return None
+
+        safe_activity = activity.copy()
+
+        # Convert datetime objects to ISO format
+        if 'created_at' in safe_activity and safe_activity['created_at']:
+            safe_activity['created_at'] = safe_activity['created_at'].isoformat()
+
+        return safe_activity
+
+    def format_category_data(self, category: Dict) -> Dict:
+        """Format category data for API response"""
+        if not category:
+            return None
+
+        safe_category = category.copy()
+
+        # Convert datetime objects to ISO format
+        datetime_fields = ['created_at', 'updated_at']
+        for field in datetime_fields:
+            if field in safe_category and safe_category[field]:
+                safe_category[field] = safe_category[field].isoformat()
+
+        return safe_category
+
+    def format_email_config_data(self, config: Dict) -> Dict:
+        """Format email configuration data for API response"""
+        if not config:
+            return None
+
+        safe_config = config.copy()
+
+        # Remove sensitive data
+        sensitive_fields = ['smtp_password_encrypted', 'imap_password_encrypted']
+        for field in sensitive_fields:
+            if field in safe_config:
+                safe_config[field] = '***' if safe_config[field] else None
+
+        # Convert datetime objects to ISO format
+        datetime_fields = ['created_at', 'updated_at']
+        for field in datetime_fields:
+            if field in safe_config and safe_config[field]:
+                safe_config[field] = safe_config[field].isoformat()
+
+        return safe_config
+
+    def format_email_queue_data(self, queue_item: Dict) -> Dict:
+        """Format email queue data for API response"""
+        if not queue_item:
+            return None
+
+        safe_item = queue_item.copy()
+
+        # Convert datetime objects to ISO format
+        datetime_fields = ['created_at', 'updated_at', 'sent_at', 'next_attempt_at']
+        for field in datetime_fields:
+            if field in safe_item and safe_item[field]:
+                safe_item[field] = safe_item[field].isoformat()
+
+        return safe_item
+
+    def format_sla_policy_data(self, policy: Dict) -> Dict:
+        """Format SLA policy data for API response"""
+        if not policy:
+            return None
+
+        safe_policy = policy.copy()
+
+        # Convert datetime objects to ISO format
+        datetime_fields = ['created_at', 'updated_at']
+        for field in datetime_fields:
+            if field in safe_policy and safe_policy[field]:
+                safe_policy[field] = safe_policy[field].isoformat()
+
+        # Parse escalation levels JSON
+        if 'escalation_levels' in safe_policy and safe_policy['escalation_levels']:
+            try:
+                import json
+                safe_policy['escalation_levels'] = json.loads(safe_policy['escalation_levels'])
+            except:
+                safe_policy['escalation_levels'] = []
+
+        return safe_policy
+
+    def format_sla_tracking_data(self, tracking: Dict) -> Dict:
+        """Format SLA tracking data for API response"""
+        if not tracking:
+            return None
+
+        safe_tracking = tracking.copy()
+
+        # Convert datetime objects to ISO format
+        datetime_fields = [
+            'response_deadline', 'resolution_deadline', 'first_response_at',
+            'resolved_at', 'response_breached_at', 'resolution_breached_at',
+            'last_escalation_at', 'created_at', 'updated_at'
+        ]
+        for field in datetime_fields:
+            if field in safe_tracking and safe_tracking[field]:
+                safe_tracking[field] = safe_tracking[field].isoformat()
+
+        return safe_tracking
+
+    def format_sla_breach_data(self, breach: Dict) -> Dict:
+        """Format SLA breach data for API response"""
+        if not breach:
+            return None
+
+        safe_breach = breach.copy()
+
+        # Convert datetime objects to ISO format
+        datetime_fields = ['response_deadline', 'resolution_deadline', 'created_at']
+        for field in datetime_fields:
+            if field in safe_breach and safe_breach[field]:
+                safe_breach[field] = safe_breach[field].isoformat()
+
+        return safe_breach
+
+    def format_sla_warning_data(self, warning: Dict) -> Dict:
+        """Format SLA warning data for API response"""
+        if not warning:
+            return None
+
+        safe_warning = warning.copy()
+
+        # Convert datetime objects to ISO format
+        datetime_fields = ['response_deadline', 'resolution_deadline']
+        for field in datetime_fields:
+            if field in safe_warning and safe_warning[field]:
+                safe_warning[field] = safe_warning[field].isoformat()
+
+        return safe_warning

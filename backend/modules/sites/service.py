@@ -27,18 +27,20 @@ class SitesService:
                 return {'success': False, 'error': 'Access denied to this client'}
             
             query = """
-            SELECT s.site_id, s.name, s.address, s.city, s.state, s.country, 
+            SELECT s.site_id, s.client_id, s.name, s.address, s.city, s.state, s.country,
                    s.postal_code, s.latitude, s.longitude, s.is_active,
                    s.created_at, s.updated_at,
+                   c.name as client_name,
                    COUNT(DISTINCT usa.user_id) as assigned_users,
                    COUNT(DISTINCT t.ticket_id) as total_tickets
             FROM sites s
+            LEFT JOIN clients c ON s.client_id = c.client_id
             LEFT JOIN user_site_assignments usa ON s.site_id = usa.site_id
             LEFT JOIN tickets t ON s.site_id = t.site_id
             WHERE s.client_id = %s AND s.is_active = true
-            GROUP BY s.site_id, s.name, s.address, s.city, s.state, s.country,
+            GROUP BY s.site_id, s.client_id, s.name, s.address, s.city, s.state, s.country,
                      s.postal_code, s.latitude, s.longitude, s.is_active,
-                     s.created_at, s.updated_at
+                     s.created_at, s.updated_at, c.name
             ORDER BY s.name
             """
             

@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+LANET Helpdesk V3 - Notifications Service
+Complete notification system for ticket events
+"""
+
+from typing import Dict, List, Optional
+from flask import current_app
+from modules.email.service import email_service
+
+class NotificationsService:
+    def __init__(self):
+        self.notification_types = {
+            'ticket_created': {
+                'template_type': 'ticket_created',
+                'recipients': ['client', 'assigned_technician', 'admins'],
+                'priority': 3
+            },
+            'ticket_assigned': {
+                'template_type': 'ticket_assigned',
+                'recipients': ['client', 'assigned_technician'],
+                'priority': 2
+            },
+            'ticket_status_changed': {
+                'template_type': 'ticket_updated',
+                'recipients': ['client', 'assigned_technician'],
+                'priority': 3
+            },
+            'ticket_commented': {
+                'template_type': 'ticket_commented',
+                'recipients': ['client', 'assigned_technician'],
+                'priority': 4
+            },
+            'ticket_resolved': {
+                'template_type': 'ticket_resolved',
+                'recipients': ['client'],
+                'priority': 2
+            },
+            'ticket_closed': {
+                'template_type': 'ticket_closed',
+                'recipients': ['client'],
+                'priority': 3
+            },
+            'sla_warning': {
+                'template_type': 'sla_warning',
+                'recipients': ['assigned_technician', 'admins'],
+                'priority': 1
+            },
+            'sla_breach': {
+                'template_type': 'sla_breach',
+                'recipients': ['assigned_technician', 'admins', 'client'],
+                'priority': 1
+            }
+        }
+    
+    def send_ticket_notification(self, notification_type: str, ticket_id: str, 
+                                additional_data: Dict = None) -> bool:
+        """Send notification for ticket event"""
+        try:
+            if notification_type not in self.notification_types:
+                current_app.logger.warning(f"Unknown notification type: {notification_type}")
+                return False
+            
+            # Get ticket details
+            ticket = self._get_ticket_details(ticket_id)
+            if not ticket:
+                current_app.logger.error(f"Ticket not found: {ticket_id}")
+                return False
+            
+            notification_config = self.notification_types[notification_type]
+            
+            # Get email template
+            template = self._get_email_template(notification_config['template_type'])
+            if not template:
+                current_app.logger.warning(f"No template found for: {notification_config['template_type']}")
+                return False
+            
+            # Get recipients
+            recipients = self._get_notification_recipients(
+                ticket, 
+                notification_config['recipients'],
+                additional_data
+            )
+            
+            if not recipients:
+                current_app.logger.info(f"No recipients for notification: {notification_type}")
+                return True
+            
+            # Prepare template variables
+            template_vars = self._prepare_template_variables(ticket, additional_data)
+            
+            # Send notifications
+            success_count = 0
+            for recipient in recipients:
+                if self._send_email_notification(
+                    recipient, template, template_vars, 
+                    notification_config['priority'], ticket_id
+                ):
+                    success_count += 1
+            
+            current_app.logger.info(
+                f"Sent {success_count}/{len(recipients)} notifications for {notification_type}"
+            )
+            return success_count > 0
+            
+        except Exception as e:
+            current_app.logger.error(f"Error sending ticket notification: {e}")
+            return False
+    
+    def _get_ticket_details(self, ticket_id: str) -> Optional[Dict]:
+        """Get complete ticket details for notifications"""
+        try:
+            query = """
+            SELECT t.ticket_id, t.ticket_number, t.subject, t.description, t.priority,
+                   t.status, t.created_at, t.updated_at, t.assigned_at, t.resolved_at,
+                   t.affected_person, t.affected_person_contact,
+                   c.name as client_name, c.email as client_email,
+                   s.name as site_name, s.address as site_address,
+                   cat.name as category_name,
+                   creator.name as created_by_name, creator.email as created_by_email,
+                   assignee.name as assigned_to_name, assignee.email as assigned_to_email
+            FROM tickets t
+            LEFT JOIN clients c ON t.client_id = c.client_id
+            LEFT JOIN sites s ON t.site_id = s.site_id
+            LEFT JOIN categories cat ON t.category_id = cat.category_id
+            LEFT JOIN users creator ON t.created_by = creator.user_id
+            LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
+            WHERE t.ticket_id = %s
+            """
+            
+            return current_app.db_manager.execute_query(query, (ticket_id,), fetch='one')
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting ticket details: {e}")
+            return None
+    
+    def _get_email_template(self, template_type: str) -> Optional[Dict]:
+        """Get email template by type"""
+        try:
+            query = """
+            SELECT * FROM email_templates 
+            WHERE template_type = %s AND is_active = true 
+            ORDER BY is_default DESC, created_at DESC
+            LIMIT 1
+            """
+            
+            return current_app.db_manager.execute_query(query, (template_type,), fetch='one')
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting email template: {e}")
+            return None
+    
+    def _get_notification_recipients(self, ticket: Dict, recipient_types: List[str], 
+                                   additional_data: Dict = None) -> List[Dict]:
+        """Get list of notification recipients"""
+        recipients = []
+        
+        try:
+            for recipient_type in recipient_types:
+                if recipient_type == 'client':
+                    # Add affected person
+                    if ticket['affected_person_contact']:
+                        recipients.append({
+                            'email': ticket['affected_person_contact'],
+                            'name': ticket['affected_person'],
+                            'type': 'client'
+                        })
+                    
+                    # Add client admin if different
+                    if ticket['client_email'] and ticket['client_email'] != ticket['affected_person_contact']:
+                        recipients.append({
+                            'email': ticket['client_email'],
+                            'name': ticket['client_name'],
+                            'type': 'client_admin'
+                        })
+                
+                elif recipient_type == 'assigned_technician':
+                    if ticket['assigned_to_email']:
+                        recipients.append({
+                            'email': ticket['assigned_to_email'],
+                            'name': ticket['assigned_to_name'],
+                            'type': 'technician'
+                        })
+                
+                elif recipient_type == 'admins':
+                    # Get admin users
+                    admin_query = """
+                    SELECT email, name FROM users 
+                    WHERE role IN ('admin', 'superadmin') AND is_active = true
+                    """
+                    admins = current_app.db_manager.execute_query(admin_query)
+                    
+                    for admin in (admins or []):
+                        recipients.append({
+                            'email': admin['email'],
+                            'name': admin['name'],
+                            'type': 'admin'
+                        })
+            
+            # Remove duplicates based on email
+            unique_recipients = []
+            seen_emails = set()
+            
+            for recipient in recipients:
+                if recipient['email'] not in seen_emails:
+                    unique_recipients.append(recipient)
+                    seen_emails.add(recipient['email'])
+            
+            return unique_recipients
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting notification recipients: {e}")
+            return []
+    
+    def _prepare_template_variables(self, ticket: Dict, additional_data: Dict = None) -> Dict:
+        """Prepare variables for email template"""
+        variables = {
+            'ticket_number': ticket['ticket_number'],
+            'ticket_id': ticket['ticket_id'],
+            'subject': ticket['subject'],
+            'description': ticket['description'],
+            'priority': ticket['priority'].title() if ticket['priority'] else 'Media',
+            'status': ticket['status'].replace('_', ' ').title() if ticket['status'] else 'Nuevo',
+            'client_name': ticket['client_name'] or 'Cliente',
+            'site_name': ticket['site_name'] or 'Sitio',
+            'category_name': ticket['category_name'] or 'Sin categoría',
+            'affected_person': ticket['affected_person'] or 'Usuario',
+            'affected_person_contact': ticket['affected_person_contact'] or '',
+            'created_by_name': ticket['created_by_name'] or 'Sistema',
+            'assigned_to_name': ticket['assigned_to_name'] or 'Sin asignar',
+            'assigned_to_email': ticket['assigned_to_email'] or '',
+            'created_at': ticket['created_at'].strftime('%d/%m/%Y %H:%M') if ticket['created_at'] else '',
+            'updated_at': ticket['updated_at'].strftime('%d/%m/%Y %H:%M') if ticket['updated_at'] else '',
+            'assigned_at': ticket['assigned_at'].strftime('%d/%m/%Y %H:%M') if ticket['assigned_at'] else '',
+            'resolved_at': ticket['resolved_at'].strftime('%d/%m/%Y %H:%M') if ticket['resolved_at'] else ''
+        }
+        
+        # Add additional data if provided
+        if additional_data:
+            variables.update(additional_data)
+        
+        return variables
+    
+    def _send_email_notification(self, recipient: Dict, template: Dict, 
+                               variables: Dict, priority: int, ticket_id: str) -> bool:
+        """Send email notification to recipient"""
+        try:
+            # Replace template variables
+            subject = self._replace_template_variables(template['subject'], variables)
+            body = self._replace_template_variables(template['body'], variables)
+            
+            # Queue email
+            return email_service.queue_email(
+                to_email=recipient['email'],
+                subject=subject,
+                body=body,
+                ticket_id=ticket_id,
+                priority=priority
+            )
+            
+        except Exception as e:
+            current_app.logger.error(f"Error sending email notification: {e}")
+            return False
+    
+    def _replace_template_variables(self, template: str, variables: Dict) -> str:
+        """Replace template variables with actual values"""
+        try:
+            for key, value in variables.items():
+                template = template.replace(f'{{{{{key}}}}}', str(value or ''))
+            return template
+        except Exception:
+            return template
+    
+    def send_sla_warning(self, ticket_id: str, sla_type: str, time_remaining: int) -> bool:
+        """Send SLA warning notification"""
+        additional_data = {
+            'sla_type': sla_type,
+            'time_remaining': f"{time_remaining} horas",
+            'urgency_level': 'warning'
+        }
+        
+        return self.send_ticket_notification('sla_warning', ticket_id, additional_data)
+    
+    def send_sla_breach(self, ticket_id: str, sla_type: str, time_overdue: int) -> bool:
+        """Send SLA breach notification"""
+        additional_data = {
+            'sla_type': sla_type,
+            'time_overdue': f"{time_overdue} horas",
+            'urgency_level': 'critical'
+        }
+        
+        return self.send_ticket_notification('sla_breach', ticket_id, additional_data)
+
+# Global notifications service instance
+notifications_service = NotificationsService()

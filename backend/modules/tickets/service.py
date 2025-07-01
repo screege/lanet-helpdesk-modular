@@ -77,18 +77,16 @@ class TicketService:
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
-                   t.assigned_at, t.resolved_at, t.closed_at,
+                   t.assigned_at, t.resolved_at, t.closed_at, t.resolution_notes,
                    c.name as client_name,
                    s.name as site_name,
                    creator.name as created_by_name,
-                   assignee.name as assigned_to_name,
-                   cat.name as category_name
+                   assignee.name as assigned_to_name
             FROM tickets t
             LEFT JOIN clients c ON t.client_id = c.client_id
             LEFT JOIN sites s ON t.site_id = s.site_id
             LEFT JOIN users creator ON t.created_by = creator.user_id
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
-            LEFT JOIN categories cat ON t.category_id = cat.category_id
             WHERE {where_clause}
             ORDER BY t.created_at DESC
             LIMIT %s OFFSET %s
@@ -122,18 +120,16 @@ class TicketService:
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
-                   t.assigned_at, t.resolved_at, t.closed_at,
+                   t.assigned_at, t.resolved_at, t.closed_at, t.resolution_notes,
                    c.name as client_name,
                    s.name as site_name, s.address as site_address,
                    creator.name as created_by_name, creator.email as created_by_email,
-                   assignee.name as assigned_to_name, assignee.email as assigned_to_email,
-                   cat.name as category_name, cat.description as category_description
+                   assignee.name as assigned_to_name, assignee.email as assigned_to_email
             FROM tickets t
             LEFT JOIN clients c ON t.client_id = c.client_id
             LEFT JOIN sites s ON t.site_id = s.site_id
             LEFT JOIN users creator ON t.created_by = creator.user_id
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
-            LEFT JOIN categories cat ON t.category_id = cat.category_id
             WHERE t.ticket_id = %s
             """
             
@@ -236,6 +232,20 @@ class TicketService:
                     f"Ticket creado: {result['subject']}"
                 )
                 
+                # Create SLA tracking
+                try:
+                    from modules.sla.service import sla_service
+                    sla_service.create_sla_tracking(result['ticket_id'], new_ticket_data)
+                except Exception as e:
+                    self.logger.warning(f"Failed to create SLA tracking: {e}")
+
+                # Send notification for ticket creation
+                try:
+                    from modules.notifications.service import notifications_service
+                    notifications_service.send_ticket_notification('ticket_created', result['ticket_id'])
+                except Exception as e:
+                    self.logger.warning(f"Failed to send ticket creation notification: {e}")
+
                 self.logger.info(f"Ticket created successfully: {result['ticket_number']}")
                 return {'success': True, 'ticket': result}
             else:
@@ -320,8 +330,19 @@ class TicketService:
                 # Handle status-specific updates
                 if ticket_data['status'] == 'resuelto':
                     update_data['resolved_at'] = datetime.utcnow()
+                    # Require resolution notes when resolving
+                    if 'resolution_notes' not in ticket_data or not ticket_data['resolution_notes']:
+                        return {'success': False, 'errors': {'resolution_notes': 'Se requieren notas de resolución'}}
+                    update_data['resolution_notes'] = ticket_data['resolution_notes'].strip()
                 elif ticket_data['status'] == 'cerrado':
                     update_data['closed_at'] = datetime.utcnow()
+                elif ticket_data['status'] == 'reabierto':
+                    # Clear resolution data when reopening
+                    update_data['resolved_at'] = None
+                    update_data['closed_at'] = None
+                    # Keep resolution_notes for reference but add reopening note
+                    if existing_ticket.get('resolution_notes'):
+                        update_data['resolution_notes'] = existing_ticket['resolution_notes'] + '\n\n[TICKET REABIERTO]'
 
             # Handle assignment changes
             if 'assigned_to' in ticket_data:
@@ -468,9 +489,9 @@ class TicketService:
                 'comment_id': str(uuid.uuid4()),
                 'ticket_id': ticket_id,
                 'user_id': created_by,
-                'content': comment_data['content'].strip(),
+                'comment_text': comment_data['content'].strip(),
                 'is_internal': comment_data.get('is_internal', False),
-                'is_solution': comment_data.get('is_solution', False),
+                'is_email_reply': comment_data.get('is_email_reply', False),
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow()
             }
@@ -479,7 +500,7 @@ class TicketService:
             result = self.db.execute_insert(
                 'ticket_comments',
                 new_comment_data,
-                returning='comment_id, content, is_internal, created_at'
+                returning='comment_id, comment_text, is_internal, created_at'
             )
 
             if result:

@@ -78,9 +78,39 @@ def get_sites():
             # Can only access their own client's sites
             if not user_client_id:
                 return current_app.response_manager.error('Client ID not found in token', 400)
-            
+
             result = sites_service.get_sites_by_client(user_client_id, user_role, user_client_id)
-            
+
+        elif user_role == 'solicitante':
+            # Can only access their assigned sites
+            query = """
+            SELECT s.site_id, s.client_id, s.name, s.address, s.city, s.state,
+                   s.country, s.postal_code, s.is_active, s.created_at,
+                   c.name as client_name,
+                   COUNT(DISTINCT usa.user_id) as assigned_users,
+                   COUNT(DISTINCT t.ticket_id) as total_tickets
+            FROM sites s
+            JOIN clients c ON s.client_id = c.client_id
+            LEFT JOIN user_site_assignments usa ON s.site_id = usa.site_id
+            LEFT JOIN tickets t ON s.site_id = t.site_id
+            INNER JOIN user_site_assignments usa2 ON s.site_id = usa2.site_id
+            WHERE s.is_active = true AND usa2.user_id = %s
+            GROUP BY s.site_id, s.client_id, s.name, s.address, s.city, s.state,
+                     s.country, s.postal_code, s.is_active, s.created_at, c.name
+            ORDER BY s.name
+            """
+
+            sites = current_app.db_manager.execute_query(query, (current_user_id,))
+
+            result = {
+                'success': True,
+                'sites': sites or [],
+                'total': len(sites or []),
+                'page': 1,
+                'per_page': len(sites or []),
+                'pages': 1
+            }
+
         else:
             return current_app.response_manager.error('Insufficient permissions', 403)
         

@@ -22,6 +22,7 @@ import {
   LogOut,
   Bell,
   Search,
+  FolderTree,
 } from 'lucide-react';
 
 interface NavItem {
@@ -75,6 +76,12 @@ const DashboardLayout: React.FC = () => {
           href: '/tickets',
           icon: Ticket,
           permission: 'tickets.read',
+        },
+        {
+          name: 'Categorías',
+          href: '/categories',
+          icon: FolderTree,
+          permission: 'categories.read',
         },
         {
           name: 'Clientes',

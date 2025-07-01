@@ -107,17 +107,17 @@ const SitesManagement: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       // Load sites and clients in parallel
       const [sitesResponse, clientsResponse] = await Promise.all([
         apiService.get('/sites?per_page=1000'),
         apiService.get('/clients?per_page=1000')
       ]);
-      
+
       if (sitesResponse.success) {
         setAllSites(sitesResponse.data.sites || sitesResponse.data || []);
       }
-      
+
       if (clientsResponse.success) {
         setClients(clientsResponse.data.clients || clientsResponse.data || []);
       }

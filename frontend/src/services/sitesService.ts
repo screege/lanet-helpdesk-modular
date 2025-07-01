@@ -84,6 +84,17 @@ class SitesService {
     return this.getAllSites(params);
   }
 
+  // Get sites for a specific client
+  async getSitesByClient(clientId: string) {
+    try {
+      const response = await apiService.get(`/sites?client_id=${clientId}&per_page=1000`);
+      return response;
+    } catch (error: any) {
+      console.error('Error fetching sites by client:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch sites');
+    }
+  }
+
   async getSiteById(siteId: string) {
     try {
       const response = await apiService.get(`/sites/${siteId}`);

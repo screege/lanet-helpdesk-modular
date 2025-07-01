@@ -66,6 +66,17 @@ class ClientsService {
     }
   }
 
+  // Get all clients without pagination (for dropdowns)
+  async getAllClients() {
+    try {
+      const response = await this.getClients({ per_page: 1000 });
+      return response?.data?.clients || [];
+    } catch (error: any) {
+      console.error('Error fetching all clients:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch clients');
+    }
+  }
+
   async getClientById(clientId: string) {
     try {
       const response = await apiService.get(`/clients/${clientId}`);

@@ -28,20 +28,20 @@ def get_users():
         page = request.args.get('page', 1, type=int)
         per_page = min(request.args.get('per_page', 20, type=int), 100)
         search = request.args.get('search', '').strip()
+        role = request.args.get('role', '').strip()
 
         # Build search condition
-        search_condition = ""
+        search_condition = "WHERE u.is_active = true"
         search_params = []
 
         if search:
-            search_condition = """
-            WHERE (u.name ILIKE %s OR u.email ILIKE %s)
-            AND u.is_active = true
-            """
+            search_condition += " AND (u.name ILIKE %s OR u.email ILIKE %s)"
             search_term = f"%{search}%"
-            search_params = [search_term, search_term]
-        else:
-            search_condition = "WHERE u.is_active = true"
+            search_params.extend([search_term, search_term])
+
+        if role:
+            search_condition += " AND u.role = %s"
+            search_params.append(role)
 
         # Get total count
         count_query = f"SELECT COUNT(*) as total FROM users u {search_condition}"
@@ -608,5 +608,37 @@ def get_user_sites(user_id):
     except Exception as e:
         logger.error(f"Get user sites error: {e}")
         return current_app.response_manager.server_error('Failed to retrieve user sites')
+
+@users_bp.route('/<user_id>/assigned-sites', methods=['GET'])
+@jwt_required()
+def get_user_assigned_sites(user_id):
+    """Get sites currently assigned to a user"""
+    try:
+        # Validate UUID
+        if not current_app.db_manager.validate_uuid(user_id):
+            return current_app.response_manager.bad_request('Invalid user ID format')
+
+        query = """
+        SELECT s.site_id, s.name, s.address, s.city, s.state,
+               c.name as client_name, usa.created_at as assigned_at
+        FROM user_site_assignments usa
+        JOIN sites s ON usa.site_id = s.site_id
+        JOIN clients c ON s.client_id = c.client_id
+        WHERE usa.user_id = %s AND s.is_active = true
+        ORDER BY s.name
+        """
+
+        assigned_sites = current_app.db_manager.execute_query(query, (user_id,))
+
+        formatted_sites = []
+        for site in (assigned_sites or []):
+            formatted_site = current_app.response_manager.format_site_data(site)
+            formatted_sites.append(formatted_site)
+
+        return current_app.response_manager.success(formatted_sites)
+
+    except Exception as e:
+        logger.error(f"Get user assigned sites error: {e}")
+        return current_app.response_manager.server_error('Failed to retrieve assigned sites')
 
 

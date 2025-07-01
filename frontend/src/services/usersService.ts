@@ -215,6 +215,27 @@ class UsersService {
     }
   }
 
+  async getUserAssignedSites(userId: string) {
+    try {
+      const response = await apiService.get(`/users/${userId}/assigned-sites`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching user assigned sites:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch user assigned sites');
+    }
+  }
+
+  // Get users by role (for ticket form dropdowns)
+  async getUsersByRole(role: string) {
+    try {
+      const response = await this.getAllUsers({ role, per_page: 1000 });
+      // Extract the users array from the response structure
+      return response?.data?.users || [];
+    } catch (error: any) {
+      console.error('Error fetching users by role:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch users by role');
+    }
+  }
 
 }
 

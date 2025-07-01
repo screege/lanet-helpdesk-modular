@@ -290,29 +290,76 @@ class UserService:
             return []
     
     def assign_user_to_sites(self, user_id: str, site_ids: List[str], assigned_by: str) -> Dict[str, Any]:
-        """Assign user to multiple sites"""
+        """Assign user to multiple sites (additive - keeps existing assignments)"""
         try:
             # Validate user ID
             if not self.db.validate_uuid(user_id):
                 return {'success': False, 'errors': {'user_id': 'Invalid user ID'}}
-            
+
             # Check if user exists
             user = self.get_user_by_id(user_id)
             if not user:
                 return {'success': False, 'errors': {'user_id': 'User not found'}}
-            
+
             # Validate site IDs
             for site_id in site_ids:
                 if not self.db.validate_uuid(site_id):
                     return {'success': False, 'errors': {'site_ids': f'Invalid site ID: {site_id}'}}
-            
+
+            # Get existing assignments to avoid duplicates
+            existing_assignments = self.db.execute_query(
+                "SELECT site_id FROM user_site_assignments WHERE user_id = %s",
+                (user_id,),
+                fetch='all'
+            )
+            existing_site_ids = [assignment['site_id'] for assignment in (existing_assignments or [])]
+
+            # Add only new assignments (avoid duplicates)
+            new_assignments = 0
+            for site_id in site_ids:
+                if site_id not in existing_site_ids:
+                    assignment_data = {
+                        'assignment_id': str(uuid.uuid4()),
+                        'user_id': user_id,
+                        'site_id': site_id,
+                        'assigned_by': assigned_by,
+                        'created_at': datetime.utcnow()
+                    }
+                    self.db.execute_insert('user_site_assignments', assignment_data)
+                    new_assignments += 1
+
+            total_sites = len(existing_site_ids) + new_assignments
+            self.logger.info(f"User {user_id} now assigned to {total_sites} sites ({new_assignments} new)")
+            return {'success': True, 'message': f'User assigned to {new_assignments} new sites (total: {total_sites})'}
+
+        except Exception as e:
+            self.logger.error(f"Error assigning user to sites: {e}")
+            return {'success': False, 'errors': {'general': 'Internal server error'}}
+
+    def replace_user_site_assignments(self, user_id: str, site_ids: List[str], assigned_by: str) -> Dict[str, Any]:
+        """Replace all user site assignments (removes existing and adds new ones)"""
+        try:
+            # Validate user ID
+            if not self.db.validate_uuid(user_id):
+                return {'success': False, 'errors': {'user_id': 'Invalid user ID'}}
+
+            # Check if user exists
+            user = self.get_user_by_id(user_id)
+            if not user:
+                return {'success': False, 'errors': {'user_id': 'User not found'}}
+
+            # Validate site IDs
+            for site_id in site_ids:
+                if not self.db.validate_uuid(site_id):
+                    return {'success': False, 'errors': {'site_ids': f'Invalid site ID: {site_id}'}}
+
             # Remove existing assignments
             self.db.execute_delete(
                 'user_site_assignments',
                 'user_id = %s',
                 (user_id,)
             )
-            
+
             # Add new assignments
             for site_id in site_ids:
                 assignment_data = {
@@ -323,12 +370,12 @@ class UserService:
                     'created_at': datetime.utcnow()
                 }
                 self.db.execute_insert('user_site_assignments', assignment_data)
-            
-            self.logger.info(f"User {user_id} assigned to {len(site_ids)} sites")
-            return {'success': True, 'message': f'User assigned to {len(site_ids)} sites'}
-            
+
+            self.logger.info(f"User {user_id} site assignments replaced with {len(site_ids)} sites")
+            return {'success': True, 'message': f'User assigned to {len(site_ids)} sites (replaced all)'}
+
         except Exception as e:
-            self.logger.error(f"Error assigning user to sites: {e}")
+            self.logger.error(f"Error replacing user site assignments: {e}")
             return {'success': False, 'errors': {'general': 'Internal server error'}}
 
     def create_solicitante(self, user_data: Dict[str, Any], site_ids: List[str], created_by: str) -> Dict[str, Any]:

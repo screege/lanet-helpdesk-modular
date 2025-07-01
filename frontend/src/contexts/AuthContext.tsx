@@ -41,12 +41,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const accessToken = localStorage.getItem('access_token');
 
       if (storedUser && accessToken) {
-        // Verify token is still valid by getting current user
-        const response = await apiService.getCurrentUser();
-        if (response.success && response.data) {
-          setUser(response.data);
-        } else {
-          // Token is invalid, clear storage
+        try {
+          // Parse stored user data safely
+          const parsedUser = JSON.parse(storedUser);
+
+          // Verify token is still valid by getting current user
+          const response = await apiService.getCurrentUser();
+          if (response.success && response.data) {
+            setUser(response.data);
+          } else {
+            // Token is invalid, clear storage
+            localStorage.removeItem('user');
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+          }
+        } catch (parseError) {
+          console.error('Error parsing stored user data:', parseError);
+          // Clear corrupted data
           localStorage.removeItem('user');
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');

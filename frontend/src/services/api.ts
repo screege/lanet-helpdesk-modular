@@ -3,7 +3,7 @@ import { ApiResponse, AuthTokens, LoginCredentials, User } from '@/types';
 
 class ApiService {
   private api: AxiosInstance;
-  private baseURL = 'http://localhost:5001/api';
+  private baseURL = '/api'; // Use relative URL to leverage Vite proxy
 
   constructor() {
     this.api = axios.create({
@@ -207,10 +207,8 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.get(endpoint);
       return response.data;
     } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Request failed',
-      };
+      console.error(`API GET Error for ${endpoint}:`, error.response?.data || error.message);
+      throw error; // Throw the original error for proper handling
     }
   }
 
@@ -219,10 +217,8 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.post(endpoint, data);
       return response.data;
     } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Request failed',
-      };
+      console.error(`API POST Error for ${endpoint}:`, error.response?.data || error.message);
+      throw error; // Throw the original error for proper handling
     }
   }
 
@@ -231,11 +227,18 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.put(endpoint, data);
       return response.data;
     } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Request failed',
-        details: error.response?.data?.details || undefined,
-      };
+      console.error(`API PUT Error for ${endpoint}:`, error.response?.data || error.message);
+      throw error; // Throw the original error for proper handling
+    }
+  }
+
+  async patch<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
+    try {
+      const response: AxiosResponse<ApiResponse<T>> = await this.api.patch(endpoint, data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`API PATCH Error for ${endpoint}:`, error.response?.data || error.message);
+      throw error; // Throw the original error for proper handling
     }
   }
 
@@ -244,11 +247,8 @@ class ApiService {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.delete(endpoint);
       return response.data;
     } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Request failed',
-        details: error.response?.data?.details || undefined,
-      };
+      console.error(`API DELETE Error for ${endpoint}:`, error.response?.data || error.message);
+      throw error; // Throw the original error for proper handling
     }
   }
 }

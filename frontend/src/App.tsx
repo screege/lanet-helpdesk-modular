@@ -11,6 +11,11 @@ import ClientDetail from '@/pages/clients/ClientDetail';
 import ClientEdit from '@/pages/clients/ClientEdit';
 import SitesManagement from '@/pages/sites/SitesManagement';
 import UsersManagement from '@/pages/users/UsersManagement';
+import TicketsManagement from '@/pages/tickets/TicketsManagement';
+import TicketCreatePage from '@/pages/tickets/TicketCreatePage';
+import TicketDetailPage from '@/pages/tickets/TicketDetailPage';
+import TicketEditPage from '@/pages/tickets/TicketEditPage';
+import CategoriesManagement from '@/pages/categories/CategoriesManagement';
 import './App.css';
 
 const App: React.FC = () => {
@@ -33,8 +38,11 @@ const App: React.FC = () => {
             >
               {/* Nested routes that will render inside the layout */}
               <Route path="dashboard" element={<Dashboard />} />
-              <Route path="tickets" element={<div className="p-6">Tickets - En desarrollo</div>} />
-              <Route path="tickets/new" element={<div className="p-6">Crear Ticket - En desarrollo</div>} />
+              <Route path="tickets" element={<TicketsManagement />} />
+              <Route path="tickets/new" element={<TicketCreatePage />} />
+              <Route path="tickets/:ticketId" element={<TicketDetailPage />} />
+              <Route path="tickets/:ticketId/edit" element={<TicketEditPage />} />
+              <Route path="categories" element={<CategoriesManagement />} />
               <Route path="clients" element={<ClientList />} />
               <Route path="clients/create" element={<ClientCreate />} />
               <Route path="clients/:clientId" element={<ClientDetail />} />

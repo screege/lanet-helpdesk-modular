@@ -33,6 +33,7 @@ from modules.users.routes import users_bp
 from modules.clients.routes import clients_bp
 from modules.sites.routes import sites_bp
 from modules.tickets.routes import tickets_bp
+from modules.categories.routes import categories_bp
 from modules.dashboard.routes import dashboard_bp
 from modules.sla.routes import sla_bp
 from modules.email.routes import email_bp
@@ -80,6 +81,30 @@ def create_app(config_name='development'):
     
     # Setup logging
     setup_logging(app)
+
+    # Add AGGRESSIVE request logging for debugging
+    @app.before_request
+    def log_request_info():
+        print("=" * 80)
+        print(f"🔥 INCOMING REQUEST: {request.method} {request.url}")
+        print(f"🔥 Headers: {dict(request.headers)}")
+        print(f"🔥 Remote addr: {request.remote_addr}")
+        print("=" * 80)
+
+        if request.method == 'POST' and 'tickets' in request.url:
+            print("🎫" * 20)
+            print("🎫 TICKET POST REQUEST DETECTED!")
+            print(f"🎫 URL: {request.url}")
+            print(f"🎫 Method: {request.method}")
+            print(f"🎫 Content-Type: {request.content_type}")
+            print(f"🎫 Authorization: {request.headers.get('Authorization', 'NONE')[:50]}...")
+            try:
+                data = request.get_json(force=True)
+                print(f"🎫 JSON Data: {data}")
+            except Exception as e:
+                print(f"🎫 JSON Parse Error: {e}")
+                print(f"🎫 Raw Data: {request.get_data()}")
+            print("🎫" * 20)
     
     # JWT error handlers
     @jwt.expired_token_loader
@@ -173,6 +198,7 @@ def create_app(config_name='development'):
     app.register_blueprint(clients_bp, url_prefix='/api/clients')
     app.register_blueprint(sites_bp, url_prefix='/api/sites')
     app.register_blueprint(tickets_bp, url_prefix='/api/tickets')
+    app.register_blueprint(categories_bp, url_prefix='/api/categories')
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(sla_bp, url_prefix='/api/sla')
     app.register_blueprint(email_bp, url_prefix='/api/email')
