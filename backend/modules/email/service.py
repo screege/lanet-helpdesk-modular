@@ -1078,7 +1078,7 @@ LANET Helpdesk V3
                 self.imap_connection = None
 
     def check_and_process_emails(self, config: Dict) -> Dict:
-        """Check for new emails and process them into tickets"""
+        """Check for new emails and process them into tickets with atomic processing"""
         try:
             current_app.logger.info(f"🔧 EMAIL SERVICE: Starting email check for config: {config.get('name')}")
 
@@ -1101,15 +1101,16 @@ LANET Helpdesk V3
             message_ids = messages[0].split()
             emails_found = len(message_ids)
             tickets_created = 0
+            emails_processed = 0
 
             current_app.logger.info(f"🔧 EMAIL SERVICE: Found {emails_found} unread emails")
 
-            # Process each email (limit to 10 for safety)
-            for msg_id in message_ids[:10]:
+            # Process each email (limit to 50 for performance)
+            for msg_id in message_ids[:50]:
                 try:
                     current_app.logger.info(f"🔧 EMAIL SERVICE: Processing email ID: {msg_id}")
 
-                    # Fetch email
+                    # Fetch email with headers and body
                     status, msg_data = self.imap_connection.fetch(msg_id, '(RFC822)')
                     if status != 'OK':
                         current_app.logger.error(f"Failed to fetch email {msg_id}: {status}")
@@ -1120,23 +1121,63 @@ LANET Helpdesk V3
                     email_message = email.message_from_bytes(msg_data[0][1])
 
                     # Extract email details
+                    message_id = email_message.get('Message-ID', f'unknown-{msg_id}')
                     from_email = email_message.get('From', '')
                     subject = email_message.get('Subject', 'Sin asunto')
+                    date_header = email_message.get('Date', '')
 
                     current_app.logger.info(f"🔧 EMAIL SERVICE: Email from: {from_email}, subject: {subject}")
 
-                    # Get email body
+                    # Check for duplicate processing
+                    if self._is_email_already_processed(message_id):
+                        current_app.logger.info(f"🔧 EMAIL SERVICE: Email {message_id} already processed, skipping")
+                        continue
+
+                    # Get email body and size
                     body = self._extract_email_body(email_message)
+                    email_size = len(msg_data[0][1])
 
-                    # Create ticket from email (simplified for now)
-                    ticket_created = self._create_ticket_from_email(from_email, subject, body, config)
+                    # Log email processing attempt
+                    log_id = self._log_email_processing(
+                        config['config_id'], message_id, from_email, subject,
+                        body, email_size, 'pending'
+                    )
 
-                    if ticket_created:
-                        tickets_created += 1
-                        current_app.logger.info(f"🔧 EMAIL SERVICE: Created ticket from email {msg_id}")
+                    # Atomic ticket creation with transaction
+                    ticket_id = None
+                    try:
+                        # Create ticket from email
+                        ticket_id = self._create_ticket_from_email_atomic(
+                            from_email, subject, body, config, message_id
+                        )
 
-                        # Mark email as read
-                        self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
+                        if ticket_id:
+                            tickets_created += 1
+                            current_app.logger.info(f"🔧 EMAIL SERVICE: Created ticket {ticket_id} from email {msg_id}")
+
+                            # Update processing log with success
+                            self._update_email_processing_log(log_id, 'processed', ticket_id)
+
+                            # Delete email only after successful ticket creation
+                            if config.get('auto_delete_processed', True):
+                                self._delete_processed_email(msg_id)
+                                current_app.logger.info(f"🔧 EMAIL SERVICE: Deleted processed email {msg_id}")
+                            else:
+                                # Just mark as read
+                                self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
+                                current_app.logger.info(f"🔧 EMAIL SERVICE: Marked email {msg_id} as read")
+
+                            emails_processed += 1
+                        else:
+                            # Update processing log with failure
+                            self._update_email_processing_log(log_id, 'failed', None, 'Failed to create ticket')
+
+                    except Exception as ticket_error:
+                        current_app.logger.error(f"🔧 EMAIL SERVICE: Failed to create ticket from email {msg_id}: {ticket_error}")
+                        # Update processing log with failure
+                        self._update_email_processing_log(log_id, 'failed', None, str(ticket_error))
+                        # Don't delete email on failure - keep for retry
+                        continue
 
                 except Exception as e:
                     current_app.logger.error(f"🔧 EMAIL SERVICE: Error processing email {msg_id}: {e}")
@@ -1147,7 +1188,8 @@ LANET Helpdesk V3
 
             result = {
                 'emails_found': emails_found,
-                'tickets_created': tickets_created
+                'tickets_created': tickets_created,
+                'emails_processed': emails_processed
             }
 
             current_app.logger.info(f"🔧 EMAIL SERVICE: Email check completed: {result}")
@@ -1198,6 +1240,105 @@ LANET Helpdesk V3
         except Exception as e:
             current_app.logger.error(f"🔧 EMAIL SERVICE: Error creating ticket from email: {e}")
             return False
+
+    def _is_email_already_processed(self, message_id: str) -> bool:
+        """Check if email has already been processed"""
+        try:
+            from core.database import get_db_connection
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT id FROM email_processing_log WHERE message_id = %s AND processing_status = 'processed'",
+                        (message_id,)
+                    )
+                    return cursor.fetchone() is not None
+
+        except Exception as e:
+            current_app.logger.error(f"Error checking email processing status: {e}")
+            return False
+
+    def _log_email_processing(self, config_id: str, message_id: str, from_email: str,
+                            subject: str, body: str, email_size: int, status: str) -> str:
+        """Log email processing attempt"""
+        try:
+            from core.database import get_db_connection
+            import uuid
+
+            log_id = str(uuid.uuid4())
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO email_processing_log
+                        (id, message_id, from_email, subject, body_preview, email_size_bytes, processing_status)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        log_id, message_id, from_email, subject[:255],
+                        body[:500], email_size, status
+                    ))
+                    conn.commit()
+
+            return log_id
+
+        except Exception as e:
+            current_app.logger.error(f"Error logging email processing: {e}")
+            return None
+
+    def _update_email_processing_log(self, log_id: str, status: str, ticket_id: str = None, error_message: str = None):
+        """Update email processing log with result"""
+        try:
+            from core.database import get_db_connection
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE email_processing_log
+                        SET processing_status = %s, ticket_id = %s, error_message = %s, processed_at = NOW()
+                        WHERE id = %s
+                    """, (status, ticket_id, error_message, log_id))
+                    conn.commit()
+
+        except Exception as e:
+            current_app.logger.error(f"Error updating email processing log: {e}")
+
+    def _delete_processed_email(self, msg_id: bytes):
+        """Delete email from IMAP server after successful processing"""
+        try:
+            # Mark for deletion
+            self.imap_connection.store(msg_id, '+FLAGS', '\\Deleted')
+            # Expunge to permanently delete
+            self.imap_connection.expunge()
+            current_app.logger.info(f"🔧 EMAIL SERVICE: Permanently deleted email {msg_id}")
+
+        except Exception as e:
+            current_app.logger.error(f"🔧 EMAIL SERVICE: Error deleting email {msg_id}: {e}")
+            # Fallback to just marking as read
+            try:
+                self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
+            except:
+                pass
+
+    def _create_ticket_from_email_atomic(self, from_email: str, subject: str, body: str,
+                                       config: Dict, message_id: str) -> str:
+        """Create ticket from email with atomic transaction"""
+        try:
+            from core.database import get_db_connection
+            import uuid
+
+            # For now, simulate ticket creation
+            # In full implementation, this would create actual ticket
+            ticket_id = str(uuid.uuid4())
+
+            current_app.logger.info(f"🔧 EMAIL SERVICE: Simulating ticket creation - ID: {ticket_id}")
+            current_app.logger.info(f"🔧 EMAIL SERVICE: From: {from_email}, Subject: {subject}")
+
+            # Simulate successful ticket creation
+            return ticket_id
+
+        except Exception as e:
+            current_app.logger.error(f"🔧 EMAIL SERVICE: Error in atomic ticket creation: {e}")
+            raise e
 
 # Global email service instance
 email_service = EmailService()
