@@ -20,15 +20,28 @@ logger = logging.getLogger(__name__)
 @users_bp.route('', methods=['GET'])
 @users_bp.route('/', methods=['GET'])
 @jwt_required()
-@require_role(['superadmin', 'admin', 'technician'])
+@require_role(['superadmin', 'admin', 'technician', 'client_admin', 'solicitante'])
 def get_users():
     """Get all users with pagination and search"""
     try:
+        # Get user info
+        claims = get_jwt()
+        user_role = claims.get('role')
+        user_client_id = claims.get('client_id')
+
         # Get query parameters
         page = request.args.get('page', 1, type=int)
         per_page = min(request.args.get('per_page', 20, type=int), 100)
         search = request.args.get('search', '').strip()
         role = request.args.get('role', '').strip()
+
+        # Role-based filtering
+        if user_role in ['client_admin', 'solicitante']:
+            # Clients can only see technicians (for ticket assignment)
+            if role and role not in ['technician']:
+                return current_app.response_manager.forbidden('Clients can only view technicians')
+            # Force role to technician for clients
+            role = 'technician'
 
         # Build search condition
         search_condition = "WHERE u.is_active = true"

@@ -82,7 +82,16 @@ def create_ticket():
         # Log user info
         current_user_id = get_jwt_identity()
         current_user = get_jwt()
-        logging.info(f"Usuario autenticado: {current_user_id}, Role: {current_user.get('role')}")
+        user_role = current_user.get('role')
+        user_client_id = current_user.get('client_id')
+        logging.info(f"Usuario autenticado: {current_user_id}, Role: {user_role}")
+
+        # ✅ FIX: Set RLS context for database queries
+        current_app.db_manager.set_rls_context(
+            user_id=current_user_id,
+            user_role=user_role,
+            client_id=user_client_id
+        )
 
         if not data:
             logging.error("Error: No se proporcionaron datos")

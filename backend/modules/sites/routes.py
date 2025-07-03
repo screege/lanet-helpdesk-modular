@@ -26,6 +26,9 @@ def get_sites():
         claims = get_jwt()
         user_role = claims.get('role')
         user_client_id = claims.get('client_id')
+
+        logger.info(f"🔍 SITES ENDPOINT - User: {current_user_id}, Role: {user_role}, Client: {user_client_id}")
+        logger.info(f"🔍 SITES ENDPOINT - Full claims: {claims}")
         
         # Get query parameters
         client_id = request.args.get('client_id')

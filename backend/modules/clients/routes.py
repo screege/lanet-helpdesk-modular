@@ -19,10 +19,50 @@ clients_bp = Blueprint('clients', __name__)
 @clients_bp.route('', methods=['GET'])
 @clients_bp.route('/', methods=['GET'])
 @jwt_required()
-@require_role(['superadmin', 'admin', 'technician'])
 def get_clients():
     """Get all clients with statistics"""
     try:
+        # Get user info
+        claims = get_jwt()
+        user_id = get_jwt_identity()
+        user_role = claims.get('role')
+        user_client_id = claims.get('client_id')
+
+        current_app.logger.info(f"🔍 CLIENTS ENDPOINT - Role: {user_role}, Client ID: {user_client_id}")
+        current_app.logger.info(f"🔍 CLIENTS ENDPOINT - Full claims: {claims}")
+
+        # ✅ FIX: Set RLS context for database queries
+        current_app.logger.info(f"🔧 Setting RLS context - User: {user_id}, Role: {user_role}, Client: {user_client_id}")
+        current_app.db_manager.set_rls_context(
+            user_id=user_id,
+            user_role=user_role,
+            client_id=user_client_id
+        )
+        current_app.logger.info(f"✅ RLS context set successfully")
+
+        # Role-based access control
+        if user_role in ['client_admin', 'solicitante']:
+            # Clients can only see their own client
+            if not user_client_id:
+                return current_app.response_manager.forbidden('No client associated with user')
+            # Return only their client
+            client_query = """
+                SELECT client_id, name, email, phone, address, city, state, country,
+                       postal_code, is_active, created_at, updated_at
+                FROM clients
+                WHERE client_id = %s AND is_active = true
+            """
+            clients = current_app.db_manager.execute_query(client_query, (user_client_id,))
+            formatted_clients = []
+            for client in (clients or []):
+                formatted_client = current_app.response_manager.format_client_data(client)
+                formatted_clients.append(formatted_client)
+            return current_app.response_manager.success(formatted_clients)
+
+        elif user_role not in ['superadmin', 'admin', 'technician']:
+            return current_app.response_manager.forbidden('Insufficient permissions')
+
+        # For superadmin/admin/technician - show all clients
         # Get search parameter
         search = request.args.get('search', '').strip()
         page = int(request.args.get('page', 1))
