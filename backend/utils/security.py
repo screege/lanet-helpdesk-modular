@@ -9,6 +9,9 @@ import re
 import html
 import secrets
 import hashlib
+import base64
+import os
+from cryptography.fernet import Fernet
 from typing import Dict, List, Any, Optional
 from functools import wraps
 from flask import request, g, current_app
@@ -70,6 +73,51 @@ class SecurityUtils:
     def generate_secure_token(length: int = 32) -> str:
         """Generate a cryptographically secure random token"""
         return secrets.token_urlsafe(length)
+
+    @staticmethod
+    def _get_encryption_key() -> bytes:
+        """Get or generate encryption key for sensitive data"""
+        # In production, this should be stored securely (environment variable, key management service)
+        # For now, we'll use a derived key from JWT secret
+        try:
+            jwt_secret = current_app.config.get('JWT_SECRET_KEY', 'default-secret-key')
+            # Derive a 32-byte key from JWT secret
+            key = hashlib.sha256(jwt_secret.encode()).digest()
+            return base64.urlsafe_b64encode(key)
+        except Exception:
+            # Fallback key (should not be used in production)
+            return base64.urlsafe_b64encode(b'default-encryption-key-32-bytes!')
+
+    @staticmethod
+    def encrypt_password(password: str) -> str:
+        """Encrypt password for storage (for email passwords, etc.)"""
+        try:
+            if not password:
+                return ''
+
+            key = SecurityUtils._get_encryption_key()
+            fernet = Fernet(key)
+            encrypted = fernet.encrypt(password.encode('utf-8'))
+            return base64.urlsafe_b64encode(encrypted).decode('utf-8')
+        except Exception as e:
+            current_app.logger.error(f"Password encryption failed: {e}")
+            raise
+
+    @staticmethod
+    def decrypt_password(encrypted_password: str) -> str:
+        """Decrypt password for use"""
+        try:
+            if not encrypted_password:
+                return ''
+
+            key = SecurityUtils._get_encryption_key()
+            fernet = Fernet(key)
+            encrypted_bytes = base64.urlsafe_b64decode(encrypted_password.encode('utf-8'))
+            decrypted = fernet.decrypt(encrypted_bytes)
+            return decrypted.decode('utf-8')
+        except Exception as e:
+            current_app.logger.error(f"Password decryption failed: {e}")
+            raise
     
     @staticmethod
     def hash_file_content(content: bytes) -> str:

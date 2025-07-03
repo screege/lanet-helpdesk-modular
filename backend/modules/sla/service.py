@@ -418,5 +418,175 @@ class SLAService:
         except Exception as e:
             current_app.logger.error(f"Error escalating ticket: {e}")
 
+    def send_sla_breach_notification(self, breach_data: Dict) -> bool:
+        """Send SLA breach notification using the new email system"""
+        try:
+            # Get ticket details
+            ticket = current_app.db_manager.execute_query(
+                """
+                SELECT t.*, c.name as client_name, u.email as assigned_email, u.name as assigned_name,
+                       s.name as site_name
+                FROM tickets t
+                JOIN clients c ON t.client_id = c.client_id
+                LEFT JOIN users u ON t.assigned_to = u.user_id
+                LEFT JOIN sites s ON t.site_id = s.site_id
+                WHERE t.ticket_id = %s
+                """,
+                (breach_data['ticket_id'],),
+                fetch='one'
+            )
+
+            if not ticket:
+                return False
+
+            # Get notification recipients
+            recipients = self._get_breach_notification_recipients(breach_data, ticket)
+
+            # Get SLA breach email template
+            from modules.email.service import email_service
+            template = email_service.get_template_by_type('sla_breach')
+
+            if not template:
+                current_app.logger.warning("No SLA breach email template found")
+                return False
+
+            # Prepare template variables
+            template_variables = {
+                'ticket_number': ticket['ticket_number'],
+                'client_name': ticket['client_name'],
+                'site_name': ticket.get('site_name', 'N/A'),
+                'subject': ticket['subject'],
+                'priority': ticket['priority'],
+                'breach_type': breach_data['breach_type'],
+                'time_elapsed': self._calculate_time_elapsed(breach_data),
+                'assigned_name': ticket.get('assigned_name', 'No asignado'),
+                'escalation_level': breach_data.get('escalation_level', 0),
+                'deadline': breach_data.get('deadline', '').strftime('%d/%m/%Y %H:%M') if breach_data.get('deadline') else 'N/A'
+            }
+
+            # Send notifications
+            success_count = 0
+            for recipient in recipients:
+                try:
+                    # Create notification record
+                    notification_data = {
+                        'user_id': recipient.get('user_id'),
+                        'ticket_id': breach_data['ticket_id'],
+                        'type': 'sla_breach',
+                        'title': f'SLA Breach: {ticket["ticket_number"]}',
+                        'message': f'SLA {breach_data["breach_type"]} breach for ticket {ticket["ticket_number"]}',
+                        'data': {
+                            'breach_type': breach_data['breach_type'],
+                            'deadline': breach_data.get('deadline'),
+                            'escalation_level': breach_data.get('escalation_level', 0)
+                        }
+                    }
+
+                    current_app.db_manager.execute_insert('notifications', notification_data)
+
+                    # Send email if recipient has email
+                    if recipient.get('email'):
+                        success = email_service.send_template_email(
+                            template_id=template['template_id'],
+                            to_email=recipient['email'],
+                            variables=template_variables,
+                            ticket_id=breach_data['ticket_id']
+                        )
+                        if success:
+                            success_count += 1
+
+                except Exception as e:
+                    current_app.logger.error(f"Error sending breach notification to {recipient}: {e}")
+                    continue
+
+            current_app.logger.info(f"Sent SLA breach notifications to {success_count} recipients for ticket {ticket['ticket_number']}")
+            return success_count > 0
+
+        except Exception as e:
+            current_app.logger.error(f"Error sending SLA breach notification: {e}")
+            return False
+
+    def _get_breach_notification_recipients(self, breach_data: Dict, ticket: Dict) -> List[Dict]:
+        """Get list of recipients for SLA breach notifications"""
+        try:
+            recipients = []
+
+            # Add assigned technician
+            if ticket.get('assigned_to') and ticket.get('assigned_email'):
+                recipients.append({
+                    'user_id': ticket['assigned_to'],
+                    'email': ticket['assigned_email'],
+                    'name': ticket.get('assigned_name', 'Technician')
+                })
+
+            # Add superadmins and admins
+            admin_users = current_app.db_manager.execute_query(
+                """
+                SELECT user_id, email, name
+                FROM users
+                WHERE role IN ('superadmin', 'admin')
+                AND is_active = true
+                AND email IS NOT NULL
+                """
+            )
+
+            for admin in (admin_users or []):
+                recipients.append({
+                    'user_id': admin['user_id'],
+                    'email': admin['email'],
+                    'name': admin['name']
+                })
+
+            # Add client contacts if configured
+            if breach_data.get('escalation_level', 0) >= 2:  # High escalation level
+                client_contacts = current_app.db_manager.execute_query(
+                    """
+                    SELECT email, name
+                    FROM users
+                    WHERE client_id = %s
+                    AND role = 'client_admin'
+                    AND is_active = true
+                    AND email IS NOT NULL
+                    """,
+                    (ticket['client_id'],)
+                )
+
+                for contact in (client_contacts or []):
+                    recipients.append({
+                        'user_id': None,  # External contact
+                        'email': contact['email'],
+                        'name': contact['name']
+                    })
+
+            return recipients
+
+        except Exception as e:
+            current_app.logger.error(f"Error getting breach notification recipients: {e}")
+            return []
+
+    def _calculate_time_elapsed(self, breach_data: Dict) -> str:
+        """Calculate human-readable time elapsed since deadline"""
+        try:
+            if not breach_data.get('deadline'):
+                return 'N/A'
+
+            deadline = breach_data['deadline']
+            if isinstance(deadline, str):
+                deadline = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+
+            now = datetime.now(deadline.tzinfo) if deadline.tzinfo else datetime.now()
+            elapsed = now - deadline
+
+            if elapsed.days > 0:
+                return f"{elapsed.days} días, {elapsed.seconds // 3600} horas"
+            elif elapsed.seconds >= 3600:
+                return f"{elapsed.seconds // 3600} horas, {(elapsed.seconds % 3600) // 60} minutos"
+            else:
+                return f"{elapsed.seconds // 60} minutos"
+
+        except Exception as e:
+            current_app.logger.error(f"Error calculating time elapsed: {e}")
+            return 'N/A'
+
 # Global SLA service instance
 sla_service = SLAService()

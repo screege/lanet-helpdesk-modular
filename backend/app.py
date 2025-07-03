@@ -82,30 +82,6 @@ def create_app(config_name='development'):
     # Setup logging
     setup_logging(app)
 
-    # Add AGGRESSIVE request logging for debugging
-    @app.before_request
-    def log_request_info():
-        print("=" * 80)
-        print(f"🔥 INCOMING REQUEST: {request.method} {request.url}")
-        print(f"🔥 Headers: {dict(request.headers)}")
-        print(f"🔥 Remote addr: {request.remote_addr}")
-        print("=" * 80)
-
-        if request.method == 'POST' and 'tickets' in request.url:
-            print("🎫" * 20)
-            print("🎫 TICKET POST REQUEST DETECTED!")
-            print(f"🎫 URL: {request.url}")
-            print(f"🎫 Method: {request.method}")
-            print(f"🎫 Content-Type: {request.content_type}")
-            print(f"🎫 Authorization: {request.headers.get('Authorization', 'NONE')[:50]}...")
-            try:
-                data = request.get_json(force=True)
-                print(f"🎫 JSON Data: {data}")
-            except Exception as e:
-                print(f"🎫 JSON Parse Error: {e}")
-                print(f"🎫 Raw Data: {request.get_data()}")
-            print("🎫" * 20)
-    
     # JWT error handlers
     @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_payload):
@@ -123,8 +99,30 @@ def create_app(config_name='development'):
     @app.before_request
     def before_request():
         """Set up request context and RLS"""
+        # AGGRESSIVE request logging for debugging
+        print("=" * 80, flush=True)
+        print(f"🔥 INCOMING REQUEST: {request.method} {request.url}", flush=True)
+        print(f"🔥 Headers: {dict(request.headers)}", flush=True)
+        print(f"🔥 Remote addr: {request.remote_addr}", flush=True)
+        print("=" * 80, flush=True)
+
+        if request.method == 'POST' and 'tickets' in request.url:
+            print("🎫" * 20, flush=True)
+            print("🎫 TICKET POST REQUEST DETECTED!", flush=True)
+            print(f"🎫 URL: {request.url}", flush=True)
+            print(f"🎫 Method: {request.method}", flush=True)
+            print(f"🎫 Content-Type: {request.content_type}", flush=True)
+            print(f"🎫 Authorization: {request.headers.get('Authorization', 'NONE')[:50]}...", flush=True)
+            try:
+                data = request.get_json(force=True)
+                print(f"🎫 JSON Data: {data}", flush=True)
+            except Exception as e:
+                print(f"🎫 JSON Parse Error: {e}", flush=True)
+                print(f"🎫 Raw Data: {request.get_data()}", flush=True)
+            print("🎫" * 20, flush=True)
+
         g.start_time = datetime.utcnow()
-        
+
         # Skip RLS setup for auth endpoints
         if request.endpoint and request.endpoint.startswith('auth.'):
             return
@@ -154,7 +152,9 @@ def create_app(config_name='development'):
                     
             except Exception as e:
                 app.logger.warning(f"RLS context setup failed: {e}")
-    
+
+    print("🔧 BEFORE_REQUEST FUNCTION REGISTERED!", flush=True)
+
     @app.after_request
     def after_request(response):
         """Log request and add security headers"""
@@ -249,5 +249,9 @@ def setup_logging(app):
         app.logger.info('LANET Helpdesk V3 startup')
 
 if __name__ == '__main__':
+    import sys
+    sys.stdout.flush()
+    print("🚀 STARTING FLASK APP WITH DEBUGGING", flush=True)
     app = create_app()
+    print("🚀 FLASK APP CREATED, STARTING SERVER", flush=True)
     app.run(host='0.0.0.0', port=5001, debug=True)

@@ -193,6 +193,29 @@ class ResponseManager:
 
         return safe_activity
 
+    def format_attachment_data(self, attachment: Dict) -> Dict:
+        """Format attachment data for API response"""
+        if not attachment:
+            return None
+
+        safe_attachment = attachment.copy()
+
+        # Convert datetime objects to ISO format
+        if 'created_at' in safe_attachment and safe_attachment['created_at']:
+            safe_attachment['created_at'] = safe_attachment['created_at'].isoformat()
+
+        # Format file size for display
+        if 'file_size' in safe_attachment and safe_attachment['file_size']:
+            size_bytes = safe_attachment['file_size']
+            if size_bytes < 1024:
+                safe_attachment['file_size_display'] = f"{size_bytes} B"
+            elif size_bytes < 1024 * 1024:
+                safe_attachment['file_size_display'] = f"{size_bytes / 1024:.1f} KB"
+            else:
+                safe_attachment['file_size_display'] = f"{size_bytes / (1024 * 1024):.1f} MB"
+
+        return safe_attachment
+
     def format_category_data(self, category: Dict) -> Dict:
         """Format category data for API response"""
         if not category:

@@ -33,18 +33,8 @@ def run_sla_monitor():
                 # Send breach notifications
                 for breach in breaches:
                     try:
-                        if breach['breach_type'] == 'response':
-                            notifications_service.send_sla_breach(
-                                breach['ticket_id'], 
-                                'response', 
-                                0  # Already breached
-                            )
-                        elif breach['breach_type'] == 'resolution':
-                            notifications_service.send_sla_breach(
-                                breach['ticket_id'], 
-                                'resolution', 
-                                0  # Already breached
-                            )
+                        # Use the new SLA service method for email notifications
+                        sla_service.send_sla_breach_notification(breach)
                     except Exception as e:
                         logger.error(f"Failed to send breach notification for ticket {breach['ticket_id']}: {e}")
             else:
