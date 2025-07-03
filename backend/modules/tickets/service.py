@@ -20,6 +20,16 @@ class TicketService:
         self.db = db_manager
         self.auth = auth_manager
         self.logger = logging.getLogger(__name__)
+
+    def _get_system_config(self, config_key: str, default_value: str = None) -> str:
+        """Get system configuration value"""
+        try:
+            query = "SELECT config_value FROM system_config WHERE config_key = %s"
+            result = self.db.execute_query(query, (config_key,), fetch='one')
+            return result['config_value'] if result else default_value
+        except Exception as e:
+            self.logger.error(f"Error getting system config {config_key}: {e}")
+            return default_value
     
     def get_all_tickets(self, page: int = 1, per_page: int = 20, filters: Dict = None) -> Dict[str, Any]:
         """Get all tickets with pagination, search, and filters"""
@@ -358,6 +368,15 @@ class TicketService:
 
                     # NO actualizar resolution_notes - Solo usar historial
                     # update_data['resolution_notes'] = resolution_text  # COMENTADO PARA MANTENER HISTORIAL
+
+                    # Check if auto-close is enabled
+                    auto_close_enabled = self._get_system_config('auto_close_resolved_tickets', 'false').lower() == 'true'
+                    if auto_close_enabled:
+                        # Automatically close the ticket
+                        update_data['status'] = 'cerrado'
+                        update_data['closed_at'] = datetime.utcnow()
+                        changes.append("Ticket cerrado automáticamente tras resolución")
+                        self.logger.info(f"Ticket {ticket_id} auto-closed after resolution")
                 elif ticket_data['status'] == 'cerrado':
                     update_data['closed_at'] = datetime.utcnow()
                 elif ticket_data['status'] == 'reabierto':

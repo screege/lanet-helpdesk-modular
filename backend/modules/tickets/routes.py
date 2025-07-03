@@ -5,12 +5,13 @@ LANET Helpdesk V3 - Tickets Module Routes
 Ticket management endpoints
 """
 
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request, current_app, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from utils.security import require_role
 from datetime import datetime
 import uuid
 import logging
+import os
 
 # Configure detailed logging for debugging
 logging.basicConfig(
@@ -45,18 +46,19 @@ def get_tickets():
 def get_ticket(ticket_id):
     """Get specific ticket"""
     try:
-        ticket = current_app.db_manager.execute_query(
-            "SELECT * FROM tickets WHERE ticket_id = %s",
-            (ticket_id,),
-            fetch='one'
-        )
-        
+        # Import TicketService here to avoid circular imports
+        from .service import TicketService
+
+        # Use the service to get complete ticket data with joins
+        ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
+        ticket = ticket_service.get_ticket_by_id(ticket_id)
+
         if not ticket:
             return current_app.response_manager.not_found('Ticket')
-        
+
         formatted_ticket = current_app.response_manager.format_ticket_data(ticket)
         return current_app.response_manager.success(formatted_ticket)
-        
+
     except Exception as e:
         current_app.logger.error(f"Get ticket error: {e}")
         return current_app.response_manager.server_error('Failed to get ticket')
@@ -66,17 +68,38 @@ def get_ticket(ticket_id):
 @require_role(['superadmin', 'admin', 'technician', 'client_admin', 'solicitante'])
 def create_ticket():
     """Create a new ticket"""
+    print("🚨🚨🚨 CREATE_TICKET FUNCTION CALLED! 🚨🚨🚨", flush=True)
     logging.info("--- Petición recibida en el endpoint /api/tickets ---")
 
+    current_user_id = None
     try:
-        # Get JSON data from request
-        data = request.get_json()
+        current_user_id = get_jwt_identity()
+        print(f"🚨 Current user ID: {current_user_id}", flush=True)
+    except Exception as e:
+        print(f"🚨 ERROR getting current user: {e}", flush=True)
 
-        # CRITICAL LOGGING: Log exactly what we receive
-        if data:
-            logging.debug(f"Payload (cuerpo de la petición) recibido: {data}")
+    try:
+        # Handle both JSON and FormData (for file uploads)
+        logging.info(f"🔍 Request content_type: {request.content_type}")
+        logging.info(f"🔍 Request headers: {dict(request.headers)}")
+
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            # FormData with files
+            data = request.form.to_dict()
+            files = request.files.getlist('attachments')
+            logging.info(f"📋 FormData recibido: {data}")
+            logging.info(f"📎 Archivos recibidos: {len(files)} archivos")
+            for i, file in enumerate(files):
+                logging.info(f"  Archivo {i}: {file.filename} ({file.content_type})")
         else:
-            logging.warning("La petición llegó sin un cuerpo JSON.")
+            # Regular JSON
+            data = request.get_json()
+            files = []
+            logging.info(f"📋 JSON recibido: {data}")
+            logging.info(f"📎 No hay archivos (JSON request)")
+
+        if not data:
+            logging.warning("La petición llegó sin datos.")
             return current_app.response_manager.bad_request('No data provided')
 
         # Log user info
@@ -159,6 +182,17 @@ def create_ticket():
         # DEBUG: Log ticket number generation
         logging.info(f"Generated ticket number: {ticket_number}")
 
+        # Extract file attachments from request
+        files = []
+        current_app.logger.info(f"🔍 DEBUG: request.files keys: {list(request.files.keys())}")
+        current_app.logger.info(f"🔍 DEBUG: request.form keys: {list(request.form.keys())}")
+
+        if 'attachments' in request.files:
+            files = request.files.getlist('attachments')
+            current_app.logger.info(f"✅ Found {len(files)} attachments in request")
+        else:
+            current_app.logger.info("❌ No 'attachments' key found in request.files")
+
         # Helper function to convert empty strings to None
         def clean_field(value):
             if value is None:
@@ -230,6 +264,56 @@ def create_ticket():
 
         if result:
             current_app.logger.info(f"Ticket created successfully: {result['ticket_number']}")
+
+            # Handle file attachments if any
+            if files:
+                ticket_id = result['ticket_id']
+                saved_files = []
+
+                import os
+                from werkzeug.utils import secure_filename
+
+                # Create uploads directory if it doesn't exist
+                upload_dir = os.path.join(current_app.root_path, 'uploads', 'tickets', str(ticket_id))
+                os.makedirs(upload_dir, exist_ok=True)
+
+                for file in files:
+                    if file and file.filename:
+                        # Secure the filename
+                        filename = secure_filename(file.filename)
+
+                        # Add timestamp to avoid conflicts
+                        import time
+                        timestamp = str(int(time.time()))
+                        name, ext = os.path.splitext(filename)
+                        unique_filename = f"{name}_{timestamp}{ext}"
+
+                        # Save file
+                        file_path = os.path.join(upload_dir, unique_filename)
+                        file.save(file_path)
+
+                        # Save file info to database (using correct table and column names)
+                        file_data = {
+                            'ticket_id': ticket_id,
+                            'filename': unique_filename,  # stored filename
+                            'original_filename': filename,  # original filename
+                            'file_path': file_path,
+                            'file_size': os.path.getsize(file_path),
+                            'mime_type': file.content_type,  # correct column name
+                            'uploaded_by': current_user_id,
+                            'created_at': datetime.utcnow()
+                        }
+
+                        file_result = current_app.db_manager.execute_insert('file_attachments', file_data)
+                        if file_result:
+                            saved_files.append({
+                                'filename': filename,
+                                'size': file_data['file_size'],
+                                'type': file_data['content_type']
+                            })
+
+                current_app.logger.info(f"Saved {len(saved_files)} attachments for ticket {ticket_id}")
+
             formatted_ticket = current_app.response_manager.format_ticket_data(result)
             return current_app.response_manager.success(formatted_ticket, "Ticket created successfully", 201)
         else:
@@ -377,6 +461,131 @@ def add_ticket_comment(ticket_id):
     except Exception as e:
         current_app.logger.error(f"Add comment error: {e}")
         return current_app.response_manager.server_error('Failed to add comment')
+
+@tickets_bp.route('/<ticket_id>/attachments', methods=['GET'])
+@jwt_required()
+def get_ticket_attachments(ticket_id):
+    """Get all attachments for a ticket"""
+    try:
+        # Validate ticket ID
+        if not current_app.db_manager.validate_uuid(ticket_id):
+            return current_app.response_manager.bad_request('Invalid ticket ID format')
+
+        # Check if ticket exists and user has access
+        ticket = current_app.db_manager.execute_query(
+            "SELECT ticket_id, client_id FROM tickets WHERE ticket_id = %s",
+            (ticket_id,),
+            fetch='one'
+        )
+
+        if not ticket:
+            return current_app.response_manager.not_found('Ticket')
+
+        # Check access permissions
+        claims = get_jwt()
+        current_user_role = claims.get('role')
+        current_user_client_id = claims.get('client_id')
+
+        if current_user_role in ['client_admin', 'solicitante']:
+            if ticket['client_id'] != current_user_client_id:
+                return current_app.response_manager.forbidden('Access denied')
+
+        # Get attachments
+        query = """
+        SELECT fa.attachment_id, fa.ticket_id, fa.filename, fa.original_filename,
+               fa.file_size, fa.mime_type, fa.uploaded_by, fa.created_at,
+               u.name as uploaded_by_name, u.role as uploaded_by_role
+        FROM file_attachments fa
+        LEFT JOIN users u ON fa.uploaded_by = u.user_id
+        WHERE fa.ticket_id = %s
+        ORDER BY fa.created_at ASC
+        """
+
+        attachments = current_app.db_manager.execute_query(query, (ticket_id,))
+        formatted_attachments = [current_app.response_manager.format_attachment_data(attachment) for attachment in (attachments or [])]
+
+        return current_app.response_manager.success(formatted_attachments)
+
+    except Exception as e:
+        current_app.logger.error(f"Get ticket attachments error: {e}")
+        return current_app.response_manager.server_error('Failed to get ticket attachments')
+
+@tickets_bp.route('/attachments/<attachment_id>/download', methods=['GET'])
+@jwt_required()
+def download_attachment(attachment_id):
+    """Download a specific attachment by ID"""
+    try:
+        # Validate attachment ID
+        if not current_app.db_manager.validate_uuid(attachment_id):
+            return current_app.response_manager.bad_request('Invalid attachment ID format')
+
+        # Get attachment info and check access
+        query = """
+        SELECT fa.attachment_id, fa.ticket_id, fa.filename, fa.original_filename,
+               fa.file_path, fa.file_size, fa.mime_type,
+               t.client_id
+        FROM file_attachments fa
+        JOIN tickets t ON fa.ticket_id = t.ticket_id
+        WHERE fa.attachment_id = %s
+        """
+
+        attachment = current_app.db_manager.execute_query(query, (attachment_id,), fetch='one')
+        if not attachment:
+            return current_app.response_manager.not_found('Attachment')
+
+        # Check access permissions
+        claims = get_jwt()
+        current_user_role = claims.get('role')
+        current_user_client_id = claims.get('client_id')
+
+        if current_user_role in ['client_admin', 'solicitante']:
+            if attachment['client_id'] != current_user_client_id:
+                return current_app.response_manager.forbidden('Access denied')
+
+        # Check if file exists on disk
+        file_path = attachment['file_path']
+        if not os.path.exists(file_path):
+            current_app.logger.error(f"File not found on disk: {file_path}")
+            return current_app.response_manager.not_found('File not found on server')
+
+        # Read file and return as response
+        try:
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+
+            # Sanitize filename for Content-Disposition header
+            import urllib.parse
+            safe_filename = attachment['original_filename'].replace('"', '\\"')
+            # URL encode the filename for better browser compatibility
+            encoded_filename = urllib.parse.quote(attachment['original_filename'])
+
+            # Create response with proper headers for file download
+            response = Response(
+                file_data,
+                mimetype=attachment['mime_type'] or 'application/octet-stream',
+                headers={
+                    # Use both filename and filename* for maximum browser compatibility
+                    'Content-Disposition': f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded_filename}',
+                    'Content-Length': str(len(file_data)),
+                    'Content-Type': attachment['mime_type'] or 'application/octet-stream',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'Accept-Ranges': 'bytes',
+                    'X-Content-Type-Options': 'nosniff'
+                }
+            )
+
+            current_app.logger.info(f"Download response created successfully for {attachment['original_filename']}")
+            return response
+
+        except Exception as file_error:
+            current_app.logger.error(f"File read error: {file_error}")
+            return current_app.response_manager.server_error('Failed to read file')
+
+    except Exception as e:
+        current_app.logger.error(f"Download attachment error: {e}")
+        return current_app.response_manager.server_error('Failed to download attachment')
 
 @tickets_bp.route('/<ticket_id>/activities', methods=['GET'])
 @jwt_required()
