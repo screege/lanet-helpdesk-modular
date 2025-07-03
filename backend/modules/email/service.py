@@ -1102,11 +1102,12 @@ LANET Helpdesk V3
             emails_found = len(message_ids)
             tickets_created = 0
             emails_processed = 0
+            emails_to_delete = []  # Collect emails to delete at the end
 
             current_app.logger.info(f"🔧 EMAIL SERVICE: Found {emails_found} unread emails")
 
-            # Process each email (limit to 50 for performance)
-            for msg_id in message_ids[:50]:
+            # Process ALL emails (no artificial limit - let IMAP server handle performance)
+            for msg_id in message_ids:
                 try:
                     current_app.logger.info(f"🔧 EMAIL SERVICE: Processing email ID: {msg_id}")
 
@@ -1158,10 +1159,10 @@ LANET Helpdesk V3
                             # Update processing log with success
                             self._update_email_processing_log(log_id, 'processed', ticket_id)
 
-                            # Delete email only after successful ticket creation
+                            # Collect email for deletion only after successful ticket creation
                             if config.get('auto_delete_processed', True):
-                                self._delete_processed_email(msg_id)
-                                current_app.logger.info(f"🔧 EMAIL SERVICE: Deleted processed email {msg_id}")
+                                emails_to_delete.append(msg_id)
+                                current_app.logger.info(f"🔧 EMAIL SERVICE: Marked email {msg_id} for deletion")
                             else:
                                 # Just mark as read
                                 self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
@@ -1182,6 +1183,25 @@ LANET Helpdesk V3
                 except Exception as e:
                     current_app.logger.error(f"🔧 EMAIL SERVICE: Error processing email {msg_id}: {e}")
                     continue
+
+            # Delete all processed emails in batch (more efficient and safer)
+            if emails_to_delete:
+                current_app.logger.info(f"🔧 EMAIL SERVICE: Deleting {len(emails_to_delete)} processed emails in batch")
+                try:
+                    for msg_id in emails_to_delete:
+                        self.imap_connection.store(msg_id, '+FLAGS', '\\Deleted')
+                    # Expunge once at the end to permanently delete all marked emails
+                    self.imap_connection.expunge()
+                    current_app.logger.info(f"🔧 EMAIL SERVICE: Successfully deleted {len(emails_to_delete)} emails from server")
+                except Exception as delete_error:
+                    current_app.logger.error(f"🔧 EMAIL SERVICE: Error deleting emails in batch: {delete_error}")
+                    # Fallback: mark all as read instead
+                    try:
+                        for msg_id in emails_to_delete:
+                            self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
+                        current_app.logger.info(f"🔧 EMAIL SERVICE: Fallback: marked {len(emails_to_delete)} emails as read")
+                    except:
+                        current_app.logger.error("🔧 EMAIL SERVICE: Failed to mark emails as read in fallback")
 
             # Disconnect
             self.disconnect_imap()
@@ -1244,9 +1264,7 @@ LANET Helpdesk V3
     def _is_email_already_processed(self, message_id: str) -> bool:
         """Check if email has already been processed"""
         try:
-            from core.database import get_db_connection
-
-            with get_db_connection() as conn:
+            with current_app.db_manager.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(
                         "SELECT id FROM email_processing_log WHERE message_id = %s AND processing_status = 'processed'",
@@ -1262,12 +1280,11 @@ LANET Helpdesk V3
                             subject: str, body: str, email_size: int, status: str) -> str:
         """Log email processing attempt"""
         try:
-            from core.database import get_db_connection
             import uuid
 
             log_id = str(uuid.uuid4())
 
-            with get_db_connection() as conn:
+            with current_app.db_manager.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
                         INSERT INTO email_processing_log
@@ -1288,9 +1305,7 @@ LANET Helpdesk V3
     def _update_email_processing_log(self, log_id: str, status: str, ticket_id: str = None, error_message: str = None):
         """Update email processing log with result"""
         try:
-            from core.database import get_db_connection
-
-            with get_db_connection() as conn:
+            with current_app.db_manager.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
                         UPDATE email_processing_log
@@ -1302,42 +1317,95 @@ LANET Helpdesk V3
         except Exception as e:
             current_app.logger.error(f"Error updating email processing log: {e}")
 
-    def _delete_processed_email(self, msg_id: bytes):
-        """Delete email from IMAP server after successful processing"""
-        try:
-            # Mark for deletion
-            self.imap_connection.store(msg_id, '+FLAGS', '\\Deleted')
-            # Expunge to permanently delete
-            self.imap_connection.expunge()
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Permanently deleted email {msg_id}")
-
-        except Exception as e:
-            current_app.logger.error(f"🔧 EMAIL SERVICE: Error deleting email {msg_id}: {e}")
-            # Fallback to just marking as read
-            try:
-                self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
-            except:
-                pass
+    # Removed _delete_processed_email method - now using batch deletion for better performance and reliability
 
     def _create_ticket_from_email_atomic(self, from_email: str, subject: str, body: str,
                                        config: Dict, message_id: str) -> str:
-        """Create ticket from email with atomic transaction"""
+        """Create ticket from email with atomic transaction and intelligent routing"""
         try:
-            from core.database import get_db_connection
+            from .routing_service import email_routing_service
             import uuid
 
-            # For now, simulate ticket creation
-            # In full implementation, this would create actual ticket
+            current_app.logger.info(f"🔧 EMAIL SERVICE: Starting intelligent ticket creation for {from_email}")
+
+            # Step 1: Route email to appropriate client and site
+            routing_result = email_routing_service.route_email_to_client_site(from_email)
+            current_app.logger.info(f"🔧 EMAIL SERVICE: Routing result: {routing_result}")
+
+            # Step 2: Create ticket with routing information
             ticket_id = str(uuid.uuid4())
 
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Simulating ticket creation - ID: {ticket_id}")
-            current_app.logger.info(f"🔧 EMAIL SERVICE: From: {from_email}, Subject: {subject}")
+            # Extract routing information
+            client_id = routing_result.get('client_id')
+            site_id = routing_result.get('site_id')
+            priority = routing_result.get('priority', 'media')
+            routing_decision = routing_result.get('routing_decision')
 
-            # Simulate successful ticket creation
+            # Determine ticket status based on routing
+            if routing_decision == 'unauthorized':
+                status = 'pending_authorization'
+                title = f"[NO AUTORIZADO] {subject}"
+                description = f"""
+Email recibido de remitente no autorizado.
+
+Remitente: {from_email}
+Asunto Original: {subject}
+Decisión de Enrutamiento: {routing_decision}
+Razón: {routing_result.get('reason', 'Dominio no autorizado')}
+
+Contenido del Email:
+{body[:1000]}{'...' if len(body) > 1000 else ''}
+
+ACCIÓN REQUERIDA: Revisar y asignar manualmente al cliente correcto.
+                """
+            else:
+                status = 'abierto'
+                title = subject
+                description = f"""
+Email recibido y procesado automáticamente.
+
+Remitente: {from_email}
+Cliente: {routing_result.get('client_name', 'N/A')}
+Sitio: {routing_result.get('site_name', 'N/A')}
+Decisión de Enrutamiento: {routing_decision}
+Confianza: {routing_result.get('routing_confidence', 0.0):.2f}
+
+Contenido del Email:
+{body}
+                """
+
+            # For now, simulate ticket creation with detailed logging
+            current_app.logger.info(f"🔧 EMAIL SERVICE: Creating ticket with routing:")
+            current_app.logger.info(f"  - Ticket ID: {ticket_id}")
+            current_app.logger.info(f"  - Client ID: {client_id}")
+            current_app.logger.info(f"  - Site ID: {site_id}")
+            current_app.logger.info(f"  - Priority: {priority}")
+            current_app.logger.info(f"  - Status: {status}")
+            current_app.logger.info(f"  - Routing Decision: {routing_decision}")
+            current_app.logger.info(f"  - Title: {title[:100]}...")
+
+            # Update routing log with created ticket ID
+            try:
+                with current_app.db_manager.get_connection() as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("""
+                            UPDATE email_routing_log
+                            SET created_ticket_id = %s
+                            WHERE sender_email = %s
+                                AND email_message_id LIKE 'routing-test-%'
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        """, (ticket_id, from_email))
+                        conn.commit()
+            except Exception as log_error:
+                current_app.logger.warning(f"Could not update routing log: {log_error}")
+
+            # In full implementation, this would create the actual ticket in the database
+            # For now, return the simulated ticket ID
             return ticket_id
 
         except Exception as e:
-            current_app.logger.error(f"🔧 EMAIL SERVICE: Error in atomic ticket creation: {e}")
+            current_app.logger.error(f"🔧 EMAIL SERVICE: Error in intelligent ticket creation: {e}")
             raise e
 
 # Global email service instance
