@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, MapPin, Save } from 'lucide-react';
+import { X, Building2, MapPin, Save, Mail, Plus, Trash2 } from 'lucide-react';
 import { sitesService, Site, CreateSiteData, UpdateSiteData } from '../../services/sitesService';
 import { apiService } from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
@@ -29,7 +29,8 @@ const SiteForm: React.FC<SiteFormProps> = ({
     country: site?.country || 'México',
     postal_code: site?.postal_code || '',
     latitude: site?.latitude || '',
-    longitude: site?.longitude || ''
+    longitude: site?.longitude || '',
+    authorized_emails: site?.authorized_emails || []
   });
 
   const [clients, setClients] = useState<any[]>([]);
@@ -37,6 +38,7 @@ const SiteForm: React.FC<SiteFormProps> = ({
   const [loadingClients, setLoadingClients] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [newEmail, setNewEmail] = useState('');
 
   const isEditing = !!site;
 
@@ -45,6 +47,24 @@ const SiteForm: React.FC<SiteFormProps> = ({
       loadClients();
     }
   }, [isOpen, clientId]);
+
+  // Update form data when site prop changes
+  useEffect(() => {
+    if (site) {
+      setFormData({
+        client_id: clientId || site.client_id || '',
+        name: site.name || '',
+        address: site.address || '',
+        city: site.city || '',
+        state: site.state || '',
+        country: site.country || 'México',
+        postal_code: site.postal_code || '',
+        latitude: site.latitude || '',
+        longitude: site.longitude || '',
+        authorized_emails: site.authorized_emails || []
+      });
+    }
+  }, [site, clientId]);
 
   const loadClients = async () => {
     try {
@@ -94,6 +114,39 @@ const SiteForm: React.FC<SiteFormProps> = ({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  // Email validation function
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Email management functions
+  const addEmail = () => {
+    const email = newEmail.trim().toLowerCase();
+    if (email && validateEmail(email) && !formData.authorized_emails.includes(email)) {
+      setFormData(prev => ({
+        ...prev,
+        authorized_emails: [...prev.authorized_emails, email]
+      }));
+      setNewEmail('');
+      // Clear any email-related errors
+      if (errors.newEmail) {
+        setErrors(prev => ({ ...prev, newEmail: '' }));
+      }
+    } else if (!validateEmail(email)) {
+      setErrors(prev => ({ ...prev, newEmail: 'Formato de email inválido' }));
+    } else if (formData.authorized_emails.includes(email)) {
+      setErrors(prev => ({ ...prev, newEmail: 'Este email ya está autorizado' }));
+    }
+  };
+
+  const removeEmail = (emailToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      authorized_emails: prev.authorized_emails.filter(email => email !== emailToRemove)
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -319,6 +372,67 @@ const SiteForm: React.FC<SiteFormProps> = ({
                 <p className="mt-1 text-sm text-red-600">{errors.postal_code}</p>
               )}
             </div>
+          </div>
+
+          {/* Email Authorization Section */}
+          <div className="bg-gray-50 p-6 rounded-lg">
+            <div className="flex items-center mb-4">
+              <Mail className="h-5 w-5 text-blue-600 mr-2" />
+              <h3 className="text-lg font-medium text-gray-900">Emails Autorizados</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Solo los emails de esta lista podrán crear tickets automáticamente para este sitio
+            </p>
+
+            {/* Add Email Input */}
+            <div className="flex gap-2 mb-4">
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
+                className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.newEmail ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="usuario@empresa.com"
+              />
+              <button
+                type="button"
+                onClick={addEmail}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Agregar
+              </button>
+            </div>
+            {errors.newEmail && (
+              <p className="mb-3 text-sm text-red-600">{errors.newEmail}</p>
+            )}
+
+            {/* Email List */}
+            {formData.authorized_emails && formData.authorized_emails.length > 0 && (
+              <div className="space-y-2">
+                {formData.authorized_emails.map((email, index) => (
+                  <div key={index} className="flex items-center justify-between bg-white p-3 rounded-lg border">
+                    <span className="text-sm font-medium text-gray-900">{email}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeEmail(email)}
+                      className="text-red-600 hover:text-red-800 focus:outline-none"
+                      title="Eliminar email"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {formData.authorized_emails.length === 0 && (
+              <div className="text-center py-4 text-gray-500 text-sm">
+                No hay emails autorizados. Agregue al menos uno para permitir la creación automática de tickets.
+              </div>
+            )}
           </div>
 
           {/* Coordinates (Optional) */}

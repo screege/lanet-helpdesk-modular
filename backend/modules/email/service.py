@@ -686,35 +686,53 @@ LANET Helpdesk V3
             return None
     
     def validate_sender_email(self, sender_email: str) -> Optional[Dict]:
-        """Validate sender email against client allowed emails and return client info"""
+        """Validate sender email against client authorized domains and site authorized emails"""
         try:
             # Clean the sender email
             sender_email = sender_email.lower().strip()
             sender_domain = '@' + sender_email.split('@')[1] if '@' in sender_email else ''
 
-            # Query clients with allowed_emails that match sender
-            query = """
-            SELECT client_id, name, allowed_emails
-            FROM clients
-            WHERE is_active = true
-            AND (
-                %s = ANY(allowed_emails) OR  -- Exact email match
-                %s = ANY(allowed_emails)     -- Domain match
-            )
+            # First check for exact email match in sites.authorized_emails
+            site_query = """
+            SELECT c.client_id, c.name, s.site_id, s.name as site_name
+            FROM clients c
+            JOIN sites s ON c.client_id = s.client_id
+            WHERE c.is_active = true
+            AND s.is_active = true
+            AND %s = ANY(s.authorized_emails)
             LIMIT 1
             """
 
-            client = current_app.db_manager.execute_query(
-                query,
-                (sender_email, sender_domain),
+            site_match = current_app.db_manager.execute_query(
+                site_query,
+                (sender_email,),
                 fetch='one'
             )
 
-            if client:
-                current_app.logger.info(f"Email validation successful: {sender_email} -> {client['name']}")
-                return client
+            if site_match:
+                current_app.logger.info(f"Email validation successful (exact match): {sender_email} -> {site_match['name']} - {site_match['site_name']}")
+                return site_match
+
+            # If no exact match, check for domain match in clients.authorized_domains
+            domain_query = """
+            SELECT client_id, name, authorized_domains
+            FROM clients
+            WHERE is_active = true
+            AND %s = ANY(authorized_domains)
+            LIMIT 1
+            """
+
+            domain_match = current_app.db_manager.execute_query(
+                domain_query,
+                (sender_domain,),
+                fetch='one'
+            )
+
+            if domain_match:
+                current_app.logger.info(f"Email validation successful (domain match): {sender_email} -> {domain_match['name']}")
+                return domain_match
             else:
-                current_app.logger.warning(f"Email validation failed: {sender_email} not in any client's allowed_emails")
+                current_app.logger.warning(f"Email validation failed: {sender_email} not in any client's authorized_emails or authorized_domains")
                 return None
 
         except Exception as e:
@@ -724,25 +742,30 @@ LANET Helpdesk V3
     def log_email_rejection(self, email_data: Dict, reason: str, config: Dict):
         """Log rejected email to audit log"""
         try:
+            import json
+
+            # Convert dictionary to JSON string for database storage
+            rejection_details = {
+                'from_email': email_data.get('from_email', 'unknown'),
+                'to_email': email_data.get('to_email', 'unknown'),
+                'subject': email_data.get('subject', 'No subject'),
+                'rejection_reason': reason,
+                'config_id': config.get('config_id', 'unknown'),
+                'message_id': email_data.get('message_id', 'unknown')
+            }
+
             audit_data = {
                 'user_id': None,  # System action
                 'action': 'email_rejected',
                 'table_name': 'email_processing_log',
                 'record_id': None,
                 'old_values': None,
-                'new_values': {
-                    'from_email': email_data.get('from_email', 'unknown'),
-                    'to_email': email_data.get('to_email', 'unknown'),
-                    'subject': email_data.get('subject', 'No subject'),
-                    'rejection_reason': reason,
-                    'config_id': config.get('config_id', 'unknown'),
-                    'message_id': email_data.get('message_id', 'unknown')
-                },
+                'new_values': json.dumps(rejection_details),  # Convert to JSON string
                 'timestamp': datetime.now()
             }
 
             current_app.db_manager.execute_insert('audit_log', audit_data)
-            current_app.logger.warning(f"Email rejected and logged: {email_data['from_email']} - {reason}")
+            current_app.logger.warning(f"Email rejected and logged: {email_data.get('from_email', 'unknown')} - {reason}")
 
         except Exception as e:
             current_app.logger.error(f"Error logging email rejection: {e}")
@@ -761,7 +784,7 @@ LANET Helpdesk V3
                 # Log rejection and return None (no ticket created)
                 self.log_email_rejection(
                     email_data,
-                    f"Sender email {sender_email} not in any client's allowed_emails",
+                    f"Sender email {sender_email} not in any client's authorized_emails or authorized_domains",
                     config
                 )
                 return None
@@ -771,15 +794,31 @@ LANET Helpdesk V3
 
             tickets_service = TicketsService()
 
-            # Use the validated client_id instead of default
+            # Get site_id from authorized client (if available) or use primary site
+            site_id = authorized_client.get('site_id')
+            if not site_id:
+                # If no specific site from validation, get the primary site for the client
+                primary_site = current_app.db_manager.execute_query(
+                    "SELECT site_id FROM sites WHERE client_id = %s AND is_primary_site = true AND is_active = true LIMIT 1",
+                    (authorized_client['client_id'],),
+                    fetch='one'
+                )
+                site_id = primary_site['site_id'] if primary_site else None
+
+            if not site_id:
+                current_app.logger.error(f"No valid site found for client {authorized_client['client_id']}")
+                return None
+
+            # Use the validated client_id and site_id
             ticket_data = {
                 'client_id': authorized_client['client_id'],
+                'site_id': site_id,
                 'category_id': config['default_category_id'],
                 'subject': email_data['subject'],
                 'description': email_data['body_text'] or email_data['body_html'],
                 'priority': config['default_priority'],
                 'affected_person': sender_name,
-                'notification_email': sender_email,
+                'affected_person_contact': sender_email,  # Use email as contact
                 'channel': 'email',
                 'is_email_originated': True,
                 'from_email': sender_email,
@@ -787,13 +826,25 @@ LANET Helpdesk V3
             }
 
             # Auto-assign if configured
-            if config['auto_assign_to']:
+            if config.get('auto_assign_to'):
                 ticket_data['assigned_to'] = config['auto_assign_to']
 
-            # Create ticket with validated client
-            ticket_id = tickets_service.create_ticket(ticket_data, created_by_email=sender_email)
+            # Get system user ID for email-originated tickets
+            system_user = current_app.db_manager.execute_query(
+                "SELECT user_id FROM users WHERE role = 'superadmin' AND is_active = true LIMIT 1",
+                fetch='one'
+            )
+            created_by = system_user['user_id'] if system_user else config.get('default_user_id')
 
-            if ticket_id:
+            if not created_by:
+                current_app.logger.error("No system user found to create email-originated ticket")
+                return None
+
+            # Create ticket with system user
+            result = tickets_service.create_ticket(ticket_data, created_by)
+
+            if result.get('success') and result.get('ticket_id'):
+                ticket_id = result['ticket_id']
                 current_app.logger.info(f"Ticket created from authorized email: {ticket_id} from {sender_email}")
 
                 # Process email attachments if any
@@ -802,7 +853,10 @@ LANET Helpdesk V3
                     if saved_attachments:
                         current_app.logger.info(f"Processed {len(saved_attachments)} attachments for ticket {ticket_id}")
 
-            return ticket_id
+                return ticket_id
+            else:
+                current_app.logger.error(f"Failed to create ticket from email: {result.get('errors', 'Unknown error')}")
+                return None
 
         except Exception as e:
             current_app.logger.error(f"Error creating ticket from email: {e}")
@@ -814,21 +868,54 @@ LANET Helpdesk V3
             # Get ticket by number
             query = "SELECT ticket_id FROM tickets WHERE ticket_number = %s"
             ticket = current_app.db_manager.execute_query(query, (ticket_number,), fetch='one')
-            
+
             if not ticket:
                 return None
-            
-            # Add comment
+
+            # Find user for email replies - first try exact email match, then fallback to superadmin
+            system_user_query = """
+            SELECT user_id FROM users
+            WHERE email = %s AND is_active = true
+            LIMIT 1
+            """
+
+            system_user = current_app.db_manager.execute_query(
+                system_user_query,
+                (email_data['from_email'],),
+                fetch='one'
+            )
+
+            # If no user found with that email, use a superadmin user as fallback
+            if not system_user:
+                # Try to find any superadmin user as fallback
+                fallback_query = "SELECT user_id FROM users WHERE role = 'superadmin' AND is_active = true LIMIT 1"
+                system_user = current_app.db_manager.execute_query(fallback_query, fetch='one')
+
+            if not system_user:
+                current_app.logger.error(f"No valid user found for email comment from {email_data['from_email']}")
+                return None
+
+            # Add comment with correct column names
             comment_data = {
                 'ticket_id': ticket['ticket_id'],
-                'comment': email_data['body_text'] or email_data['body_html'],
+                'user_id': system_user['user_id'],
+                'comment_text': email_data['body_text'] or email_data['body_html'],
                 'is_internal': False,
-                'created_by_email': email_data['from_email']
+                'is_email_reply': True,
+                'email_message_id': email_data.get('message_id')
             }
-            
+
             current_app.db_manager.execute_insert('ticket_comments', comment_data)
+
+            # Send notification for the new comment
+            try:
+                from modules.notifications.service import notifications_service
+                notifications_service.send_ticket_notification('ticket_commented', ticket['ticket_id'])
+            except Exception as e:
+                current_app.logger.warning(f"Failed to send comment notification: {e}")
+
             return ticket['ticket_id']
-            
+
         except Exception as e:
             current_app.logger.error(f"Error adding email comment: {e}")
             return None

@@ -19,7 +19,7 @@ class NotificationsService:
             },
             'ticket_assigned': {
                 'template_type': 'ticket_assigned',
-                'recipients': ['client', 'assigned_technician'],
+                'recipients': ['client', 'assigned_technician', 'admins'],
                 'priority': 2
             },
             'ticket_status_changed': {
@@ -29,12 +29,12 @@ class NotificationsService:
             },
             'ticket_commented': {
                 'template_type': 'ticket_commented',
-                'recipients': ['client', 'assigned_technician'],
+                'recipients': ['client', 'assigned_technician', 'admins'],
                 'priority': 4
             },
             'ticket_resolved': {
                 'template_type': 'ticket_resolved',
-                'recipients': ['client'],
+                'recipients': ['client', 'assigned_technician', 'admins'],
                 'priority': 2
             },
             'ticket_closed': {
