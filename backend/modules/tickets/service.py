@@ -448,6 +448,21 @@ class TicketService:
                     # Get updated ticket
                     updated_ticket = self.get_ticket_by_id(ticket_id)
                     self.logger.info(f"Ticket updated successfully: {updated_ticket['ticket_number']}")
+
+                    # Send notification for ticket update
+                    try:
+                        from modules.notifications.service import notifications_service
+
+                        # Check if this is a resolution
+                        if 'resolution_notes' in ticket_data and ticket_data['resolution_notes']:
+                            notifications_service.send_ticket_notification('ticket_resolved', ticket_id)
+                        elif 'status' in ticket_data:
+                            notifications_service.send_ticket_notification('ticket_status_changed', ticket_id)
+                        else:
+                            notifications_service.send_ticket_notification('ticket_status_changed', ticket_id)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to send ticket update notification: {e}")
+
                     return {'success': True, 'ticket': updated_ticket}
                 else:
                     return {'success': False, 'errors': {'general': 'Failed to update ticket'}}
@@ -505,6 +520,13 @@ class TicketService:
                     'assigned',
                     f"Ticket asignado a {assignee['name']}"
                 )
+
+                # Send notification for ticket assignment
+                try:
+                    from modules.notifications.service import notifications_service
+                    notifications_service.send_ticket_notification('ticket_assigned', ticket_id)
+                except Exception as e:
+                    self.logger.warning(f"Failed to send ticket assignment notification: {e}")
 
                 self.logger.info(f"Ticket {ticket['ticket_number']} assigned to {assignee['name']}")
                 return {'success': True, 'message': f"Ticket assigned to {assignee['name']}"}
@@ -591,6 +613,13 @@ class TicketService:
                     'commented',
                     f"Agregó {comment_type}"
                 )
+
+                # Send notification for ticket comment
+                try:
+                    from modules.notifications.service import notifications_service
+                    notifications_service.send_ticket_notification('ticket_commented', ticket_id)
+                except Exception as e:
+                    self.logger.warning(f"Failed to send ticket comment notification: {e}")
 
                 self.logger.info(f"Comment added to ticket {ticket['ticket_number']}")
                 return {'success': True, 'comment': result}
