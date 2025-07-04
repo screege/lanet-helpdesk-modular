@@ -790,9 +790,9 @@ LANET Helpdesk V3
                 return None
 
             # Import here to avoid circular imports
-            from modules.tickets.service import TicketsService
+            from modules.tickets.service import TicketService
 
-            tickets_service = TicketsService()
+            tickets_service = TicketService(current_app.db_manager, current_app.auth_manager)
 
             # Get site_id from authorized client (if available) or use primary site
             site_id = authorized_client.get('site_id')
