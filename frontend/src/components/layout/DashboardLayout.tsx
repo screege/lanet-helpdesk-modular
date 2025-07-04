@@ -77,12 +77,7 @@ const DashboardLayout: React.FC = () => {
           icon: Ticket,
           permission: 'tickets.read',
         },
-        {
-          name: 'Categorías',
-          href: '/categories',
-          icon: FolderTree,
-          permission: 'categories.read',
-        },
+
         {
           name: 'Clientes',
           href: '/clients',
@@ -101,10 +96,10 @@ const DashboardLayout: React.FC = () => {
           permission: null,
           submenu: user?.role === 'superadmin' || user?.role === 'admin' ? [
             {
-              name: 'Categorías y Subcategorías',
-              href: '/admin/categories',
-              icon: Settings,
-              permission: 'admin.categories',
+              name: 'Categorías',
+              href: '/categories',
+              icon: FolderTree,
+              permission: 'categories.read',
             },
             {
               name: 'Gestión de SLA',

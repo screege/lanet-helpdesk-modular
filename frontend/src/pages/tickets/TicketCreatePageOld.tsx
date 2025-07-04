@@ -53,8 +53,7 @@ const TicketCreatePage: React.FC = () => {
     assigned_to: '',
     category_id: '',
     affected_person: '',
-    affected_person_phone: '',
-    notification_email: '',
+    affected_person_contact: '',
     additional_emails: [],
     channel: 'portal'
   });
@@ -65,9 +64,6 @@ const TicketCreatePage: React.FC = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
-
-  // File attachments
-  const [attachments, setAttachments] = useState<File[]>([]);
 
   // Load initial data once
   useEffect(() => {
@@ -113,38 +109,19 @@ const TicketCreatePage: React.FC = () => {
       // Role-based data loading
       const isClientUser = user?.role === 'client_admin' || user?.role === 'solicitante';
 
-      // Load data individually to avoid Promise.all failures
-      let techniciansResponse, categoriesResponse, clientsResponse, sitesResponse;
+      const promises = [
+        usersService.getUsersByRole('technician'),
+        categoriesService.getFlatCategories(),
+        clientsService.getAllClients(), // Always load clients (backend filters appropriately)
+        sitesService.getAllSites() // Always load sites (backend filters appropriately)
+      ];
 
-      try {
-        techniciansResponse = await usersService.getUsersByRole('technician');
-      } catch (err) {
-        console.error('Error loading technicians:', err);
-        techniciansResponse = { data: [] };
-      }
+      const responses = await Promise.all(promises);
 
-      try {
-        categoriesResponse = await categoriesService.getFlatCategories();
-      } catch (err) {
-        console.error('Error loading categories:', err);
-        categoriesResponse = { data: [] };
-      }
-
-      try {
-        clientsResponse = await clientsService.getAllClients();
-      } catch (err) {
-        console.error('Error loading clients:', err);
-        clientsResponse = { data: [] };
-      }
-
-      try {
-        sitesResponse = await sitesService.getAllSites();
-      } catch (err) {
-        console.error('Error loading sites:', err);
-        sitesResponse = { data: [] };
-      }
-
-
+      const techniciansResponse = responses[0];
+      const categoriesResponse = responses[1];
+      const clientsResponse = responses[2];
+      const sitesResponse = responses[3];
 
       console.log('📋 Raw API responses:');
       console.log('  Technicians:', techniciansResponse);
@@ -152,10 +129,18 @@ const TicketCreatePage: React.FC = () => {
       console.log('  Sites:', sitesResponse);
       console.log('  Categories:', categoriesResponse);
 
-      // Handle API response structures - fix for undefined responses
+      // Handle API response structures
       const techniciansData = techniciansResponse?.data || techniciansResponse || [];
-      const clientsData = clientsResponse?.data || clientsResponse || [];
+
+      // Handle API response structures
+      const techniciansData = techniciansResponse?.data || [];
+      const clientsData = clientsResponse?.data || [];
+      const sitesData = sitesResponse?.data?.sites || sitesResponse?.data || [];
+      const categoriesData = categoriesResponse?.data || [];
+
+      // ✅ FIX: Sites API returns nested structure: { data: { sites: [...] } }
       const sitesData = sitesResponse?.data?.sites || sitesResponse?.data || sitesResponse || [];
+
       const categoriesData = categoriesResponse?.data || categoriesResponse || [];
 
       console.log('🔍 Processing API responses:');
@@ -213,27 +198,6 @@ const TicketCreatePage: React.FC = () => {
     }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-
-    // Validar tamaño máximo (10MB por archivo)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    const validFiles = files.filter(file => {
-      if (file.size > maxSize) {
-        setError(`El archivo ${file.name} excede el tamaño máximo de 10MB`);
-        return false;
-      }
-      return true;
-    });
-
-    setAttachments(prev => [...prev, ...validFiles]);
-    setError(null);
-  };
-
-  const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -242,45 +206,14 @@ const TicketCreatePage: React.FC = () => {
       setError(null);
 
       console.log('🎫 Creating ticket with data:', formData);
-      console.log('📎 Attachments:', attachments.length);
-      console.log('📎 Attachments array:', attachments);
+      console.log('🔑 Current user:', user);
 
-      // Create FormData if there are attachments
-      if (attachments.length > 0) {
-        console.log('🔄 Creating FormData with attachments...');
-        const formDataToSend = new FormData();
+      const ticket = await ticketsService.createTicket(formData);
 
-        // Add form fields
-        Object.entries(formData).forEach(([key, value]) => {
-          if (value !== null && value !== undefined && value !== '') {
-            if (Array.isArray(value)) {
-              formDataToSend.append(key, value.join(','));
-            } else {
-              formDataToSend.append(key, value.toString());
-            }
-          }
-        });
+      console.log('✅ Ticket created successfully:', ticket);
 
-        // Add files
-        attachments.forEach((file) => {
-          formDataToSend.append('attachments', file);
-        });
-
-        console.log('📤 About to send FormData...');
-        console.log('📤 FormData entries:');
-        for (let [key, value] of formDataToSend.entries()) {
-          console.log(`  ${key}:`, value);
-        }
-
-        const ticket = await ticketsService.createTicketWithFiles(formDataToSend);
-        console.log('✅ Ticket created successfully with files:', ticket);
-        navigate(`/tickets/${ticket.ticket_id}`);
-      } else {
-        console.log('📝 No attachments, sending as JSON...');
-        const ticket = await ticketsService.createTicket(formData);
-        console.log('✅ Ticket created successfully:', ticket);
-        navigate(`/tickets/${ticket.ticket_id}`);
-      }
+      // Navigate to the new ticket detail page
+      navigate(`/tickets/${ticket.ticket_id}`);
 
     } catch (err: any) {
       console.error('❌ Error creating ticket:', err);
@@ -513,21 +446,20 @@ const TicketCreatePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label htmlFor="affected_person_phone" className="block text-sm font-medium text-gray-700 mb-1">
-                    Teléfono
+                  <label htmlFor="affected_person_contact" className="block text-sm font-medium text-gray-700 mb-1">
+                    Contacto *
                   </label>
                   <input
-                    type="tel"
-                    id="affected_person_phone"
-                    name="affected_person_phone"
-                    value={formData.affected_person_phone}
+                    type="email"
+                    id="affected_person_contact"
+                    name="affected_person_contact"
+                    value={formData.affected_person_contact}
                     onChange={handleInputChange}
-                    placeholder="Teléfono de contacto (opcional)"
+                    required
+                    placeholder="email@ejemplo.com"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
-
-
 
                 <div className="md:col-span-2">
                   <label htmlFor="additional_emails" className="block text-sm font-medium text-gray-700 mb-1">
@@ -549,48 +481,6 @@ const TicketCreatePage: React.FC = () => {
                     Separa múltiples emails con comas
                   </p>
                 </div>
-              </div>
-            </div>
-
-            {/* File Attachments */}
-            <div>
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Archivos Adjuntos</h2>
-              <div className="space-y-4">
-                <div>
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileChange}
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  <p className="mt-1 text-sm text-gray-500">
-                    Máximo 10MB por archivo. Formatos: PDF, DOC, DOCX, TXT, JPG, PNG
-                  </p>
-                </div>
-
-                {/* Lista de archivos seleccionados */}
-                {attachments.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">
-                      Archivos seleccionados ({attachments.length}):
-                    </h3>
-                    <div className="space-y-2">
-                      {attachments.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span className="text-sm text-gray-700">{file.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(index)}
-                            className="text-red-600 hover:text-red-800 text-sm"
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 

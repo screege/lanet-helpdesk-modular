@@ -11,7 +11,10 @@ export interface Ticket {
   subject: string;
   description: string;
   affected_person: string;
-  affected_person_contact: string;
+  affected_person_phone?: string;  // New phone field (optional)
+  notification_email?: string;     // New email field (optional)
+  // Backward compatibility
+  affected_person_contact?: string; // Deprecated, use notification_email instead
   additional_emails?: string[];
   priority: 'baja' | 'media' | 'alta' | 'critica';
   category_id?: string;
@@ -52,6 +55,21 @@ export interface TicketComment {
   user_role?: string;
 }
 
+export interface TicketAttachment {
+  attachment_id: string;
+  ticket_id: string;
+  filename: string;
+  original_filename: string;
+  file_size: number;
+  file_size_display: string;
+  mime_type: string;
+  uploaded_by: string;
+  created_at: string;
+  // Related data
+  uploaded_by_name?: string;
+  uploaded_by_role?: string;
+}
+
 export interface TicketActivity {
   activity_id: string;
   ticket_id: string;
@@ -71,7 +89,10 @@ export interface CreateTicketData {
   subject: string;
   description: string;
   affected_person: string;
-  affected_person_contact: string;
+  affected_person_phone?: string;  // New phone field (optional)
+  notification_email?: string;     // New email field (optional)
+  // Backward compatibility
+  affected_person_contact?: string; // Deprecated, use notification_email instead
   additional_emails?: string[];
   priority: 'baja' | 'media' | 'alta' | 'critica';
   category_id?: string;
@@ -82,7 +103,10 @@ export interface UpdateTicketData {
   subject?: string;
   description?: string;
   affected_person?: string;
-  affected_person_contact?: string;
+  affected_person_phone?: string;  // New phone field (optional)
+  notification_email?: string;     // New email field (optional)
+  // Backward compatibility
+  affected_person_contact?: string; // Deprecated, use notification_email instead
   additional_emails?: string[];
   priority?: 'baja' | 'media' | 'alta' | 'critica';
   category_id?: string;
@@ -159,6 +183,13 @@ class TicketsService {
     return response.data;
   }
 
+  // Create new ticket with files
+  async createTicketWithFiles(formData: FormData): Promise<Ticket> {
+    // Let axios set Content-Type automatically for FormData
+    const response = await apiService.post('/tickets/', formData);
+    return response.data;
+  }
+
   // Update ticket
   async updateTicket(ticketId: string, ticketData: UpdateTicketData): Promise<Ticket> {
     const response = await apiService.put(`/tickets/${ticketId}`, ticketData);
@@ -199,6 +230,18 @@ class TicketsService {
   // Get ticket activities
   async getTicketActivities(ticketId: string): Promise<TicketActivity[]> {
     const response = await apiService.get(`/tickets/${ticketId}/activities`);
+    return response.data;
+  }
+
+  // Get ticket resolutions
+  async getTicketResolutions(ticketId: string): Promise<any[]> {
+    const response = await apiService.get(`/tickets/${ticketId}/resolutions`);
+    return response.data;
+  }
+
+  // Get ticket attachments
+  async getTicketAttachments(ticketId: string): Promise<TicketAttachment[]> {
+    const response = await apiService.get(`/tickets/${ticketId}/attachments`);
     return response.data;
   }
 
