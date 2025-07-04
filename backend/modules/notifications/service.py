@@ -121,7 +121,7 @@ class NotificationsService:
             SELECT t.ticket_id, t.ticket_number, t.subject, t.description, t.priority,
                    t.status, t.created_at, t.updated_at, t.assigned_at, t.resolved_at,
                    t.affected_person, t.affected_person_phone, t.notification_email, t.additional_emails,
-                   c.name as client_name, c.email as client_email,
+                   t.client_id, c.name as client_name, c.email as client_email,
                    s.name as site_name, s.address as site_address,
                    cat.name as category_name,
                    creator.name as created_by_name, creator.email as created_by_email,
@@ -191,7 +191,7 @@ class NotificationsService:
                                 })
 
                     # Add client admin if different
-                    if ticket['client_email'] and ticket['client_email'] != notification_email:
+                    if ticket.get('client_email') and ticket['client_email'] != notification_email:
                         recipients.append({
                             'email': ticket['client_email'],
                             'name': ticket['client_name'],
