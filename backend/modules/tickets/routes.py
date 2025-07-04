@@ -120,8 +120,8 @@ def create_ticket():
             logging.error("Error: No se proporcionaron datos")
             return current_app.response_manager.bad_request('No data provided')
 
-        # Validate required fields
-        required_fields = ['client_id', 'site_id', 'subject', 'description', 'affected_person', 'affected_person_contact', 'priority']
+        # Validate required fields (affected_person_contact is now optional affected_person_phone)
+        required_fields = ['client_id', 'site_id', 'subject', 'description', 'affected_person', 'priority']
         for field in required_fields:
             if field not in data or not data[field]:
                 return current_app.response_manager.bad_request(f'{field} is required')
@@ -226,7 +226,8 @@ def create_ticket():
             'subject': data['subject'].strip(),
             'description': data['description'].strip(),
             'affected_person': data['affected_person'].strip(),
-            'affected_person_contact': data['affected_person_contact'].strip(),
+            'affected_person_phone': clean_field(data.get('affected_person_phone')),  # New phone field
+            'notification_email': clean_field(data.get('notification_email') or data.get('affected_person_contact')),  # New email field (backward compatibility)
             'additional_emails': data.get('additional_emails', []) if data.get('additional_emails') else [],
             'priority': data['priority'],
             'category_id': category_id,  # Use validated category_id
@@ -264,6 +265,17 @@ def create_ticket():
 
         if result:
             current_app.logger.info(f"Ticket created successfully: {result['ticket_number']}")
+
+            # 🔔 SEND NOTIFICATION - This was missing!
+            try:
+                from modules.notifications.service import notifications_service
+                current_app.logger.info(f"🔔 Triggering notification for ticket {result['ticket_id']}")
+                notification_result = notifications_service.send_ticket_notification('ticket_created', result['ticket_id'])
+                current_app.logger.info(f"🔔 Notification result: {notification_result}")
+            except Exception as notification_error:
+                current_app.logger.error(f"❌ Notification failed: {notification_error}")
+                # Don't fail the ticket creation if notification fails
+                pass
 
             # Handle file attachments if any
             if files:

@@ -54,53 +54,59 @@ class NotificationsService:
             }
         }
     
-    def send_ticket_notification(self, notification_type: str, ticket_id: str, 
+    def send_ticket_notification(self, notification_type: str, ticket_id: str,
                                 additional_data: Dict = None) -> bool:
         """Send notification for ticket event"""
         try:
+            current_app.logger.info(f"🔔 NOTIFICATION: Starting {notification_type} for ticket {ticket_id}")
+
             if notification_type not in self.notification_types:
-                current_app.logger.warning(f"Unknown notification type: {notification_type}")
+                current_app.logger.warning(f"❌ NOTIFICATION: Unknown notification type: {notification_type}")
                 return False
-            
+
             # Get ticket details
             ticket = self._get_ticket_details(ticket_id)
             if not ticket:
-                current_app.logger.error(f"Ticket not found: {ticket_id}")
+                current_app.logger.error(f"❌ NOTIFICATION: Ticket not found: {ticket_id}")
                 return False
-            
+
+            current_app.logger.info(f"🔔 NOTIFICATION: Found ticket {ticket['ticket_number']}")
+
             notification_config = self.notification_types[notification_type]
-            
+
             # Get email template
             template = self._get_email_template(notification_config['template_type'])
             if not template:
-                current_app.logger.warning(f"No template found for: {notification_config['template_type']}")
+                current_app.logger.warning(f"❌ NOTIFICATION: No template found for: {notification_config['template_type']}")
                 return False
-            
+
             # Get recipients
             recipients = self._get_notification_recipients(
-                ticket, 
+                ticket,
                 notification_config['recipients'],
                 additional_data
             )
-            
+
             if not recipients:
-                current_app.logger.info(f"No recipients for notification: {notification_type}")
+                current_app.logger.info(f"⚠️ NOTIFICATION: No recipients for notification: {notification_type}")
                 return True
-            
+
+            current_app.logger.info(f"🔔 NOTIFICATION: Found {len(recipients)} recipients: {[r['email'] for r in recipients]}")
+
             # Prepare template variables
             template_vars = self._prepare_template_variables(ticket, additional_data)
-            
+
             # Send notifications
             success_count = 0
             for recipient in recipients:
                 if self._send_email_notification(
-                    recipient, template, template_vars, 
+                    recipient, template, template_vars,
                     notification_config['priority'], ticket_id
                 ):
                     success_count += 1
-            
+
             current_app.logger.info(
-                f"Sent {success_count}/{len(recipients)} notifications for {notification_type}"
+                f"✅ NOTIFICATION: Sent {success_count}/{len(recipients)} notifications for {notification_type}"
             )
             return success_count > 0
             
@@ -114,7 +120,9 @@ class NotificationsService:
             query = """
             SELECT t.ticket_id, t.ticket_number, t.subject, t.description, t.priority,
                    t.status, t.created_at, t.updated_at, t.assigned_at, t.resolved_at,
-                   t.affected_person, t.affected_person_contact,
+                   t.affected_person, t.affected_person_phone, t.notification_email,
+                   -- Backward compatibility
+                   t.affected_person_contact,
                    c.name as client_name, c.email as client_email,
                    s.name as site_name, s.address as site_address,
                    cat.name as category_name,
@@ -139,16 +147,21 @@ class NotificationsService:
         """Get email template by type"""
         try:
             query = """
-            SELECT * FROM email_templates 
-            WHERE template_type = %s AND is_active = true 
+            SELECT * FROM email_templates
+            WHERE template_type = %s AND is_active = true
             ORDER BY is_default DESC, created_at DESC
             LIMIT 1
             """
-            
-            return current_app.db_manager.execute_query(query, (template_type,), fetch='one')
-            
+
+            template = current_app.db_manager.execute_query(query, (template_type,), fetch='one')
+            if template:
+                current_app.logger.info(f"🔔 NOTIFICATION: Found template for {template_type}: {template['name']}")
+            else:
+                current_app.logger.warning(f"🔔 NOTIFICATION: No template found for {template_type}")
+            return template
+
         except Exception as e:
-            current_app.logger.error(f"Error getting email template: {e}")
+            current_app.logger.error(f"❌ NOTIFICATION: Error getting email template: {e}")
             return None
     
     def _get_notification_recipients(self, ticket: Dict, recipient_types: List[str], 
@@ -159,16 +172,17 @@ class NotificationsService:
         try:
             for recipient_type in recipient_types:
                 if recipient_type == 'client':
-                    # Add affected person
-                    if ticket['affected_person_contact']:
+                    # Add notification email recipient (new field)
+                    notification_email = ticket.get('notification_email') or ticket.get('affected_person_contact')
+                    if notification_email:
                         recipients.append({
-                            'email': ticket['affected_person_contact'],
+                            'email': notification_email,
                             'name': ticket['affected_person'],
-                            'type': 'client'
+                            'type': 'affected_person'
                         })
-                    
+
                     # Add client admin if different
-                    if ticket['client_email'] and ticket['client_email'] != ticket['affected_person_contact']:
+                    if ticket['client_email'] and ticket['client_email'] != notification_email:
                         recipients.append({
                             'email': ticket['client_email'],
                             'name': ticket['client_name'],
@@ -184,19 +198,21 @@ class NotificationsService:
                         })
                 
                 elif recipient_type == 'admins':
-                    # Get admin users
+                    # Get admin and technician users (both should receive notifications)
                     admin_query = """
-                    SELECT email, name FROM users 
-                    WHERE role IN ('admin', 'superadmin') AND is_active = true
+                    SELECT email, name FROM users
+                    WHERE role IN ('admin', 'superadmin', 'technician') AND is_active = true
                     """
                     admins = current_app.db_manager.execute_query(admin_query)
-                    
+                    current_app.logger.info(f"🔔 NOTIFICATION: Found {len(admins or [])} admin/technician users")
+
                     for admin in (admins or []):
                         recipients.append({
                             'email': admin['email'],
                             'name': admin['name'],
                             'type': 'admin'
                         })
+                        current_app.logger.info(f"🔔 NOTIFICATION: Added admin recipient: {admin['email']}")
             
             # Remove duplicates based on email
             unique_recipients = []
@@ -242,25 +258,42 @@ class NotificationsService:
         
         return variables
     
-    def _send_email_notification(self, recipient: Dict, template: Dict, 
+    def _send_email_notification(self, recipient: Dict, template: Dict,
                                variables: Dict, priority: int, ticket_id: str) -> bool:
         """Send email notification to recipient"""
         try:
             # Replace template variables
-            subject = self._replace_template_variables(template['subject'], variables)
-            body = self._replace_template_variables(template['body'], variables)
-            
-            # Queue email
-            return email_service.queue_email(
-                to_email=recipient['email'],
-                subject=subject,
-                body=body,
-                ticket_id=ticket_id,
-                priority=priority
-            )
-            
+            subject = self._replace_template_variables(template['subject_template'], variables)
+            body = self._replace_template_variables(template['body_template'], variables)
+
+            current_app.logger.info(f"🔔 NOTIFICATION: Queueing email to {recipient['email']} - {subject}")
+
+            # Get email configuration
+            from modules.email.service import email_service
+            config = email_service.get_default_config()
+            if not config:
+                current_app.logger.error("🔔 NOTIFICATION: No email configuration found")
+                return False
+
+            # Queue email directly in database
+            queue_data = {
+                'config_id': config['config_id'],
+                'to_email': recipient['email'],
+                'subject': subject,
+                'body_html': body,
+                'ticket_id': ticket_id,
+                'priority': priority,
+                'status': 'pending'
+            }
+
+            current_app.db_manager.execute_insert('email_queue', queue_data)
+            current_app.logger.info(f"✅ NOTIFICATION: Email queued successfully to {recipient['email']}")
+            return True
+
         except Exception as e:
-            current_app.logger.error(f"Error sending email notification: {e}")
+            current_app.logger.error(f"❌ NOTIFICATION: Error sending email notification: {e}")
+            import traceback
+            current_app.logger.error(f"❌ NOTIFICATION: Traceback: {traceback.format_exc()}")
             return False
     
     def _replace_template_variables(self, template: str, variables: Dict) -> str:

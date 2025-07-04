@@ -124,13 +124,11 @@ def get_email_templates():
             "SELECT * FROM email_templates WHERE is_active = true ORDER BY name"
         )
 
-        # Map database field names to frontend expected field names
+        # Map variables field for frontend compatibility
         if templates:
             for template in templates:
-                if 'subject' in template:
-                    template['subject_template'] = template['subject']
-                if 'body' in template:
-                    template['body_template'] = template['body']
+                if 'variables' in template:
+                    template['available_variables'] = template['variables']
 
         return current_app.response_manager.success(templates)
 
@@ -498,8 +496,8 @@ def get_email_template(template_id):
     """Get specific email template"""
     try:
         query = """
-        SELECT template_id, name, description, template_type, subject,
-               body, is_html, variables, is_active, is_default,
+        SELECT template_id, name, description, template_type, subject_template,
+               body_template, is_html, variables, is_active, is_default,
                created_at, updated_at
         FROM email_templates
         WHERE template_id = %s
@@ -510,14 +508,9 @@ def get_email_template(template_id):
         if not template:
             return current_app.response_manager.not_found('Email template not found')
 
-        # Map database field names to frontend expected field names
-        if template:
-            if 'subject' in template:
-                template['subject_template'] = template['subject']
-            if 'body' in template:
-                template['body_template'] = template['body']
-            if 'variables' in template:
-                template['available_variables'] = template['variables']
+        # Map variables field for frontend compatibility
+        if template and 'variables' in template:
+            template['available_variables'] = template['variables']
 
         return current_app.response_manager.success(template)
 
@@ -560,7 +553,7 @@ def create_email_template():
             'subject_template': data['subject_template'],
             'body_template': data['body_template'],
             'is_html': data.get('is_html', True),
-            'available_variables': template_variables.get(data['template_type'], []),
+            'variables': template_variables.get(data['template_type'], []),
             'is_active': data.get('is_active', True),
             'is_default': data.get('is_default', False)
         }
@@ -618,19 +611,11 @@ def update_email_template(template_id):
         # Prepare update data
         update_data = {}
 
-        # Field mapping for backward compatibility
-        field_mapping = {
-            'subject_template': 'subject',
-            'body_template': 'body'
-        }
-
-        # Basic fields with field mapping
+        # Basic fields - use the new column names directly
         for field in ['name', 'description', 'template_type', 'subject_template',
                      'body_template', 'is_html', 'is_active', 'is_default']:
             if field in data:
-                # Map new field names to old database column names
-                db_field = field_mapping.get(field, field)
-                update_data[db_field] = data[field]
+                update_data[field] = data[field]
 
         # Update available variables if template type changed
         if 'template_type' in data:
@@ -672,14 +657,9 @@ def update_email_template(template_id):
             fetch='one'
         )
 
-        # Map database field names to frontend expected field names
-        if updated_template:
-            if 'subject' in updated_template:
-                updated_template['subject_template'] = updated_template['subject']
-            if 'body' in updated_template:
-                updated_template['body_template'] = updated_template['body']
-            if 'variables' in updated_template:
-                updated_template['available_variables'] = updated_template['variables']
+        # Map variables field for frontend compatibility
+        if updated_template and 'variables' in updated_template:
+            updated_template['available_variables'] = updated_template['variables']
 
         return current_app.response_manager.success(updated_template)
 
@@ -897,10 +877,12 @@ def cancel_email_queue(queue_id):
 def process_email_queue():
     """Process pending emails in queue"""
     try:
-        # Get pending emails
+        current_app.logger.info("📧 EMAIL QUEUE: Starting email queue processing")
+
+        # Get pending emails with details for better logging
         pending_emails = current_app.db_manager.execute_query(
             """
-            SELECT queue_id FROM email_queue
+            SELECT queue_id, to_email, subject, attempts FROM email_queue
             WHERE status = 'pending'
             AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
             ORDER BY priority ASC, created_at ASC
@@ -908,21 +890,60 @@ def process_email_queue():
             """
         )
 
-        processed_count = 0
+        if not pending_emails:
+            current_app.logger.info("📧 EMAIL QUEUE: No pending emails to process")
+            return current_app.response_manager.success({
+                'processed_count': 0,
+                'success_count': 0,
+                'failed_count': 0,
+                'message': 'No pending emails to process'
+            })
 
-        for email_item in (pending_emails or []):
+        current_app.logger.info(f"📧 EMAIL QUEUE: Found {len(pending_emails)} pending emails to process")
+
+        processed_count = 0
+        success_count = 0
+        failed_count = 0
+        failed_details = []
+
+        for email_item in pending_emails:
             try:
+                current_app.logger.info(f"📧 EMAIL QUEUE: Processing email to {email_item['to_email']}")
                 # Process individual email
                 success = email_service.process_queue_item(email_item['queue_id'])
+                processed_count += 1
                 if success:
-                    processed_count += 1
+                    success_count += 1
+                else:
+                    failed_count += 1
+                    failed_details.append({
+                        'email': email_item['to_email'],
+                        'subject': email_item['subject'],
+                        'attempts': email_item['attempts']
+                    })
             except Exception as e:
-                current_app.logger.error(f"Error processing queue item {email_item['queue_id']}: {e}")
-                continue
+                current_app.logger.error(f"❌ EMAIL QUEUE: Error processing queue item {email_item['queue_id']}: {e}")
+                processed_count += 1
+                failed_count += 1
+                failed_details.append({
+                    'email': email_item['to_email'],
+                    'subject': email_item['subject'],
+                    'error': str(e)
+                })
+
+        # Log summary
+        current_app.logger.info(f"📧 EMAIL QUEUE SUMMARY: Processed {processed_count} emails - {success_count} successful, {failed_count} failed")
+        if failed_count > 0:
+            current_app.logger.warning(f"📧 EMAIL QUEUE FAILURES: {failed_count} emails failed to send")
+            for failure in failed_details:
+                current_app.logger.warning(f"  - Failed: {failure['email']} - {failure.get('error', 'Processing failed')}")
 
         return current_app.response_manager.success({
-            'processed': processed_count,
-            'message': f'Processed {processed_count} emails from queue'
+            'processed_count': processed_count,
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'failed_details': failed_details if failed_count > 0 else [],
+            'message': f'Processed {processed_count} emails - {success_count} successful, {failed_count} failed'
         })
 
     except Exception as e:

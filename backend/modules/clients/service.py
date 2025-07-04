@@ -214,19 +214,22 @@ class ClientService:
             
             # Prepare update data
             update_data = {
-                'updated_at': datetime.utcnow(),
-                'updated_by': updated_by
+                'updated_at': datetime.utcnow()
             }
             
             # Add fields that can be updated
-            updatable_fields = ['name', 'rfc', 'email', 'phone', 'allowed_emails', 
-                              'address', 'city', 'state', 'country', 'postal_code', 'is_active']
+            updatable_fields = ['name', 'rfc', 'email', 'phone', 'authorized_domains',
+                              'address', 'city', 'state', 'country', 'postal_code', 'is_active',
+                              'email_routing_enabled']
             for field in updatable_fields:
                 if field in client_data:
                     if field == 'email':
                         update_data[field] = client_data[field].lower().strip() if client_data[field] else None
                     elif field in ['name', 'rfc', 'phone', 'address', 'city', 'state', 'country', 'postal_code']:
                         update_data[field] = client_data[field].strip() if client_data[field] else None
+                    elif field == 'authorized_domains':
+                        # Handle authorized_domains as JSON array
+                        update_data[field] = client_data[field] if isinstance(client_data[field], list) else []
                     else:
                         update_data[field] = client_data[field]
             
@@ -242,7 +245,7 @@ class ClientService:
                 # Get updated client
                 updated_client = self.get_client_by_id(client_id)
                 self.logger.info(f"Client updated successfully: {updated_client['name']}")
-                return {'success': True, 'client': updated_client}
+                return {'success': True, 'data': updated_client}
             else:
                 return {'success': False, 'errors': {'general': 'Failed to update client'}}
                 
@@ -277,20 +280,20 @@ class ClientService:
                 with conn.cursor() as cursor:
                     # Deactivate client
                     cursor.execute(
-                        "UPDATE clients SET is_active = false, updated_at = %s, updated_by = %s WHERE client_id = %s",
-                        (datetime.utcnow(), deleted_by, client_id)
+                        "UPDATE clients SET is_active = false, updated_at = %s WHERE client_id = %s",
+                        (datetime.utcnow(), client_id)
                     )
-                    
+
                     # Deactivate related sites
                     cursor.execute(
-                        "UPDATE sites SET is_active = false, updated_at = %s, updated_by = %s WHERE client_id = %s",
-                        (datetime.utcnow(), deleted_by, client_id)
+                        "UPDATE sites SET is_active = false, updated_at = %s WHERE client_id = %s",
+                        (datetime.utcnow(), client_id)
                     )
-                    
+
                     # Deactivate related users
                     cursor.execute(
-                        "UPDATE users SET is_active = false, updated_at = %s, updated_by = %s WHERE client_id = %s",
-                        (datetime.utcnow(), deleted_by, client_id)
+                        "UPDATE users SET is_active = false, updated_at = %s WHERE client_id = %s",
+                        (datetime.utcnow(), client_id)
                     )
                     
                     conn.commit()

@@ -83,7 +83,7 @@ class TicketService:
             query = f"""
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_contact, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
@@ -126,7 +126,7 @@ class TicketService:
             query = """
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_contact, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,

@@ -182,50 +182,57 @@ LANET Helpdesk V3
             current_app.logger.error(f"Full traceback: {traceback.format_exc()}")
             return False, error_msg
     
-    def send_email(self, to_email: str, subject: str, body: str, 
+    def send_email(self, to_email: str, subject: str, body: str,
                    cc_emails: List[str] = None, bcc_emails: List[str] = None,
-                   is_html: bool = True, config_id: str = None) -> bool:
-        """Send email using configured SMTP"""
+                   is_html: bool = True, config_id: str = None) -> tuple:
+        """Send email using configured SMTP
+
+        Returns:
+            tuple: (success: bool, error_message: str or None)
+        """
         try:
             config = self.get_config_by_id(config_id) if config_id else self.get_default_config()
             if not config:
-                current_app.logger.error("No email configuration found")
-                return False
-            
+                error_msg = "No email configuration found"
+                current_app.logger.error(error_msg)
+                return False, error_msg
+
             if not self.connect_smtp(config):
-                return False
-            
+                error_msg = "Failed to connect to SMTP server"
+                return False, error_msg
+
             # Create message
             msg = MIMEMultipart('alternative')
             msg['From'] = config['smtp_username']
             msg['To'] = to_email
             msg['Subject'] = subject
-            
+
             if cc_emails:
                 msg['Cc'] = ', '.join(cc_emails)
-            
+
             # Add body
             if is_html:
                 msg.attach(MIMEText(body, 'html', 'utf-8'))
             else:
                 msg.attach(MIMEText(body, 'plain', 'utf-8'))
-            
+
             # Send email
             recipients = [to_email]
             if cc_emails:
                 recipients.extend(cc_emails)
             if bcc_emails:
                 recipients.extend(bcc_emails)
-            
+
             self.smtp_connection.send_message(msg, to_addrs=recipients)
             self.smtp_connection.quit()
-            
+
             current_app.logger.info(f"Email sent successfully to {to_email}")
-            return True
-            
+            return True, None
+
         except Exception as e:
-            current_app.logger.error(f"Error sending email: {e}")
-            return False
+            error_msg = str(e)
+            current_app.logger.error(f"Error sending email to {to_email}: {error_msg}")
+            return False, error_msg
     
     def queue_email(self, to_email: str, subject: str, body: str,
                     cc_emails: List[str] = None, bcc_emails: List[str] = None,
@@ -285,9 +292,10 @@ LANET Helpdesk V3
         """Process a single email from queue"""
         try:
             # Update status to sending
+            from datetime import datetime
             current_app.db_manager.execute_update(
                 'email_queue',
-                {'status': 'sending', 'updated_at': 'CURRENT_TIMESTAMP'},
+                {'status': 'sending', 'updated_at': datetime.now()},
                 'queue_id = %s',
                 (email_item['queue_id'],)
             )
@@ -309,8 +317,8 @@ LANET Helpdesk V3
                     'email_queue',
                     {
                         'status': 'sent',
-                        'sent_at': 'CURRENT_TIMESTAMP',
-                        'updated_at': 'CURRENT_TIMESTAMP'
+                        'sent_at': datetime.now(),
+                        'updated_at': datetime.now()
                     },
                     'queue_id = %s',
                     (email_item['queue_id'],)
@@ -337,7 +345,7 @@ LANET Helpdesk V3
                         'attempts': attempts,
                         'next_attempt_at': next_attempt,
                         'error_message': 'Failed to send email',
-                        'updated_at': 'CURRENT_TIMESTAMP'
+                        'updated_at': datetime.now()
                     },
                     'queue_id = %s',
                     (email_item['queue_id'],)
@@ -492,7 +500,7 @@ LANET Helpdesk V3
                         'content_type': attachment['content_type'],
                         'uploaded_by': None,  # Email system
                         'uploaded_via': 'email',
-                        'created_at': 'CURRENT_TIMESTAMP'
+                        'created_at': datetime.now()
                     }
 
                     current_app.db_manager.execute_insert('file_attachments', attachment_data)
@@ -553,7 +561,7 @@ LANET Helpdesk V3
                         'processing_status': 'processed',
                         'ticket_id': ticket_id,
                         'action_taken': action,
-                        'processed_at': 'CURRENT_TIMESTAMP'
+                        'processed_at': datetime.now()
                     },
                     'log_id = %s',
                     (log_id['log_id'],)
@@ -571,7 +579,7 @@ LANET Helpdesk V3
                     {
                         'processing_status': 'failed',
                         'error_message': 'Failed to create/update ticket',
-                        'processed_at': 'CURRENT_TIMESTAMP'
+                        'processed_at': datetime.now()
                     },
                     'log_id = %s',
                     (log_id['log_id'],)
@@ -730,7 +738,7 @@ LANET Helpdesk V3
                     'config_id': config['config_id'],
                     'message_id': email_data['message_id']
                 },
-                'timestamp': 'CURRENT_TIMESTAMP'
+                'timestamp': datetime.now()
             }
 
             current_app.db_manager.execute_insert('audit_log', audit_data)
@@ -969,7 +977,7 @@ LANET Helpdesk V3
                 'priority': priority,
                 'attempts': 0,
                 'max_attempts': 3,
-                'next_attempt_at': 'CURRENT_TIMESTAMP'
+                'next_attempt_at': datetime.now()
             }
 
             result = current_app.db_manager.execute_insert('email_queue', queue_data)
@@ -1006,40 +1014,51 @@ LANET Helpdesk V3
                 (queue_id,)
             )
 
-            # Send email
-            success = self.send_email(
-                config=config,
+            # Send email with detailed logging
+            current_app.logger.info(f"📧 EMAIL PROCESSING: Attempting to send email to {queue_item['to_email']}")
+            current_app.logger.info(f"📧 EMAIL PROCESSING: Subject: {queue_item['subject']}")
+
+            success, error_message = self.send_email(
+                config_id=config['config_id'],
                 to_email=queue_item['to_email'],
                 subject=queue_item['subject'],
-                body_text=queue_item['body_text'],
-                body_html=queue_item['body_html'],
+                body=queue_item['body_html'] or queue_item['body_text'],
                 cc_emails=queue_item.get('cc_emails'),
-                bcc_emails=queue_item.get('bcc_emails')
+                bcc_emails=queue_item.get('bcc_emails'),
+                is_html=bool(queue_item['body_html'])
             )
 
             if success:
+                current_app.logger.info(f"✅ EMAIL SUCCESS: Email sent successfully to {queue_item['to_email']}")
                 # Mark as sent
                 current_app.db_manager.execute_update(
                     'email_queue',
-                    {'status': 'sent', 'sent_at': 'CURRENT_TIMESTAMP'},
+                    {'status': 'sent', 'sent_at': datetime.now()},
                     'queue_id = %s',
                     (queue_id,)
                 )
                 return True
             else:
+                # Categorize the error
+                error_category = self._categorize_email_error(error_message or "Unknown error")
+                current_app.logger.warning(f"❌ EMAIL FAILED: {queue_item['to_email']} - {error_category}: {error_message}")
+
                 # Mark as failed or retry
-                if queue_item['attempts'] + 1 >= queue_item['max_attempts']:
-                    self._mark_queue_item_failed(queue_id, "Maximum retry attempts reached")
+                if queue_item['attempts'] + 1 >= queue_item.get('max_attempts', 3):
+                    current_app.logger.error(f"💀 EMAIL PERMANENTLY FAILED: {queue_item['to_email']} after {queue_item['attempts'] + 1} attempts")
+                    self._mark_queue_item_failed(queue_id, f"{error_category}: {error_message}")
                 else:
                     # Schedule retry
                     from datetime import datetime, timedelta
-                    next_attempt = datetime.now() + timedelta(minutes=5 * (queue_item['attempts'] + 1))
+                    retry_minutes = 5 * (queue_item['attempts'] + 1)
+                    next_attempt = datetime.now() + timedelta(minutes=retry_minutes)
+                    current_app.logger.info(f"🔄 EMAIL RETRY: {queue_item['to_email']} will retry in {retry_minutes} minutes")
                     current_app.db_manager.execute_update(
                         'email_queue',
                         {
                             'status': 'pending',
                             'next_attempt_at': next_attempt,
-                            'error_message': 'Send failed, will retry'
+                            'error_message': f"{error_category}: {error_message}"
                         },
                         'queue_id = %s',
                         (queue_id,)
@@ -1050,6 +1069,57 @@ LANET Helpdesk V3
             current_app.logger.error(f"Error processing queue item {queue_id}: {e}")
             self._mark_queue_item_failed(queue_id, str(e))
             return False
+
+    def _categorize_email_error(self, error_message: str) -> str:
+        """Categorize email errors for better logging"""
+        if not error_message:
+            return "UNKNOWN_ERROR"
+
+        error_lower = error_message.lower()
+
+        # Invalid email address errors
+        if any(phrase in error_lower for phrase in [
+            'invalid address', 'invalid email', 'malformed address',
+            'address syntax', 'invalid recipient', 'bad address'
+        ]):
+            return "INVALID_EMAIL_ADDRESS"
+
+        # Non-existent email address errors
+        if any(phrase in error_lower for phrase in [
+            'user unknown', 'no such user', 'recipient not found',
+            'mailbox not found', 'address not found', 'user not found',
+            'recipient unknown', 'no mailbox', 'unknown user'
+        ]):
+            return "EMAIL_ADDRESS_NOT_FOUND"
+
+        # SMTP authentication errors
+        if any(phrase in error_lower for phrase in [
+            'authentication failed', 'auth failed', 'login failed',
+            'invalid credentials', 'username and password not accepted'
+        ]):
+            return "SMTP_AUTH_ERROR"
+
+        # SMTP connection errors
+        if any(phrase in error_lower for phrase in [
+            'connection refused', 'connection timeout', 'network unreachable',
+            'smtp server', 'connection failed', 'timeout'
+        ]):
+            return "SMTP_CONNECTION_ERROR"
+
+        # Rate limiting / quota errors
+        if any(phrase in error_lower for phrase in [
+            'rate limit', 'quota exceeded', 'too many', 'throttled',
+            'sending limit', 'daily limit'
+        ]):
+            return "RATE_LIMIT_ERROR"
+
+        # Server errors
+        if any(phrase in error_lower for phrase in [
+            'server error', 'internal error', '5.', 'temporary failure'
+        ]):
+            return "SERVER_ERROR"
+
+        return "OTHER_ERROR"
 
     def _mark_queue_item_failed(self, queue_id: str, error_message: str):
         """Mark queue item as failed"""
