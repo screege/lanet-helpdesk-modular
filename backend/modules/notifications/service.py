@@ -197,6 +197,24 @@ class NotificationsService:
                             'name': ticket['client_name'],
                             'type': 'client_admin'
                         })
+
+                    # CRITICAL FIX: Add all solicitante users for this client
+                    client_id = ticket.get('client_id')
+                    if client_id:
+                        solicitante_query = """
+                        SELECT email, name FROM users
+                        WHERE client_id = %s AND role = 'solicitante' AND is_active = true
+                        """
+                        solicitante_users = current_app.db_manager.execute_query(solicitante_query, (client_id,))
+                        current_app.logger.info(f"🔔 NOTIFICATION: Found {len(solicitante_users or [])} solicitante users for client {client_id}")
+
+                        for user in (solicitante_users or []):
+                            recipients.append({
+                                'email': user['email'],
+                                'name': user['name'],
+                                'type': 'solicitante'
+                            })
+                            current_app.logger.info(f"🔔 NOTIFICATION: Added solicitante recipient: {user['email']}")
                 
                 elif recipient_type == 'assigned_technician':
                     if ticket['assigned_to_email']:
