@@ -658,8 +658,8 @@ def update_email_template(template_id):
         )
 
         # Map variables field for frontend compatibility
-        if updated_template and 'variables' in updated_template:
-            updated_template['available_variables'] = updated_template['variables']
+        if updated_template and 'available_variables' in updated_template:
+            updated_template['variables'] = updated_template['available_variables']
 
         return current_app.response_manager.success(updated_template)
 
