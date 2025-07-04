@@ -731,12 +731,12 @@ LANET Helpdesk V3
                 'record_id': None,
                 'old_values': None,
                 'new_values': {
-                    'from_email': email_data['from_email'],
-                    'to_email': email_data['to_email'],
-                    'subject': email_data['subject'],
+                    'from_email': email_data.get('from_email', 'unknown'),
+                    'to_email': email_data.get('to_email', 'unknown'),
+                    'subject': email_data.get('subject', 'No subject'),
                     'rejection_reason': reason,
-                    'config_id': config['config_id'],
-                    'message_id': email_data['message_id']
+                    'config_id': config.get('config_id', 'unknown'),
+                    'message_id': email_data.get('message_id', 'unknown')
                 },
                 'timestamp': datetime.now()
             }
@@ -1309,27 +1309,7 @@ LANET Helpdesk V3
             current_app.logger.error(f"Error extracting email body: {e}")
             return "Error extracting email content"
 
-    def _create_ticket_from_email(self, from_email: str, subject: str, body: str, config: Dict) -> bool:
-        """Create a ticket from email (simplified implementation)"""
-        try:
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Creating ticket from email: {from_email}")
 
-            # For now, just log the email details
-            # In a full implementation, this would:
-            # 1. Validate sender against authorized domains
-            # 2. Extract client/site information
-            # 3. Create ticket in database
-            # 4. Send confirmation email
-
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Would create ticket - From: {from_email}, Subject: {subject}")
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Body preview: {body[:200]}...")
-
-            # Return True to simulate successful ticket creation
-            return True
-
-        except Exception as e:
-            current_app.logger.error(f"🔧 EMAIL SERVICE: Error creating ticket from email: {e}")
-            return False
 
     def _is_email_already_processed(self, message_id: str) -> bool:
         """Check if email has already been processed"""
