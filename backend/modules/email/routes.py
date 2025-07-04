@@ -10,6 +10,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.security import require_role
 from .service import email_service
 from datetime import datetime, timezone
+import json
 
 email_bp = Blueprint('email', __name__)
 
@@ -553,7 +554,7 @@ def create_email_template():
             'subject_template': data['subject_template'],
             'body_template': data['body_template'],
             'is_html': data.get('is_html', True),
-            'available_variables': template_variables.get(data['template_type'], []),
+            'variables': json.dumps(template_variables.get(data['template_type'], [])),
             'is_active': data.get('is_active', True),
             'is_default': data.get('is_default', False)
         }
@@ -628,7 +629,7 @@ def update_email_template(template_id):
                 'sla_breach': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{priority}}', '{{breach_type}}', '{{time_elapsed}}'],
                 'auto_response': ['{{sender_name}}', '{{ticket_number}}', '{{subject}}', '{{original_subject}}', '{{client_name}}']
             }
-            update_data['available_variables'] = template_variables.get(data['template_type'], [])
+            update_data['variables'] = json.dumps(template_variables.get(data['template_type'], []))
 
         # If setting as default, remove default from others of same type
         if data.get('is_default'):
@@ -658,8 +659,8 @@ def update_email_template(template_id):
         )
 
         # Map variables field for frontend compatibility
-        if updated_template and 'available_variables' in updated_template:
-            updated_template['variables'] = updated_template['available_variables']
+        if updated_template and 'variables' in updated_template:
+            updated_template['available_variables'] = updated_template['variables']
 
         return current_app.response_manager.success(updated_template)
 

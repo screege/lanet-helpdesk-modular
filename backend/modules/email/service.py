@@ -898,7 +898,7 @@ LANET Helpdesk V3
         """Get email template by type"""
         try:
             query = """
-            SELECT template_id, name, subject_template, body_template, is_html, available_variables
+            SELECT template_id, name, subject_template, body_template, is_html, variables
             FROM email_templates
             WHERE template_type = %s AND is_active = true
             ORDER BY is_default DESC, created_at DESC
