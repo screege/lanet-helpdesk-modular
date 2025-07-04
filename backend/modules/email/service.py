@@ -779,7 +779,7 @@ LANET Helpdesk V3
                 'description': email_data['body_text'] or email_data['body_html'],
                 'priority': config['default_priority'],
                 'affected_person': sender_name,
-                'affected_person_contact': sender_email,
+                'notification_email': sender_email,
                 'channel': 'email',
                 'is_email_originated': True,
                 'from_email': sender_email,

@@ -120,9 +120,7 @@ class NotificationsService:
             query = """
             SELECT t.ticket_id, t.ticket_number, t.subject, t.description, t.priority,
                    t.status, t.created_at, t.updated_at, t.assigned_at, t.resolved_at,
-                   t.affected_person, t.affected_person_phone, t.notification_email,
-                   -- Backward compatibility
-                   t.affected_person_contact,
+                   t.affected_person, t.affected_person_phone, t.notification_email, t.additional_emails,
                    c.name as client_name, c.email as client_email,
                    s.name as site_name, s.address as site_address,
                    cat.name as category_name,
@@ -173,13 +171,24 @@ class NotificationsService:
             for recipient_type in recipient_types:
                 if recipient_type == 'client':
                     # Add notification email recipient (new field)
-                    notification_email = ticket.get('notification_email') or ticket.get('affected_person_contact')
+                    notification_email = ticket.get('notification_email')
                     if notification_email:
                         recipients.append({
                             'email': notification_email,
                             'name': ticket['affected_person'],
                             'type': 'affected_person'
                         })
+
+                    # Also add additional emails
+                    additional_emails = ticket.get('additional_emails', [])
+                    if additional_emails:
+                        for email in additional_emails:
+                            if email and email.strip():
+                                recipients.append({
+                                    'email': email.strip(),
+                                    'name': ticket['affected_person'],
+                                    'type': 'additional_contact'
+                                })
 
                     # Add client admin if different
                     if ticket['client_email'] and ticket['client_email'] != notification_email:
@@ -242,7 +251,8 @@ class NotificationsService:
             'site_name': ticket['site_name'] or 'Sitio',
             'category_name': ticket['category_name'] or 'Sin categoría',
             'affected_person': ticket['affected_person'] or 'Usuario',
-            'affected_person_contact': ticket['affected_person_contact'] or '',
+            'affected_person_phone': ticket.get('affected_person_phone') or '',
+            'notification_email': ticket.get('notification_email') or '',
             'created_by_name': ticket['created_by_name'] or 'Sistema',
             'assigned_to_name': ticket['assigned_to_name'] or 'Sin asignar',
             'assigned_to_email': ticket['assigned_to_email'] or '',
