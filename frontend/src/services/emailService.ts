@@ -10,6 +10,7 @@ export interface EmailConfiguration {
   smtp_password_encrypted?: string;
   smtp_use_tls: boolean;
   smtp_use_ssl: boolean;
+  smtp_reply_to?: string;
   imap_host?: string;
   imap_port?: number;
   imap_username?: string;

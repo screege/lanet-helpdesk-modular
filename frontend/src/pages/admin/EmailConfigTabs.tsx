@@ -353,6 +353,17 @@ const EmailConfigTabs: React.FC = () => {
                     className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+                <div>
+                  <label className="block font-medium text-gray-700 mb-1">Reply-To (Responder a):</label>
+                  <input
+                    type="email"
+                    value={formData.smtp_reply_to || ''}
+                    onChange={(e) => handleInputChange('smtp_reply_to', e.target.value)}
+                    placeholder="respuestas@empresa.com (opcional)"
+                    className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Para comunicación bidireccional</p>
+                </div>
                 <div className="col-span-2">
                   <label className="block font-medium text-gray-700 mb-2">Seguridad:</label>
                   <div className="flex gap-4">

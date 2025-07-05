@@ -33,6 +33,7 @@ const EmailConfigForm: React.FC = () => {
     smtp_password: '',
     smtp_use_tls: true,
     smtp_use_ssl: false,
+    smtp_reply_to: '',
     imap_host: '',
     imap_port: 993,
     imap_username: '',
@@ -67,6 +68,7 @@ const EmailConfigForm: React.FC = () => {
         smtp_password: '', // Don't populate password for security
         smtp_use_tls: config.smtp_use_tls,
         smtp_use_ssl: config.smtp_use_ssl,
+        smtp_reply_to: config.smtp_reply_to || '',
         imap_host: config.imap_host || '',
         imap_port: config.imap_port || 993,
         imap_username: config.imap_username || '',
@@ -308,6 +310,25 @@ const EmailConfigForm: React.FC = () => {
                   placeholder={isEditing ? "Dejar en blanco para mantener actual" : ""}
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Reply-To (Responder a)
+                  <span className="text-xs text-gray-500 ml-1">
+                    - Para comunicación bidireccional
+                  </span>
+                </label>
+                <input
+                  type="email"
+                  value={formData.smtp_reply_to}
+                  onChange={(e) => setFormData({...formData, smtp_reply_to: e.target.value})}
+                  placeholder="respuestas@empresa.com (opcional)"
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Dirección de email donde se recibirán las respuestas. Útil cuando el servidor SMTP es solo de envío.
+                </p>
               </div>
               
               <div className="flex space-x-4">
