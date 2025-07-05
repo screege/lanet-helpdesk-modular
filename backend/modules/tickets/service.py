@@ -266,32 +266,27 @@ class TicketService:
             return {'success': False, 'errors': {'general': 'Internal server error'}}
     
     def _generate_ticket_number(self) -> str:
-        """Generate unique ticket number"""
+        """Generate unique ticket number using PostgreSQL sequence"""
         try:
-            # Get current year and month
-            now = datetime.utcnow()
-            year_month = now.strftime("%Y%m")
-            
-            # Get next sequence number for this month
-            sequence_query = """
-            SELECT COALESCE(MAX(CAST(SUBSTRING(ticket_number FROM 8) AS INTEGER)), 0) + 1 as next_seq
-            FROM tickets 
-            WHERE ticket_number LIKE %s
-            """
-            
+            # Use the PostgreSQL function to generate ticket number
             result = self.db.execute_query(
-                sequence_query, 
-                (f"TKT-{year_month}%",), 
+                "SELECT generate_ticket_number() as ticket_number",
                 fetch='one'
             )
-            
-            next_seq = result['next_seq'] if result else 1
-            
-            return f"TKT-{year_month}{next_seq:04d}"
-            
+
+            if result and result['ticket_number']:
+                return result['ticket_number']
+            else:
+                # Fallback: use sequence directly
+                result = self.db.execute_query(
+                    "SELECT 'TKT-' || LPAD(nextval('ticket_number_seq')::TEXT, 6, '0') as ticket_number",
+                    fetch='one'
+                )
+                return result['ticket_number'] if result else f"TKT-{str(uuid.uuid4())[:8].upper()}"
+
         except Exception as e:
             self.logger.error(f"Error generating ticket number: {e}")
-            # Fallback to UUID-based number
+            # Final fallback to UUID-based number
             return f"TKT-{str(uuid.uuid4())[:8].upper()}"
     
     def _create_activity_log(self, ticket_id: str, user_id: str, action: str, description: str):
