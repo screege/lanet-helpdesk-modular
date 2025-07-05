@@ -22,7 +22,7 @@ def get_email_configurations():
     try:
         query = """
         SELECT config_id, name, description, smtp_host, smtp_port, smtp_username,
-               smtp_use_ssl, smtp_use_tls, imap_host, imap_port, imap_username,
+               smtp_use_ssl, smtp_use_tls, smtp_reply_to, imap_host, imap_port, imap_username,
                enable_email_to_ticket, default_priority, subject_prefix,
                is_active, is_default, created_at, updated_at
         FROM email_configurations
@@ -145,7 +145,7 @@ def get_email_configuration(config_id):
     try:
         query = """
         SELECT config_id, name, description, smtp_host, smtp_port, smtp_username,
-               smtp_use_tls, smtp_use_ssl, imap_host, imap_port, imap_username,
+               smtp_use_tls, smtp_use_ssl, smtp_reply_to, imap_host, imap_port, imap_username,
                imap_use_ssl, imap_folder, enable_email_to_ticket,
                default_priority, subject_prefix, ticket_number_regex,
                auto_assign_to, default_client_id, default_category_id,
