@@ -285,9 +285,8 @@ def update_email_configuration(config_id):
             from utils.security import SecurityUtils
             update_data['imap_password_encrypted'] = SecurityUtils.encrypt_password(data['imap_password'])
 
-        # Add updated timestamp (use datetime object, not string)
-        from datetime import datetime
-        update_data['updated_at'] = datetime.now()
+        # Add updated timestamp - let database handle it
+        # Don't set updated_at manually, let the database trigger handle it
 
         # Update configuration
         current_app.logger.info(f"🔧 UPDATE_DATA TO SAVE: {update_data}")

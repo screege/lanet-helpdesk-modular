@@ -159,28 +159,28 @@ def create_ticket():
             if data['client_id'] != current_user_client_id:
                 return current_app.response_manager.forbidden('Access denied')
 
-        # Generate simple consecutive ticket number (TKT-0001, TKT-0002, etc.)
-        sequence_query = """
-        SELECT COALESCE(MAX(
-            CASE
-                WHEN ticket_number ~ '^TKT-[0-9]{4}$'
-                THEN CAST(SUBSTRING(ticket_number FROM 5) AS INTEGER)
-                ELSE 0
-            END
-        ), 0) + 1 as next_seq
-        FROM tickets
-        """
+        # Use unified PostgreSQL sequence for all tickets (same as email tickets)
+        try:
+            result = current_app.db_manager.execute_query(
+                "SELECT generate_ticket_number() as ticket_number",
+                fetch='one'
+            )
+            ticket_number = result['ticket_number'] if result else None
 
-        result = current_app.db_manager.execute_query(
-            sequence_query,
-            fetch='one'
-        )
+            if not ticket_number:
+                # Fallback to direct sequence access
+                result = current_app.db_manager.execute_query(
+                    "SELECT 'TKT-' || LPAD(nextval('ticket_number_seq')::TEXT, 6, '0') as ticket_number",
+                    fetch='one'
+                )
+                ticket_number = result['ticket_number'] if result else f"TKT-{uuid.uuid4().hex[:8].upper()}"
 
-        next_seq = result['next_seq'] if result else 1
-        ticket_number = f"TKT-{next_seq:04d}"
+        except Exception as e:
+            logging.error(f"Error generating ticket number: {e}")
+            ticket_number = f"TKT-{uuid.uuid4().hex[:8].upper()}"
 
         # DEBUG: Log ticket number generation
-        logging.info(f"Generated ticket number: {ticket_number}")
+        logging.info(f"Generated unified ticket number: {ticket_number}")
 
         # Extract file attachments from request
         files = []

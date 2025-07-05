@@ -300,10 +300,9 @@ LANET Helpdesk V3
         """Process a single email from queue"""
         try:
             # Update status to sending
-            from datetime import datetime
             current_app.db_manager.execute_update(
                 'email_queue',
-                {'status': 'sending', 'updated_at': datetime.now()},
+                {'status': 'sending'},
                 'queue_id = %s',
                 (email_item['queue_id'],)
             )
@@ -321,12 +320,12 @@ LANET Helpdesk V3
             
             if success:
                 # Mark as sent
+                from datetime import datetime
                 current_app.db_manager.execute_update(
                     'email_queue',
                     {
                         'status': 'sent',
-                        'sent_at': datetime.now(),
-                        'updated_at': datetime.now()
+                        'sent_at': datetime.now()
                     },
                     'queue_id = %s',
                     (email_item['queue_id'],)
@@ -352,8 +351,7 @@ LANET Helpdesk V3
                         'status': status,
                         'attempts': attempts,
                         'next_attempt_at': next_attempt,
-                        'error_message': 'Failed to send email',
-                        'updated_at': datetime.now()
+                        'error_message': 'Failed to send email'
                     },
                     'queue_id = %s',
                     (email_item['queue_id'],)
@@ -1468,86 +1466,26 @@ LANET Helpdesk V3
                                        config: Dict, message_id: str) -> str:
         """Create ticket from email with atomic transaction and intelligent routing"""
         try:
-            from .routing_service import email_routing_service
-            import uuid
+            current_app.logger.info(f"🔧 EMAIL SERVICE: Creating ticket from email for {from_email}")
 
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Starting intelligent ticket creation for {from_email}")
+            # Use the existing working ticket creation function
+            email_data = {
+                'from_email': from_email,
+                'subject': subject,
+                'body_text': body,
+                'body_html': body,
+                'message_id': message_id
+            }
 
-            # Step 1: Route email to appropriate client and site
-            routing_result = email_routing_service.route_email_to_client_site(from_email)
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Routing result: {routing_result}")
+            # Call the working ticket creation function
+            ticket_id = self._create_ticket_from_email(email_data, config)
 
-            # Step 2: Create ticket with routing information
-            ticket_id = str(uuid.uuid4())
-
-            # Extract routing information
-            client_id = routing_result.get('client_id')
-            site_id = routing_result.get('site_id')
-            priority = routing_result.get('priority', 'media')
-            routing_decision = routing_result.get('routing_decision')
-
-            # Determine ticket status based on routing
-            if routing_decision == 'unauthorized':
-                status = 'pending_authorization'
-                title = f"[NO AUTORIZADO] {subject}"
-                description = f"""
-Email recibido de remitente no autorizado.
-
-Remitente: {from_email}
-Asunto Original: {subject}
-Decisión de Enrutamiento: {routing_decision}
-Razón: {routing_result.get('reason', 'Dominio no autorizado')}
-
-Contenido del Email:
-{body[:1000]}{'...' if len(body) > 1000 else ''}
-
-ACCIÓN REQUERIDA: Revisar y asignar manualmente al cliente correcto.
-                """
+            if ticket_id:
+                current_app.logger.info(f"🔧 EMAIL SERVICE: Successfully created ticket {ticket_id} from email")
+                return ticket_id
             else:
-                status = 'abierto'
-                title = subject
-                description = f"""
-Email recibido y procesado automáticamente.
-
-Remitente: {from_email}
-Cliente: {routing_result.get('client_name', 'N/A')}
-Sitio: {routing_result.get('site_name', 'N/A')}
-Decisión de Enrutamiento: {routing_decision}
-Confianza: {routing_result.get('routing_confidence', 0.0):.2f}
-
-Contenido del Email:
-{body}
-                """
-
-            # For now, simulate ticket creation with detailed logging
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Creating ticket with routing:")
-            current_app.logger.info(f"  - Ticket ID: {ticket_id}")
-            current_app.logger.info(f"  - Client ID: {client_id}")
-            current_app.logger.info(f"  - Site ID: {site_id}")
-            current_app.logger.info(f"  - Priority: {priority}")
-            current_app.logger.info(f"  - Status: {status}")
-            current_app.logger.info(f"  - Routing Decision: {routing_decision}")
-            current_app.logger.info(f"  - Title: {title[:100]}...")
-
-            # Update routing log with created ticket ID
-            try:
-                with current_app.db_manager.get_connection() as conn:
-                    with conn.cursor() as cursor:
-                        cursor.execute("""
-                            UPDATE email_routing_log
-                            SET created_ticket_id = %s
-                            WHERE sender_email = %s
-                                AND email_message_id LIKE 'routing-test-%'
-                            ORDER BY created_at DESC
-                            LIMIT 1
-                        """, (ticket_id, from_email))
-                        conn.commit()
-            except Exception as log_error:
-                current_app.logger.warning(f"Could not update routing log: {log_error}")
-
-            # In full implementation, this would create the actual ticket in the database
-            # For now, return the simulated ticket ID
-            return ticket_id
+                current_app.logger.error(f"🔧 EMAIL SERVICE: Failed to create ticket from email")
+                return None
 
         except Exception as e:
             current_app.logger.error(f"🔧 EMAIL SERVICE: Error in intelligent ticket creation: {e}")

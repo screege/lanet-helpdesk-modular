@@ -128,8 +128,7 @@ class SLAService:
             # Update tracking
             update_data = {
                 'first_response_at': now,
-                'response_status': 'met',
-                'updated_at': 'CURRENT_TIMESTAMP'
+                'response_status': 'met'
             }
             
             current_app.db_manager.execute_update(
