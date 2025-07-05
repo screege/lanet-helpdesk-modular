@@ -198,6 +198,7 @@ def create_email_configuration():
             'smtp_password_encrypted': smtp_password_encrypted,
             'smtp_use_tls': data.get('smtp_use_tls', True),
             'smtp_use_ssl': data.get('smtp_use_ssl', False),
+            'smtp_reply_to': data.get('smtp_reply_to'),
             'imap_host': data.get('imap_host'),
             'imap_port': data.get('imap_port', 993),
             'imap_username': data.get('imap_username'),
@@ -267,7 +268,7 @@ def update_email_configuration(config_id):
 
         # Basic fields (only include fields that exist in the database)
         valid_fields = ['name', 'description', 'smtp_host', 'smtp_port', 'smtp_username',
-                       'smtp_use_tls', 'smtp_use_ssl', 'imap_host', 'imap_port', 'imap_username',
+                       'smtp_use_tls', 'smtp_use_ssl', 'smtp_reply_to', 'imap_host', 'imap_port', 'imap_username',
                        'imap_use_ssl', 'imap_folder', 'enable_email_to_ticket', 'default_priority',
                        'subject_prefix', 'ticket_number_regex', 'is_active']
 

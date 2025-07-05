@@ -131,6 +131,10 @@ class EmailService:
             msg['To'] = to_email
             msg['Subject'] = f"Email de Prueba - LANET Helpdesk - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
+            # Add Reply-To header if configured
+            if config.get('smtp_reply_to'):
+                msg['Reply-To'] = config['smtp_reply_to']
+
             # Email body
             body = f"""
 ¡Hola!
@@ -206,6 +210,10 @@ LANET Helpdesk V3
             msg['From'] = config['smtp_username']
             msg['To'] = to_email
             msg['Subject'] = subject
+
+            # Add Reply-To header if configured for bidirectional communication
+            if config.get('smtp_reply_to'):
+                msg['Reply-To'] = config['smtp_reply_to']
 
             if cc_emails:
                 msg['Cc'] = ', '.join(cc_emails)
