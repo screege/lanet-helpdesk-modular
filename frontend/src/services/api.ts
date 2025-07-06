@@ -3,7 +3,7 @@ import { ApiResponse, AuthTokens, LoginCredentials, User } from '@/types';
 
 class ApiService {
   private api: AxiosInstance;
-  private baseURL = '/api'; // Use relative URL to leverage Vite proxy
+  private baseURL = '/api'; // Use Vite proxy
 
   constructor() {
     this.api = axios.create({
@@ -212,13 +212,62 @@ class ApiService {
     }
   }
 
-  async post<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data: any, config?: any): Promise<ApiResponse<T>> {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await this.api.post(endpoint, data);
+      console.log('🚀 API POST:', endpoint, 'Data type:', data ? data.constructor.name : 'undefined');
+
+      // Handle FormData specially - don't set Content-Type, let axios handle it
+      if (data instanceof FormData) {
+        console.log('📎 FormData detected in apiService - removing Content-Type header');
+        for (let [key, value] of data.entries()) {
+          console.log(`  ${key}:`, value);
+        }
+
+        // Create config without Content-Type for FormData
+        const formDataConfig = {
+          ...config,
+          headers: {
+            ...config?.headers,
+            // Don't set Content-Type - let axios set multipart/form-data with boundary
+          }
+        };
+
+        // Remove Content-Type from the request for FormData
+        const response: AxiosResponse<ApiResponse<T>> = await this.api.post(endpoint, data, {
+          ...formDataConfig,
+          headers: {
+            ...formDataConfig.headers,
+            'Content-Type': undefined, // Remove Content-Type for FormData
+          }
+        });
+        return response.data;
+      }
+
+      // Regular JSON request
+      const response: AxiosResponse<ApiResponse<T>> = await this.api.post(endpoint, data, config);
       return response.data;
     } catch (error: any) {
-      console.error(`API POST Error for ${endpoint}:`, error.response?.data || error.message);
-      throw error; // Throw the original error for proper handling
+      console.error(`🔧 FRONTEND API: POST Error for ${endpoint}:`, error);
+      console.error(`🔧 FRONTEND API: Error response:`, error.response);
+      console.error(`🔧 FRONTEND API: Error response data:`, error.response?.data);
+
+      let errorMessage = 'Request failed';
+
+      if (error.response?.data) {
+        // Backend returned an error response
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      const errorToThrow = new Error(errorMessage);
+      throw errorToThrow;
     }
   }
 

@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, UserPlus, MessageSquare, Clock, User, MapPin, AlertCircle, Send } from 'lucide-react';
-import { Ticket, TicketComment, ticketsService } from '../../services/ticketsService';
+import { ArrowLeft, Edit, UserPlus, MessageSquare, Clock, User, MapPin, AlertCircle, Send, CheckCircle, Paperclip, Download } from 'lucide-react';
+import { Ticket, TicketComment, TicketAttachment, ticketsService } from '../../services/ticketsService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import ResolveTicketModal from '../../components/tickets/ResolveTicketModal';
 import ReopenTicketModal from '../../components/tickets/ReopenTicketModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 const TicketDetailPage: React.FC = () => {
   const { ticketId } = useParams<{ ticketId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
+  const [attachments, setAttachments] = useState<TicketAttachment[]>([]);
+  const [resolutions, setResolutions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -20,6 +24,7 @@ const TicketDetailPage: React.FC = () => {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
+  const [downloadingAttachments, setDownloadingAttachments] = useState<Set<string>>(new Set());
 
   // Load ticket data
   useEffect(() => {
@@ -35,18 +40,37 @@ const TicketDetailPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const [ticketData, commentsData] = await Promise.all([
+      const [ticketData, commentsData, attachmentsData] = await Promise.all([
         ticketsService.getTicketById(ticketId),
-        ticketsService.getTicketComments(ticketId)
+        ticketsService.getTicketComments(ticketId),
+        ticketsService.getTicketAttachments(ticketId)
       ]);
-      
+
+      console.log('🔗 Attachments loaded:', attachmentsData);
       setTicket(ticketData);
       setComments(commentsData);
+      setAttachments(attachmentsData);
+
+      // Cargar historial de resoluciones
+      await loadResolutions();
     } catch (err: any) {
       console.error('Error loading ticket data:', err);
       setError(err.response?.data?.message || 'Error al cargar el ticket');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadResolutions = async () => {
+    if (!ticketId) return;
+
+    try {
+      console.log('🔍 Loading resolutions for ticket:', ticketId);
+      const resolutionsData = await ticketsService.getTicketResolutions(ticketId);
+      console.log('✅ Resolutions loaded:', resolutionsData);
+      setResolutions(resolutionsData);
+    } catch (error) {
+      console.error('❌ Error loading resolutions:', error);
     }
   };
 
@@ -124,6 +148,85 @@ const TicketDetailPage: React.FC = () => {
     } catch (err: any) {
       console.error('Error reopening ticket:', err);
       throw new Error(err.message || 'Error al reabrir el ticket');
+    }
+  };
+
+  // Handle attachment download
+  const handleDownloadAttachment = async (attachmentId: string, originalFilename: string) => {
+    // Prevent multiple downloads of the same attachment
+    if (downloadingAttachments.has(attachmentId)) {
+      console.log('🔽 Download already in progress for:', attachmentId);
+      return;
+    }
+
+    try {
+      console.log('🔽 Downloading attachment:', attachmentId, originalFilename);
+
+      // Mark attachment as downloading
+      setDownloadingAttachments(prev => new Set(prev).add(attachmentId));
+
+      // Get the token for authentication (using correct key)
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setError('No authentication token found');
+        return;
+      }
+
+      // Create download URL
+      const downloadUrl = `http://localhost:5001/api/tickets/attachments/${attachmentId}/download`;
+
+      // Fetch the file
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = originalFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      console.log('✅ Download completed successfully');
+    } catch (err: any) {
+      console.error('❌ Download error:', err);
+      setError(`Error al descargar archivo: ${err.message}`);
+    } finally {
+      // Remove attachment from downloading set
+      setDownloadingAttachments(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(attachmentId);
+        return newSet;
+      });
+    }
+  };
+
+  // Cliente reabrir directamente sin modal
+  const handleClientReopen = async () => {
+    if (!ticket || !ticketId) return;
+
+    try {
+      setLoading(true);
+      // Add comment explaining why it's not resolved
+      await ticketsService.addTicketComment(ticketId, 'El problema no está resuelto. Necesito más ayuda.', false);
+      // Then change status
+      await ticketsService.updateTicketStatus(ticketId, 'reabierto');
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Error reopening ticket:', err);
+      setError(err.response?.data?.message || 'Error al reabrir el ticket');
+      setLoading(false);
     }
   };
 
@@ -265,7 +368,8 @@ const TicketDetailPage: React.FC = () => {
               </button>
               
               {/* Status Change Buttons */}
-              {ticket.status === 'nuevo' && (
+              {/* Iniciar Trabajo - Solo técnicos/admins pueden iniciar trabajo en tickets */}
+              {ticket.status === 'nuevo' && user?.role && ['superadmin', 'technician'].includes(user.role) && (
                 <button
                   onClick={() => handleStatusChange('en_proceso')}
                   className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
@@ -276,29 +380,44 @@ const TicketDetailPage: React.FC = () => {
               
               {ticket.status === 'en_proceso' && (
                 <>
-                  <button
-                    onClick={() => handleStatusChange('espera_cliente')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700"
-                  >
-                    Esperar Cliente
-                  </button>
-                  <button
-                    onClick={() => handleStatusChange('resuelto')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
-                  >
-                    Resolver
-                  </button>
+                  {/* Solo técnicos/admins pueden cambiar a espera_cliente y resolver */}
+                  {user?.role && ['superadmin', 'technician'].includes(user.role) && (
+                    <>
+                      <button
+                        onClick={() => handleStatusChange('espera_cliente')}
+                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700"
+                      >
+                        Esperar Cliente
+                      </button>
+                      <button
+                        onClick={() => handleStatusChange('resuelto')}
+                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                      >
+                        Resolver
+                      </button>
+                    </>
+                  )}
+
+                  {/* Clientes pueden cerrar directamente si están satisfechos */}
+                  {user?.role && ['client_admin', 'solicitante'].includes(user.role) && (
+                    <button
+                      onClick={() => handleStatusChange('cerrado')}
+                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gray-600 hover:bg-gray-700"
+                    >
+                      Cerrar (Satisfecho)
+                    </button>
+                  )}
                 </>
               )}
               
-              {/* Espera Cliente → Continuar o Resolver */}
-              {ticket.status === 'espera_cliente' && (
+              {/* Espera Cliente → Solo técnicos pueden continuar/resolver */}
+              {ticket.status === 'espera_cliente' && user?.role && ['superadmin', 'technician'].includes(user.role) && (
                 <>
                   <button
                     onClick={() => handleStatusChange('en_proceso')}
                     className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
                   >
-                    Continuar
+                    Continuar Trabajo
                   </button>
                   <button
                     onClick={() => handleStatusChange('resuelto')}
@@ -311,27 +430,55 @@ const TicketDetailPage: React.FC = () => {
 
               {ticket.status === 'resuelto' && (
                 <>
+                  {/* Cualquiera puede cerrar un ticket resuelto */}
                   <button
                     onClick={() => handleStatusChange('cerrado')}
                     className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gray-600 hover:bg-gray-700"
                   >
-                    Cerrar Ticket
+                    {user?.role && ['client_admin', 'solicitante'].includes(user.role)
+                      ? 'Confirmar Resolución'
+                      : 'Cerrar Ticket'}
                   </button>
-                  <button
-                    onClick={() => handleStatusChange('reabierto')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
-                  >
-                    Reabrir
-                  </button>
+
+                  {/* Solo técnicos/admins pueden reabrir directamente */}
+                  {user?.role && ['superadmin', 'technician'].includes(user.role) && (
+                    <button
+                      onClick={() => handleStatusChange('reabierto')}
+                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
+                    >
+                      Reabrir
+                    </button>
+                  )}
+
+                  {/* Clientes pueden reabrir directamente */}
+                  {user?.role && ['client_admin', 'solicitante'].includes(user.role) && (
+                    <button
+                      onClick={() => handleClientReopen()}
+                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
+                    >
+                      No Resuelto
+                    </button>
+                  )}
                 </>
               )}
 
-              {ticket.status === 'reabierto' && (
+              {/* Reabierto → Solo técnicos pueden continuar */}
+              {ticket.status === 'reabierto' && user?.role && ['superadmin', 'technician'].includes(user.role) && (
                 <button
                   onClick={() => handleStatusChange('en_proceso')}
                   className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
                 >
-                  Continuar
+                  Retomar Trabajo
+                </button>
+              )}
+
+              {/* Cerrado → Reabrir */}
+              {ticket.status === 'cerrado' && (
+                <button
+                  onClick={() => handleStatusChange('reabierto')}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
+                >
+                  Reabrir Ticket
                 </button>
               )}
             </div>
@@ -369,17 +516,54 @@ const TicketDetailPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Comments Section */}
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                Conversación ({comments.length} comentarios)
-              </h2>
+            {/* Attachments Section */}
+            {attachments.length > 0 && (
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
+                  <Paperclip className="w-5 h-5" />
+                  Archivos Adjuntos ({attachments.length})
+                </h2>
+                <div className="space-y-3">
+                  {attachments.map((attachment) => (
+                    <div key={attachment.attachment_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Paperclip className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{attachment.original_filename}</p>
+                          <p className="text-xs text-gray-500">
+                            {attachment.file_size_display} • Subido por {attachment.uploaded_by_name} • {new Date(attachment.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
+                          downloadingAttachments.has(attachment.attachment_id)
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
+                        }`}
+                        onClick={() => handleDownloadAttachment(attachment.attachment_id, attachment.original_filename)}
+                        disabled={downloadingAttachments.has(attachment.attachment_id)}
+                      >
+                        <Download className="w-4 h-4" />
+                        {downloadingAttachments.has(attachment.attachment_id) ? 'Descargando...' : 'Descargar'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-              {/* Comments List - Con scroll y altura fija */}
-              <div
-                className="space-y-4 mb-6 max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50 scroll-smooth"
-                style={{ scrollBehavior: 'smooth' }}
-              >
+            {/* Comments/Communication Thread - DISEÑO ORIGINAL */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Conversación</h3>
+                <span className="text-sm text-gray-500">{comments.length} comentarios</span>
+              </div>
+
+              {/* Comments List - DISEÑO ORIGINAL INCREÍBLE */}
+              <div className="px-6 py-4 space-y-4 max-h-96 overflow-y-auto">
                 {comments.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <div className="text-4xl mb-2">💬</div>
@@ -387,44 +571,77 @@ const TicketDetailPage: React.FC = () => {
                     <p className="text-sm">Sé el primero en agregar un comentario</p>
                   </div>
                 ) : (
-                  comments.map((comment) => (
-                    <div key={comment.comment_id} className={`p-4 rounded-lg shadow-sm border ${
-                      comment.is_internal
-                        ? 'bg-yellow-50 border-yellow-200 border-l-4 border-l-yellow-400'
-                        : 'bg-white border-gray-200'
-                    }`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium text-gray-900">{comment.created_by_name}</span>
-                        {comment.is_internal && (
-                          <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-                            Interno
+                  comments.map((comment) => {
+                    // Distinción de colores por tipo y rol
+                    let borderColor = 'border-blue-400';
+                    let bgColor = 'bg-blue-50';
+
+                    if (comment.is_internal) {
+                      borderColor = 'border-yellow-400';
+                      bgColor = 'bg-yellow-50';
+                    } else if (comment.user_role === 'superadmin' || comment.user_role === 'technician') {
+                      borderColor = 'border-green-400';
+                      bgColor = 'bg-green-50';
+                    } else if (comment.user_role === 'client_admin' || comment.user_role === 'solicitante') {
+                      borderColor = 'border-blue-400';
+                      bgColor = 'bg-blue-50';
+                    }
+
+                    return (
+                    <div key={comment.comment_id} className={`border-l-4 pl-4 py-3 ${borderColor} ${bgColor}`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className="flex items-center">
+                            <User className="h-4 w-4 text-gray-400 mr-1" />
+                            <span className="text-sm font-medium text-gray-900">{comment.user_name}</span>
+                          </div>
+                          <span className="text-xs text-gray-500">•</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(comment.created_at).toLocaleString('es-ES')}
                           </span>
-                        )}
+                          {comment.is_internal && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Nota Interna
+                            </span>
+                          )}
+                          {!comment.is_internal && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              comment.user_role === 'superadmin' || comment.user_role === 'technician'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {comment.user_role === 'superadmin' ? 'Admin' :
+                               comment.user_role === 'technician' ? 'Técnico' :
+                               comment.user_role === 'client_admin' ? 'Cliente Admin' :
+                               comment.user_role === 'solicitante' ? 'Solicitante' : 'Usuario'}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-sm text-gray-500">
-                        {new Date(comment.created_at).toLocaleString()}
-                      </span>
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{comment.content}</p>
+                      </div>
                     </div>
-                    <p className="text-gray-700">{comment.content}</p>
-                  </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
               {/* Add Comment Form */}
               <form onSubmit={handleAddComment} className="border-t pt-4">
                 <div className="mb-4">
-                  <label className="flex items-center gap-2 mb-2">
-                    <input
-                      type="checkbox"
-                      checked={isInternal}
-                      onChange={(e) => setIsInternal(e.target.checked)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Comentario interno (solo visible para técnicos)</span>
-                  </label>
+                  {/* Internal comment checkbox - only visible to superadmin and technician */}
+                  {user?.role && ['superadmin', 'technician'].includes(user.role) && (
+                    <label className="flex items-center gap-2 mb-2">
+                      <input
+                        type="checkbox"
+                        checked={isInternal}
+                        onChange={(e) => setIsInternal(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Comentario interno (solo visible para técnicos)</span>
+                    </label>
+                  )}
                   <textarea
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
@@ -446,36 +663,47 @@ const TicketDetailPage: React.FC = () => {
               </form>
             </div>
 
-            {/* Resolution Section - AL FINAL como debe ser */}
-            {ticket.resolution_notes && (
-              <div className="bg-white shadow rounded-lg p-6 mt-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">🎯 Resolución del Ticket</h2>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-sm">✓</span>
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-sm font-medium text-green-900 mb-2">
-                        Ticket Resuelto
-                        {ticket.resolved_at && (
-                          <span className="ml-2 text-xs text-green-700">
-                            el {new Date(ticket.resolved_at).toLocaleString('es-ES')}
+            {/* Resolution History - HISTORIAL REAL COMPLETO */}
+            {console.log('🎯 Rendering resolutions check:', resolutions.length, resolutions)}
+            {resolutions.length > 0 && (
+              <div className="bg-white shadow rounded-lg">
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-gray-900">Historial de Resoluciones</h3>
+                  <span className="text-sm text-gray-500">
+                    {resolutions.length} resoluciones
+                  </span>
+                </div>
+                <div className="px-6 py-4 space-y-4">
+                  {resolutions.map((resolution, index) => (
+                    <div key={resolution.resolution_id} className="border-l-4 border-green-400 bg-green-50 pl-4 py-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className="flex items-center">
+                            <CheckCircle className="h-4 w-4 text-green-600 mr-1" />
+                            <span className="text-sm font-medium text-green-900">
+                              {resolution.resolved_by_name || 'Sistema'}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">•</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(resolution.resolved_at).toLocaleString('es-ES')}
                           </span>
-                        )}
-                      </h3>
-                      <div className="text-sm text-green-800 whitespace-pre-wrap">
-                        {ticket.resolution_notes}
-                      </div>
-                      {ticket.status === 'reabierto' && (
-                        <div className="mt-2 p-2 bg-orange-100 border border-orange-300 rounded text-xs text-orange-800">
-                          ⚠️ Este ticket fue reabierto después de la resolución
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                            Resolución #{resolutions.length - index}
+                          </span>
                         </div>
-                      )}
+                      </div>
+                      <div className="mt-2">
+                        <p className="text-sm text-green-900 whitespace-pre-wrap">{resolution.resolution_notes}</p>
+                      </div>
                     </div>
-                  </div>
+                  ))}
+
+                  {ticket?.status === 'reabierto' && (
+                    <div className="mt-4 p-3 bg-orange-100 border border-orange-300 rounded text-sm text-orange-800">
+                      ⚠️ Este ticket fue reabierto después de la resolución más reciente
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -100,7 +100,7 @@ def create_ticket():
 
         if not data:
             logging.warning("La petición llegó sin datos.")
-            return current_app.response_manager.bad_request('No data provided')
+            return current_app.response_manager.error('No data provided', 400)
 
         # Log user info
         current_user_id = get_jwt_identity()
@@ -118,13 +118,28 @@ def create_ticket():
 
         if not data:
             logging.error("Error: No se proporcionaron datos")
-            return current_app.response_manager.bad_request('No data provided')
+            return current_app.response_manager.error('No data provided', 400)
 
-        # Validate required fields
-        required_fields = ['client_id', 'site_id', 'subject', 'description', 'affected_person', 'affected_person_contact', 'priority']
+        # Validate required fields - add affected_person_contact for TicketsService compatibility
+        required_fields = ['client_id', 'site_id', 'subject', 'description', 'affected_person', 'priority']
         for field in required_fields:
             if field not in data or not data[field]:
-                return current_app.response_manager.bad_request(f'{field} is required')
+                return current_app.response_manager.error(f'{field} is required', 400)
+
+        # Map frontend fields to TicketsService expected fields
+        # Frontend sends affected_person_phone, but TicketsService expects affected_person_contact
+        # According to user requirements, affected_person_contact should be phone-only
+        affected_person_phone = data.get('affected_person_phone', '').strip()
+        affected_person_contact = data.get('affected_person_contact', '').strip()
+
+        # Use phone if provided, otherwise use contact, otherwise use a default value
+        if affected_person_phone:
+            data['affected_person_contact'] = affected_person_phone
+        elif affected_person_contact:
+            data['affected_person_contact'] = affected_person_contact
+        else:
+            # TicketsService requires this field, so provide a default
+            data['affected_person_contact'] = 'No especificado'
 
         # Validate client exists and is active
         client = current_app.db_manager.execute_query(
@@ -133,7 +148,7 @@ def create_ticket():
             fetch='one'
         )
         if not client:
-            return current_app.response_manager.bad_request('Invalid or inactive client')
+            return current_app.response_manager.error('Invalid or inactive client', 400)
 
         # Validate site exists and belongs to client
         site = current_app.db_manager.execute_query(
@@ -142,12 +157,12 @@ def create_ticket():
             fetch='one'
         )
         if not site:
-            return current_app.response_manager.bad_request('Invalid site or site does not belong to client')
+            return current_app.response_manager.error('Invalid site or site does not belong to client', 400)
 
         # Validate priority
         valid_priorities = ['baja', 'media', 'alta', 'critica']
         if data['priority'] not in valid_priorities:
-            return current_app.response_manager.bad_request('Invalid priority level')
+            return current_app.response_manager.error('Invalid priority level', 400)
 
         # Check access permissions for client users
         claims = get_jwt()
@@ -159,28 +174,9 @@ def create_ticket():
             if data['client_id'] != current_user_client_id:
                 return current_app.response_manager.forbidden('Access denied')
 
-        # Generate simple consecutive ticket number (TKT-0001, TKT-0002, etc.)
-        sequence_query = """
-        SELECT COALESCE(MAX(
-            CASE
-                WHEN ticket_number ~ '^TKT-[0-9]{4}$'
-                THEN CAST(SUBSTRING(ticket_number FROM 5) AS INTEGER)
-                ELSE 0
-            END
-        ), 0) + 1 as next_seq
-        FROM tickets
-        """
-
-        result = current_app.db_manager.execute_query(
-            sequence_query,
-            fetch='one'
-        )
-
-        next_seq = result['next_seq'] if result else 1
-        ticket_number = f"TKT-{next_seq:04d}"
-
-        # DEBUG: Log ticket number generation
-        logging.info(f"Generated ticket number: {ticket_number}")
+        # Use TicketsService for proper ticket creation
+        from modules.tickets.service import TicketService
+        tickets_service = TicketService(current_app.db_manager, current_app.auth_manager)
 
         # Extract file attachments from request
         files = []
@@ -214,60 +210,60 @@ def create_ticket():
                 logging.warning(f"Category ID {category_id} not found, setting to NULL")
                 category_id = None
 
-        # Prepare ticket data - handle empty strings properly for optional fields
+        # Prepare ticket data for TicketsService
         ticket_data = {
-            'ticket_id': str(uuid.uuid4()),
-            'ticket_number': ticket_number,
             'client_id': data['client_id'],
             'site_id': data['site_id'],
             'asset_id': clean_field(data.get('asset_id')),
-            'created_by': current_user_id,
             'assigned_to': clean_field(data.get('assigned_to')),
             'subject': data['subject'].strip(),
             'description': data['description'].strip(),
             'affected_person': data['affected_person'].strip(),
-            'affected_person_contact': data['affected_person_contact'].strip(),
+            'affected_person_contact': clean_field(data.get('affected_person_phone') or data.get('affected_person_contact') or ''),
             'additional_emails': data.get('additional_emails', []) if data.get('additional_emails') else [],
             'priority': data['priority'],
-            'category_id': category_id,  # Use validated category_id
-            'status': 'nuevo',
+            'category_id': category_id,
             'channel': data.get('channel', 'portal'),
             'is_email_originated': data.get('is_email_originated', False),
             'from_email': clean_field(data.get('from_email')),
             'email_message_id': clean_field(data.get('email_message_id')),
-            'email_thread_id': clean_field(data.get('email_thread_id')),
-            'approval_status': 'pendiente',
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow()
+            'email_thread_id': clean_field(data.get('email_thread_id'))
         }
 
-        # Auto-assign if assigned_to is provided and not None
-        if ticket_data['assigned_to'] is not None:
-            ticket_data['status'] = 'asignado'
-            ticket_data['assigned_at'] = datetime.utcnow()
+        # DEBUG: Log ticket data before creation
+        logging.info(f"About to create ticket with TicketsService: {ticket_data}")
 
-        # DEBUG: Log ticket data before insert
-        logging.info(f"About to insert ticket data: {ticket_data}")
-
-        # Insert ticket
+        # Create ticket using TicketsService
         try:
-            logging.info("Attempting database insert...")
-            result = current_app.db_manager.execute_insert(
-                'tickets',
-                ticket_data,
-                returning='ticket_id, ticket_number, subject, status, created_at'
-            )
-            logging.info(f"Insert successful: {result}")
-        except Exception as insert_error:
-            logging.error(f"Insert failed: {insert_error}")
-            raise insert_error
+            logging.info("Attempting ticket creation with TicketsService...")
+            service_result = tickets_service.create_ticket(ticket_data, current_user_id)
+            logging.info(f"TicketsService result: {service_result}")
+
+            if not service_result.get('success'):
+                logging.error(f"TicketsService failed: {service_result.get('errors')}")
+                return current_app.response_manager.error(f"Ticket creation failed: {service_result.get('errors')}", 400)
+
+            # Check if service_result has the expected structure
+            if 'ticket' in service_result:
+                result = service_result['ticket']
+            else:
+                # If no 'ticket' key, use the service_result directly
+                result = service_result
+            logging.info(f"Ticket created successfully: {result}")
+
+        except Exception as create_error:
+            logging.error(f"Ticket creation failed: {create_error}")
+            raise create_error
 
         if result:
-            current_app.logger.info(f"Ticket created successfully: {result['ticket_number']}")
+            # result is already the ticket data (extracted above)
+            ticket_data = result
+            current_app.logger.info(f"Ticket created successfully: {ticket_data['ticket_number']}")
+            # Notifications are already handled by TicketsService
 
             # Handle file attachments if any
             if files:
-                ticket_id = result['ticket_id']
+                ticket_id = ticket_data['ticket_id']
                 saved_files = []
 
                 import os
@@ -314,7 +310,7 @@ def create_ticket():
 
                 current_app.logger.info(f"Saved {len(saved_files)} attachments for ticket {ticket_id}")
 
-            formatted_ticket = current_app.response_manager.format_ticket_data(result)
+            formatted_ticket = current_app.response_manager.format_ticket_data(ticket_data)
             return current_app.response_manager.success(formatted_ticket, "Ticket created successfully", 201)
         else:
             return current_app.response_manager.server_error('Failed to create ticket')
@@ -322,6 +318,12 @@ def create_ticket():
     except Exception as e:
         # CRUCIAL! Esto capturará CUALQUIER error que ocurra en el bloque try
         # y lo escribirá en tu archivo de log, incluyendo la traza completa.
+        print(f"🚨🚨🚨 EXCEPTION IN CREATE_TICKET: {e}", flush=True)
+        print(f"🚨🚨🚨 EXCEPTION TYPE: {type(e)}", flush=True)
+        import traceback
+        print(f"🚨🚨🚨 TRACEBACK:", flush=True)
+        traceback.print_exc()
+
         logging.error("Ha ocurrido una excepción no controlada al crear el ticket.", exc_info=True)
 
         # También log el error específico

@@ -33,7 +33,8 @@ const TicketForm: React.FC<TicketFormProps> = ({
     subject: '',
     description: '',
     affected_person: '',
-    affected_person_contact: '',
+    affected_person_phone: '',
+    notification_email: '',
     additional_emails: [],
     priority: 'media',
     category_id: '',
@@ -280,8 +281,21 @@ const TicketForm: React.FC<TicketFormProps> = ({
     if (!formData.subject.trim()) newErrors.subject = 'Asunto es requerido';
     if (!formData.description.trim()) newErrors.description = 'Descripción es requerida';
     if (!formData.affected_person.trim()) newErrors.affected_person = 'Persona afectada es requerida';
-    if (!formData.affected_person_contact.trim()) {
-      newErrors.affected_person_contact = 'Contacto de persona afectada es requerido';
+
+    // Validate phone number format if provided
+    if (formData.affected_person_phone && formData.affected_person_phone.trim()) {
+      const phoneRegex = /^[\+]?[0-9\s\-\(\)\.]{7,20}$/;
+      if (!phoneRegex.test(formData.affected_person_phone.trim())) {
+        newErrors.affected_person_phone = 'Formato de teléfono inválido';
+      }
+    }
+
+    // Validate email format if provided
+    if (formData.notification_email && formData.notification_email.trim()) {
+      const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+      if (!emailRegex.test(formData.notification_email.trim())) {
+        newErrors.notification_email = 'Formato de email inválido';
+      }
     }
     if (!formData.category_id) newErrors.category_id = 'Categoría es requerida';
 
@@ -332,7 +346,8 @@ const TicketForm: React.FC<TicketFormProps> = ({
       subject: '',
       description: '',
       affected_person: '',
-      affected_person_contact: '',
+      affected_person_phone: '',
+      notification_email: '',
       additional_emails: [],
       priority: 'media',
       category_id: '',
@@ -473,7 +488,7 @@ const TicketForm: React.FC<TicketFormProps> = ({
             )}
           </div>
 
-          {/* Affected Person and Contact */}
+          {/* Affected Person and Phone */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -495,21 +510,23 @@ const TicketForm: React.FC<TicketFormProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Contacto *
+                Teléfono
               </label>
               <input
-                type="text"
-                value={formData.affected_person_contact}
-                onChange={(e) => handleChange('affected_person_contact', e.target.value)}
+                type="tel"
+                value={formData.affected_person_phone}
+                onChange={(e) => handleChange('affected_person_phone', e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.affected_person_contact ? 'border-red-300' : 'border-gray-300'
+                  errors.affected_person_phone ? 'border-red-300' : 'border-gray-300'
                 }`}
-                placeholder="Email o teléfono de contacto..."
+                placeholder="Teléfono de contacto (opcional)..."
               />
-              {errors.affected_person_contact && (
-                <p className="mt-1 text-sm text-red-600">{errors.affected_person_contact}</p>
+              {errors.affected_person_phone && (
+                <p className="mt-1 text-sm text-red-600">{errors.affected_person_phone}</p>
               )}
             </div>
+
+
           </div>
 
           {/* Priority, Category and Assignment */}

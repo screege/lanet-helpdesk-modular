@@ -231,8 +231,8 @@ def update_client(client_id):
             return current_app.response_manager.bad_request('No data provided')
 
         # Use service layer for proper validation and error handling
-        from .service import ClientsService
-        clients_service = ClientsService(current_app.db_manager)
+        from .service import ClientService
+        clients_service = ClientService(current_app.db_manager, current_app.auth_manager)
         result = clients_service.update_client(client_id, data, current_user_id)
 
         if result['success']:
@@ -328,7 +328,7 @@ def get_client_sites(client_id):
 
         query = """
         SELECT s.site_id, s.client_id, s.name, s.address, s.city, s.state,
-               s.country, s.postal_code, s.latitude, s.longitude, s.is_active,
+               s.country, s.postal_code, s.latitude, s.longitude, s.authorized_emails, s.is_active,
                s.created_at, s.updated_at,
                0 as total_users,
                COUNT(DISTINCT t.ticket_id) as total_tickets
@@ -336,7 +336,7 @@ def get_client_sites(client_id):
         LEFT JOIN tickets t ON s.site_id = t.site_id
         WHERE s.client_id = %s AND s.is_active = true
         GROUP BY s.site_id, s.client_id, s.name, s.address, s.city, s.state,
-                 s.country, s.postal_code, s.latitude, s.longitude, s.is_active,
+                 s.country, s.postal_code, s.latitude, s.longitude, s.authorized_emails, s.is_active,
                  s.created_at, s.updated_at
         ORDER BY s.name
         """

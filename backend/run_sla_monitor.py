@@ -9,10 +9,19 @@ import sys
 import os
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Add backend directory to Python path
 backend_dir = Path(__file__).parent
 sys.path.insert(0, str(backend_dir))
+
+# Load environment variables from .env file
+env_file = backend_dir / '.env'
+if env_file.exists():
+    load_dotenv(env_file)
+    print(f"Loaded environment variables from {env_file}")
+else:
+    print(f"Warning: .env file not found at {env_file}")
 
 # Configure logging
 log_dir = backend_dir / 'logs'

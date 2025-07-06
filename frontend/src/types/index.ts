@@ -65,7 +65,10 @@ export interface Ticket {
   subject: string;
   description: string;
   affected_person: string;
-  affected_person_contact: string;
+  affected_person_phone?: string;  // New phone field (optional)
+  notification_email?: string;     // New email field (optional)
+  // Backward compatibility
+  affected_person_contact?: string; // Deprecated, use notification_email instead
   additional_emails?: string[];
   priority: TicketPriority;
   category_id?: string;

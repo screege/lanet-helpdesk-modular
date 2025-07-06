@@ -131,6 +131,10 @@ class EmailService:
             msg['To'] = to_email
             msg['Subject'] = f"Email de Prueba - LANET Helpdesk - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
+            # Add Reply-To header if configured
+            if config.get('smtp_reply_to'):
+                msg['Reply-To'] = config['smtp_reply_to']
+
             # Email body
             body = f"""
 ¡Hola!
@@ -182,50 +186,61 @@ LANET Helpdesk V3
             current_app.logger.error(f"Full traceback: {traceback.format_exc()}")
             return False, error_msg
     
-    def send_email(self, to_email: str, subject: str, body: str, 
+    def send_email(self, to_email: str, subject: str, body: str,
                    cc_emails: List[str] = None, bcc_emails: List[str] = None,
-                   is_html: bool = True, config_id: str = None) -> bool:
-        """Send email using configured SMTP"""
+                   is_html: bool = True, config_id: str = None) -> tuple:
+        """Send email using configured SMTP
+
+        Returns:
+            tuple: (success: bool, error_message: str or None)
+        """
         try:
             config = self.get_config_by_id(config_id) if config_id else self.get_default_config()
             if not config:
-                current_app.logger.error("No email configuration found")
-                return False
-            
+                error_msg = "No email configuration found"
+                current_app.logger.error(error_msg)
+                return False, error_msg
+
             if not self.connect_smtp(config):
-                return False
-            
+                error_msg = "Failed to connect to SMTP server"
+                return False, error_msg
+
             # Create message
             msg = MIMEMultipart('alternative')
             msg['From'] = config['smtp_username']
             msg['To'] = to_email
             msg['Subject'] = subject
-            
+
+            # Add Reply-To header if configured for bidirectional communication
+            if config.get('smtp_reply_to'):
+                msg['Reply-To'] = config['smtp_reply_to']
+
             if cc_emails:
                 msg['Cc'] = ', '.join(cc_emails)
-            
+
             # Add body
             if is_html:
                 msg.attach(MIMEText(body, 'html', 'utf-8'))
             else:
                 msg.attach(MIMEText(body, 'plain', 'utf-8'))
-            
+
             # Send email
             recipients = [to_email]
             if cc_emails:
                 recipients.extend(cc_emails)
             if bcc_emails:
                 recipients.extend(bcc_emails)
-            
+
             self.smtp_connection.send_message(msg, to_addrs=recipients)
             self.smtp_connection.quit()
-            
+
             current_app.logger.info(f"Email sent successfully to {to_email}")
-            return True
-            
+            return True, None
+
         except Exception as e:
-            current_app.logger.error(f"Error sending email: {e}")
-            return False
+            error_msg = str(e)
+            current_app.logger.error(f"Error sending email to {to_email}: {error_msg}")
+            return False, error_msg
     
     def queue_email(self, to_email: str, subject: str, body: str,
                     cc_emails: List[str] = None, bcc_emails: List[str] = None,
@@ -287,7 +302,7 @@ LANET Helpdesk V3
             # Update status to sending
             current_app.db_manager.execute_update(
                 'email_queue',
-                {'status': 'sending', 'updated_at': 'CURRENT_TIMESTAMP'},
+                {'status': 'sending'},
                 'queue_id = %s',
                 (email_item['queue_id'],)
             )
@@ -305,12 +320,12 @@ LANET Helpdesk V3
             
             if success:
                 # Mark as sent
+                from datetime import datetime
                 current_app.db_manager.execute_update(
                     'email_queue',
                     {
                         'status': 'sent',
-                        'sent_at': 'CURRENT_TIMESTAMP',
-                        'updated_at': 'CURRENT_TIMESTAMP'
+                        'sent_at': datetime.now()
                     },
                     'queue_id = %s',
                     (email_item['queue_id'],)
@@ -336,8 +351,7 @@ LANET Helpdesk V3
                         'status': status,
                         'attempts': attempts,
                         'next_attempt_at': next_attempt,
-                        'error_message': 'Failed to send email',
-                        'updated_at': 'CURRENT_TIMESTAMP'
+                        'error_message': 'Failed to send email'
                     },
                     'queue_id = %s',
                     (email_item['queue_id'],)
@@ -492,7 +506,7 @@ LANET Helpdesk V3
                         'content_type': attachment['content_type'],
                         'uploaded_by': None,  # Email system
                         'uploaded_via': 'email',
-                        'created_at': 'CURRENT_TIMESTAMP'
+                        'created_at': datetime.now()
                     }
 
                     current_app.db_manager.execute_insert('file_attachments', attachment_data)
@@ -553,7 +567,7 @@ LANET Helpdesk V3
                         'processing_status': 'processed',
                         'ticket_id': ticket_id,
                         'action_taken': action,
-                        'processed_at': 'CURRENT_TIMESTAMP'
+                        'processed_at': datetime.now()
                     },
                     'log_id = %s',
                     (log_id['log_id'],)
@@ -571,7 +585,7 @@ LANET Helpdesk V3
                     {
                         'processing_status': 'failed',
                         'error_message': 'Failed to create/update ticket',
-                        'processed_at': 'CURRENT_TIMESTAMP'
+                        'processed_at': datetime.now()
                     },
                     'log_id = %s',
                     (log_id['log_id'],)
@@ -678,35 +692,53 @@ LANET Helpdesk V3
             return None
     
     def validate_sender_email(self, sender_email: str) -> Optional[Dict]:
-        """Validate sender email against client allowed emails and return client info"""
+        """Validate sender email against client authorized domains and site authorized emails"""
         try:
             # Clean the sender email
             sender_email = sender_email.lower().strip()
             sender_domain = '@' + sender_email.split('@')[1] if '@' in sender_email else ''
 
-            # Query clients with allowed_emails that match sender
-            query = """
-            SELECT client_id, name, allowed_emails
-            FROM clients
-            WHERE is_active = true
-            AND (
-                %s = ANY(allowed_emails) OR  -- Exact email match
-                %s = ANY(allowed_emails)     -- Domain match
-            )
+            # First check for exact email match in sites.authorized_emails
+            site_query = """
+            SELECT c.client_id, c.name, s.site_id, s.name as site_name
+            FROM clients c
+            JOIN sites s ON c.client_id = s.client_id
+            WHERE c.is_active = true
+            AND s.is_active = true
+            AND %s = ANY(s.authorized_emails)
             LIMIT 1
             """
 
-            client = current_app.db_manager.execute_query(
-                query,
-                (sender_email, sender_domain),
+            site_match = current_app.db_manager.execute_query(
+                site_query,
+                (sender_email,),
                 fetch='one'
             )
 
-            if client:
-                current_app.logger.info(f"Email validation successful: {sender_email} -> {client['name']}")
-                return client
+            if site_match:
+                current_app.logger.info(f"Email validation successful (exact match): {sender_email} -> {site_match['name']} - {site_match['site_name']}")
+                return site_match
+
+            # If no exact match, check for domain match in clients.authorized_domains
+            domain_query = """
+            SELECT client_id, name, authorized_domains
+            FROM clients
+            WHERE is_active = true
+            AND %s = ANY(authorized_domains)
+            LIMIT 1
+            """
+
+            domain_match = current_app.db_manager.execute_query(
+                domain_query,
+                (sender_domain,),
+                fetch='one'
+            )
+
+            if domain_match:
+                current_app.logger.info(f"Email validation successful (domain match): {sender_email} -> {domain_match['name']}")
+                return domain_match
             else:
-                current_app.logger.warning(f"Email validation failed: {sender_email} not in any client's allowed_emails")
+                current_app.logger.warning(f"Email validation failed: {sender_email} not in any client's authorized_emails or authorized_domains")
                 return None
 
         except Exception as e:
@@ -716,25 +748,30 @@ LANET Helpdesk V3
     def log_email_rejection(self, email_data: Dict, reason: str, config: Dict):
         """Log rejected email to audit log"""
         try:
+            import json
+
+            # Convert dictionary to JSON string for database storage
+            rejection_details = {
+                'from_email': email_data.get('from_email', 'unknown'),
+                'to_email': email_data.get('to_email', 'unknown'),
+                'subject': email_data.get('subject', 'No subject'),
+                'rejection_reason': reason,
+                'config_id': config.get('config_id', 'unknown'),
+                'message_id': email_data.get('message_id', 'unknown')
+            }
+
             audit_data = {
                 'user_id': None,  # System action
                 'action': 'email_rejected',
                 'table_name': 'email_processing_log',
                 'record_id': None,
                 'old_values': None,
-                'new_values': {
-                    'from_email': email_data['from_email'],
-                    'to_email': email_data['to_email'],
-                    'subject': email_data['subject'],
-                    'rejection_reason': reason,
-                    'config_id': config['config_id'],
-                    'message_id': email_data['message_id']
-                },
-                'timestamp': 'CURRENT_TIMESTAMP'
+                'new_values': json.dumps(rejection_details),  # Convert to JSON string
+                'timestamp': datetime.now()
             }
 
             current_app.db_manager.execute_insert('audit_log', audit_data)
-            current_app.logger.warning(f"Email rejected and logged: {email_data['from_email']} - {reason}")
+            current_app.logger.warning(f"Email rejected and logged: {email_data.get('from_email', 'unknown')} - {reason}")
 
         except Exception as e:
             current_app.logger.error(f"Error logging email rejection: {e}")
@@ -753,25 +790,41 @@ LANET Helpdesk V3
                 # Log rejection and return None (no ticket created)
                 self.log_email_rejection(
                     email_data,
-                    f"Sender email {sender_email} not in any client's allowed_emails",
+                    f"Sender email {sender_email} not in any client's authorized_emails or authorized_domains",
                     config
                 )
                 return None
 
             # Import here to avoid circular imports
-            from modules.tickets.service import TicketsService
+            from modules.tickets.service import TicketService
 
-            tickets_service = TicketsService()
+            tickets_service = TicketService(current_app.db_manager, current_app.auth_manager)
 
-            # Use the validated client_id instead of default
+            # Get site_id from authorized client (if available) or use primary site
+            site_id = authorized_client.get('site_id')
+            if not site_id:
+                # If no specific site from validation, get the primary site for the client
+                primary_site = current_app.db_manager.execute_query(
+                    "SELECT site_id FROM sites WHERE client_id = %s AND is_primary_site = true AND is_active = true LIMIT 1",
+                    (authorized_client['client_id'],),
+                    fetch='one'
+                )
+                site_id = primary_site['site_id'] if primary_site else None
+
+            if not site_id:
+                current_app.logger.error(f"No valid site found for client {authorized_client['client_id']}")
+                return None
+
+            # Use the validated client_id and site_id
             ticket_data = {
                 'client_id': authorized_client['client_id'],
+                'site_id': site_id,
                 'category_id': config['default_category_id'],
                 'subject': email_data['subject'],
                 'description': email_data['body_text'] or email_data['body_html'],
                 'priority': config['default_priority'],
                 'affected_person': sender_name,
-                'affected_person_contact': sender_email,
+                'affected_person_contact': sender_email,  # Use email as contact
                 'channel': 'email',
                 'is_email_originated': True,
                 'from_email': sender_email,
@@ -779,13 +832,25 @@ LANET Helpdesk V3
             }
 
             # Auto-assign if configured
-            if config['auto_assign_to']:
+            if config.get('auto_assign_to'):
                 ticket_data['assigned_to'] = config['auto_assign_to']
 
-            # Create ticket with validated client
-            ticket_id = tickets_service.create_ticket(ticket_data, created_by_email=sender_email)
+            # Get system user ID for email-originated tickets
+            system_user = current_app.db_manager.execute_query(
+                "SELECT user_id FROM users WHERE role = 'superadmin' AND is_active = true LIMIT 1",
+                fetch='one'
+            )
+            created_by = system_user['user_id'] if system_user else config.get('default_user_id')
 
-            if ticket_id:
+            if not created_by:
+                current_app.logger.error("No system user found to create email-originated ticket")
+                return None
+
+            # Create ticket with system user
+            result = tickets_service.create_ticket(ticket_data, created_by)
+
+            if result.get('success') and result.get('ticket'):
+                ticket_id = result['ticket']['ticket_id']
                 current_app.logger.info(f"Ticket created from authorized email: {ticket_id} from {sender_email}")
 
                 # Process email attachments if any
@@ -794,7 +859,10 @@ LANET Helpdesk V3
                     if saved_attachments:
                         current_app.logger.info(f"Processed {len(saved_attachments)} attachments for ticket {ticket_id}")
 
-            return ticket_id
+                return ticket_id
+            else:
+                current_app.logger.error(f"Failed to create ticket from email: {result.get('errors', 'Unknown error')}")
+                return None
 
         except Exception as e:
             current_app.logger.error(f"Error creating ticket from email: {e}")
@@ -806,21 +874,54 @@ LANET Helpdesk V3
             # Get ticket by number
             query = "SELECT ticket_id FROM tickets WHERE ticket_number = %s"
             ticket = current_app.db_manager.execute_query(query, (ticket_number,), fetch='one')
-            
+
             if not ticket:
                 return None
-            
-            # Add comment
+
+            # Find user for email replies - first try exact email match, then fallback to superadmin
+            system_user_query = """
+            SELECT user_id FROM users
+            WHERE email = %s AND is_active = true
+            LIMIT 1
+            """
+
+            system_user = current_app.db_manager.execute_query(
+                system_user_query,
+                (email_data['from_email'],),
+                fetch='one'
+            )
+
+            # If no user found with that email, use a superadmin user as fallback
+            if not system_user:
+                # Try to find any superadmin user as fallback
+                fallback_query = "SELECT user_id FROM users WHERE role = 'superadmin' AND is_active = true LIMIT 1"
+                system_user = current_app.db_manager.execute_query(fallback_query, fetch='one')
+
+            if not system_user:
+                current_app.logger.error(f"No valid user found for email comment from {email_data['from_email']}")
+                return None
+
+            # Add comment with correct column names
             comment_data = {
                 'ticket_id': ticket['ticket_id'],
-                'comment': email_data['body_text'] or email_data['body_html'],
+                'user_id': system_user['user_id'],
+                'comment_text': email_data['body_text'] or email_data['body_html'],
                 'is_internal': False,
-                'created_by_email': email_data['from_email']
+                'is_email_reply': True,
+                'email_message_id': email_data.get('message_id')
             }
-            
+
             current_app.db_manager.execute_insert('ticket_comments', comment_data)
+
+            # Send notification for the new comment
+            try:
+                from modules.notifications.service import notifications_service
+                notifications_service.send_ticket_notification('ticket_commented', ticket['ticket_id'])
+            except Exception as e:
+                current_app.logger.warning(f"Failed to send comment notification: {e}")
+
             return ticket['ticket_id']
-            
+
         except Exception as e:
             current_app.logger.error(f"Error adding email comment: {e}")
             return None
@@ -890,7 +991,7 @@ LANET Helpdesk V3
         """Get email template by type"""
         try:
             query = """
-            SELECT template_id, name, subject_template, body_template, is_html, available_variables
+            SELECT template_id, name, subject_template, body_template, is_html, variables
             FROM email_templates
             WHERE template_type = %s AND is_active = true
             ORDER BY is_default DESC, created_at DESC
@@ -969,7 +1070,7 @@ LANET Helpdesk V3
                 'priority': priority,
                 'attempts': 0,
                 'max_attempts': 3,
-                'next_attempt_at': 'CURRENT_TIMESTAMP'
+                'next_attempt_at': datetime.now()
             }
 
             result = current_app.db_manager.execute_insert('email_queue', queue_data)
@@ -1006,40 +1107,51 @@ LANET Helpdesk V3
                 (queue_id,)
             )
 
-            # Send email
-            success = self.send_email(
-                config=config,
+            # Send email with detailed logging
+            current_app.logger.info(f"📧 EMAIL PROCESSING: Attempting to send email to {queue_item['to_email']}")
+            current_app.logger.info(f"📧 EMAIL PROCESSING: Subject: {queue_item['subject']}")
+
+            success, error_message = self.send_email(
+                config_id=config['config_id'],
                 to_email=queue_item['to_email'],
                 subject=queue_item['subject'],
-                body_text=queue_item['body_text'],
-                body_html=queue_item['body_html'],
+                body=queue_item['body_html'] or queue_item['body_text'],
                 cc_emails=queue_item.get('cc_emails'),
-                bcc_emails=queue_item.get('bcc_emails')
+                bcc_emails=queue_item.get('bcc_emails'),
+                is_html=bool(queue_item['body_html'])
             )
 
             if success:
+                current_app.logger.info(f"✅ EMAIL SUCCESS: Email sent successfully to {queue_item['to_email']}")
                 # Mark as sent
                 current_app.db_manager.execute_update(
                     'email_queue',
-                    {'status': 'sent', 'sent_at': 'CURRENT_TIMESTAMP'},
+                    {'status': 'sent', 'sent_at': datetime.now()},
                     'queue_id = %s',
                     (queue_id,)
                 )
                 return True
             else:
+                # Categorize the error
+                error_category = self._categorize_email_error(error_message or "Unknown error")
+                current_app.logger.warning(f"❌ EMAIL FAILED: {queue_item['to_email']} - {error_category}: {error_message}")
+
                 # Mark as failed or retry
-                if queue_item['attempts'] + 1 >= queue_item['max_attempts']:
-                    self._mark_queue_item_failed(queue_id, "Maximum retry attempts reached")
+                if queue_item['attempts'] + 1 >= queue_item.get('max_attempts', 3):
+                    current_app.logger.error(f"💀 EMAIL PERMANENTLY FAILED: {queue_item['to_email']} after {queue_item['attempts'] + 1} attempts")
+                    self._mark_queue_item_failed(queue_id, f"{error_category}: {error_message}")
                 else:
                     # Schedule retry
                     from datetime import datetime, timedelta
-                    next_attempt = datetime.now() + timedelta(minutes=5 * (queue_item['attempts'] + 1))
+                    retry_minutes = 5 * (queue_item['attempts'] + 1)
+                    next_attempt = datetime.now() + timedelta(minutes=retry_minutes)
+                    current_app.logger.info(f"🔄 EMAIL RETRY: {queue_item['to_email']} will retry in {retry_minutes} minutes")
                     current_app.db_manager.execute_update(
                         'email_queue',
                         {
                             'status': 'pending',
                             'next_attempt_at': next_attempt,
-                            'error_message': 'Send failed, will retry'
+                            'error_message': f"{error_category}: {error_message}"
                         },
                         'queue_id = %s',
                         (queue_id,)
@@ -1050,6 +1162,57 @@ LANET Helpdesk V3
             current_app.logger.error(f"Error processing queue item {queue_id}: {e}")
             self._mark_queue_item_failed(queue_id, str(e))
             return False
+
+    def _categorize_email_error(self, error_message: str) -> str:
+        """Categorize email errors for better logging"""
+        if not error_message:
+            return "UNKNOWN_ERROR"
+
+        error_lower = error_message.lower()
+
+        # Invalid email address errors
+        if any(phrase in error_lower for phrase in [
+            'invalid address', 'invalid email', 'malformed address',
+            'address syntax', 'invalid recipient', 'bad address'
+        ]):
+            return "INVALID_EMAIL_ADDRESS"
+
+        # Non-existent email address errors
+        if any(phrase in error_lower for phrase in [
+            'user unknown', 'no such user', 'recipient not found',
+            'mailbox not found', 'address not found', 'user not found',
+            'recipient unknown', 'no mailbox', 'unknown user'
+        ]):
+            return "EMAIL_ADDRESS_NOT_FOUND"
+
+        # SMTP authentication errors
+        if any(phrase in error_lower for phrase in [
+            'authentication failed', 'auth failed', 'login failed',
+            'invalid credentials', 'username and password not accepted'
+        ]):
+            return "SMTP_AUTH_ERROR"
+
+        # SMTP connection errors
+        if any(phrase in error_lower for phrase in [
+            'connection refused', 'connection timeout', 'network unreachable',
+            'smtp server', 'connection failed', 'timeout'
+        ]):
+            return "SMTP_CONNECTION_ERROR"
+
+        # Rate limiting / quota errors
+        if any(phrase in error_lower for phrase in [
+            'rate limit', 'quota exceeded', 'too many', 'throttled',
+            'sending limit', 'daily limit'
+        ]):
+            return "RATE_LIMIT_ERROR"
+
+        # Server errors
+        if any(phrase in error_lower for phrase in [
+            'server error', 'internal error', '5.', 'temporary failure'
+        ]):
+            return "SERVER_ERROR"
+
+        return "OTHER_ERROR"
 
     def _mark_queue_item_failed(self, queue_id: str, error_message: str):
         """Mark queue item as failed"""
@@ -1102,11 +1265,12 @@ LANET Helpdesk V3
             emails_found = len(message_ids)
             tickets_created = 0
             emails_processed = 0
+            emails_to_delete = []  # Collect emails to delete at the end
 
             current_app.logger.info(f"🔧 EMAIL SERVICE: Found {emails_found} unread emails")
 
-            # Process each email (limit to 50 for performance)
-            for msg_id in message_ids[:50]:
+            # Process ALL emails (no artificial limit - let IMAP server handle performance)
+            for msg_id in message_ids:
                 try:
                     current_app.logger.info(f"🔧 EMAIL SERVICE: Processing email ID: {msg_id}")
 
@@ -1158,10 +1322,10 @@ LANET Helpdesk V3
                             # Update processing log with success
                             self._update_email_processing_log(log_id, 'processed', ticket_id)
 
-                            # Delete email only after successful ticket creation
+                            # Collect email for deletion only after successful ticket creation
                             if config.get('auto_delete_processed', True):
-                                self._delete_processed_email(msg_id)
-                                current_app.logger.info(f"🔧 EMAIL SERVICE: Deleted processed email {msg_id}")
+                                emails_to_delete.append(msg_id)
+                                current_app.logger.info(f"🔧 EMAIL SERVICE: Marked email {msg_id} for deletion")
                             else:
                                 # Just mark as read
                                 self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
@@ -1182,6 +1346,25 @@ LANET Helpdesk V3
                 except Exception as e:
                     current_app.logger.error(f"🔧 EMAIL SERVICE: Error processing email {msg_id}: {e}")
                     continue
+
+            # Delete all processed emails in batch (more efficient and safer)
+            if emails_to_delete:
+                current_app.logger.info(f"🔧 EMAIL SERVICE: Deleting {len(emails_to_delete)} processed emails in batch")
+                try:
+                    for msg_id in emails_to_delete:
+                        self.imap_connection.store(msg_id, '+FLAGS', '\\Deleted')
+                    # Expunge once at the end to permanently delete all marked emails
+                    self.imap_connection.expunge()
+                    current_app.logger.info(f"🔧 EMAIL SERVICE: Successfully deleted {len(emails_to_delete)} emails from server")
+                except Exception as delete_error:
+                    current_app.logger.error(f"🔧 EMAIL SERVICE: Error deleting emails in batch: {delete_error}")
+                    # Fallback: mark all as read instead
+                    try:
+                        for msg_id in emails_to_delete:
+                            self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
+                        current_app.logger.info(f"🔧 EMAIL SERVICE: Fallback: marked {len(emails_to_delete)} emails as read")
+                    except:
+                        current_app.logger.error("🔧 EMAIL SERVICE: Failed to mark emails as read in fallback")
 
             # Disconnect
             self.disconnect_imap()
@@ -1219,34 +1402,12 @@ LANET Helpdesk V3
             current_app.logger.error(f"Error extracting email body: {e}")
             return "Error extracting email content"
 
-    def _create_ticket_from_email(self, from_email: str, subject: str, body: str, config: Dict) -> bool:
-        """Create a ticket from email (simplified implementation)"""
-        try:
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Creating ticket from email: {from_email}")
 
-            # For now, just log the email details
-            # In a full implementation, this would:
-            # 1. Validate sender against authorized domains
-            # 2. Extract client/site information
-            # 3. Create ticket in database
-            # 4. Send confirmation email
-
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Would create ticket - From: {from_email}, Subject: {subject}")
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Body preview: {body[:200]}...")
-
-            # Return True to simulate successful ticket creation
-            return True
-
-        except Exception as e:
-            current_app.logger.error(f"🔧 EMAIL SERVICE: Error creating ticket from email: {e}")
-            return False
 
     def _is_email_already_processed(self, message_id: str) -> bool:
         """Check if email has already been processed"""
         try:
-            from core.database import get_db_connection
-
-            with get_db_connection() as conn:
+            with current_app.db_manager.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(
                         "SELECT id FROM email_processing_log WHERE message_id = %s AND processing_status = 'processed'",
@@ -1262,12 +1423,11 @@ LANET Helpdesk V3
                             subject: str, body: str, email_size: int, status: str) -> str:
         """Log email processing attempt"""
         try:
-            from core.database import get_db_connection
             import uuid
 
             log_id = str(uuid.uuid4())
 
-            with get_db_connection() as conn:
+            with current_app.db_manager.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
                         INSERT INTO email_processing_log
@@ -1288,9 +1448,7 @@ LANET Helpdesk V3
     def _update_email_processing_log(self, log_id: str, status: str, ticket_id: str = None, error_message: str = None):
         """Update email processing log with result"""
         try:
-            from core.database import get_db_connection
-
-            with get_db_connection() as conn:
+            with current_app.db_manager.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
                         UPDATE email_processing_log
@@ -1302,42 +1460,35 @@ LANET Helpdesk V3
         except Exception as e:
             current_app.logger.error(f"Error updating email processing log: {e}")
 
-    def _delete_processed_email(self, msg_id: bytes):
-        """Delete email from IMAP server after successful processing"""
-        try:
-            # Mark for deletion
-            self.imap_connection.store(msg_id, '+FLAGS', '\\Deleted')
-            # Expunge to permanently delete
-            self.imap_connection.expunge()
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Permanently deleted email {msg_id}")
-
-        except Exception as e:
-            current_app.logger.error(f"🔧 EMAIL SERVICE: Error deleting email {msg_id}: {e}")
-            # Fallback to just marking as read
-            try:
-                self.imap_connection.store(msg_id, '+FLAGS', '\\Seen')
-            except:
-                pass
+    # Removed _delete_processed_email method - now using batch deletion for better performance and reliability
 
     def _create_ticket_from_email_atomic(self, from_email: str, subject: str, body: str,
                                        config: Dict, message_id: str) -> str:
-        """Create ticket from email with atomic transaction"""
+        """Create ticket from email with atomic transaction and intelligent routing"""
         try:
-            from core.database import get_db_connection
-            import uuid
+            current_app.logger.info(f"🔧 EMAIL SERVICE: Creating ticket from email for {from_email}")
 
-            # For now, simulate ticket creation
-            # In full implementation, this would create actual ticket
-            ticket_id = str(uuid.uuid4())
+            # Use the existing working ticket creation function
+            email_data = {
+                'from_email': from_email,
+                'subject': subject,
+                'body_text': body,
+                'body_html': body,
+                'message_id': message_id
+            }
 
-            current_app.logger.info(f"🔧 EMAIL SERVICE: Simulating ticket creation - ID: {ticket_id}")
-            current_app.logger.info(f"🔧 EMAIL SERVICE: From: {from_email}, Subject: {subject}")
+            # Call the working ticket creation function
+            ticket_id = self._create_ticket_from_email(email_data, config)
 
-            # Simulate successful ticket creation
-            return ticket_id
+            if ticket_id:
+                current_app.logger.info(f"🔧 EMAIL SERVICE: Successfully created ticket {ticket_id} from email")
+                return ticket_id
+            else:
+                current_app.logger.error(f"🔧 EMAIL SERVICE: Failed to create ticket from email")
+                return None
 
         except Exception as e:
-            current_app.logger.error(f"🔧 EMAIL SERVICE: Error in atomic ticket creation: {e}")
+            current_app.logger.error(f"🔧 EMAIL SERVICE: Error in intelligent ticket creation: {e}")
             raise e
 
 # Global email service instance

@@ -83,7 +83,7 @@ class TicketService:
             query = f"""
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_contact, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
@@ -126,7 +126,7 @@ class TicketService:
             query = """
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_contact, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
@@ -266,32 +266,27 @@ class TicketService:
             return {'success': False, 'errors': {'general': 'Internal server error'}}
     
     def _generate_ticket_number(self) -> str:
-        """Generate unique ticket number"""
+        """Generate unique ticket number using PostgreSQL sequence"""
         try:
-            # Get current year and month
-            now = datetime.utcnow()
-            year_month = now.strftime("%Y%m")
-            
-            # Get next sequence number for this month
-            sequence_query = """
-            SELECT COALESCE(MAX(CAST(SUBSTRING(ticket_number FROM 8) AS INTEGER)), 0) + 1 as next_seq
-            FROM tickets 
-            WHERE ticket_number LIKE %s
-            """
-            
+            # Use the PostgreSQL function to generate ticket number
             result = self.db.execute_query(
-                sequence_query, 
-                (f"TKT-{year_month}%",), 
+                "SELECT generate_ticket_number() as ticket_number",
                 fetch='one'
             )
-            
-            next_seq = result['next_seq'] if result else 1
-            
-            return f"TKT-{year_month}{next_seq:04d}"
-            
+
+            if result and result['ticket_number']:
+                return result['ticket_number']
+            else:
+                # Fallback: use sequence directly
+                result = self.db.execute_query(
+                    "SELECT 'TKT-' || LPAD(nextval('ticket_number_seq')::TEXT, 6, '0') as ticket_number",
+                    fetch='one'
+                )
+                return result['ticket_number'] if result else f"TKT-{str(uuid.uuid4())[:8].upper()}"
+
         except Exception as e:
             self.logger.error(f"Error generating ticket number: {e}")
-            # Fallback to UUID-based number
+            # Final fallback to UUID-based number
             return f"TKT-{str(uuid.uuid4())[:8].upper()}"
     
     def _create_activity_log(self, ticket_id: str, user_id: str, action: str, description: str):
@@ -448,6 +443,21 @@ class TicketService:
                     # Get updated ticket
                     updated_ticket = self.get_ticket_by_id(ticket_id)
                     self.logger.info(f"Ticket updated successfully: {updated_ticket['ticket_number']}")
+
+                    # Send notification for ticket update
+                    try:
+                        from modules.notifications.service import notifications_service
+
+                        # Check if this is a resolution
+                        if 'resolution_notes' in ticket_data and ticket_data['resolution_notes']:
+                            notifications_service.send_ticket_notification('ticket_resolved', ticket_id)
+                        elif 'status' in ticket_data:
+                            notifications_service.send_ticket_notification('ticket_status_changed', ticket_id)
+                        else:
+                            notifications_service.send_ticket_notification('ticket_status_changed', ticket_id)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to send ticket update notification: {e}")
+
                     return {'success': True, 'ticket': updated_ticket}
                 else:
                     return {'success': False, 'errors': {'general': 'Failed to update ticket'}}
@@ -505,6 +515,13 @@ class TicketService:
                     'assigned',
                     f"Ticket asignado a {assignee['name']}"
                 )
+
+                # Send notification for ticket assignment
+                try:
+                    from modules.notifications.service import notifications_service
+                    notifications_service.send_ticket_notification('ticket_assigned', ticket_id)
+                except Exception as e:
+                    self.logger.warning(f"Failed to send ticket assignment notification: {e}")
 
                 self.logger.info(f"Ticket {ticket['ticket_number']} assigned to {assignee['name']}")
                 return {'success': True, 'message': f"Ticket assigned to {assignee['name']}"}
@@ -591,6 +608,13 @@ class TicketService:
                     'commented',
                     f"Agregó {comment_type}"
                 )
+
+                # Send notification for ticket comment
+                try:
+                    from modules.notifications.service import notifications_service
+                    notifications_service.send_ticket_notification('ticket_commented', ticket_id)
+                except Exception as e:
+                    self.logger.warning(f"Failed to send ticket comment notification: {e}")
 
                 self.logger.info(f"Comment added to ticket {ticket['ticket_number']}")
                 return {'success': True, 'comment': result}

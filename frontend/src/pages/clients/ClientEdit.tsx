@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, X } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus, Trash2, Mail } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import CountrySelector from '../../components/CountrySelector';
@@ -16,6 +16,8 @@ interface ClientData {
   state?: string;
   country: string;
   postal_code?: string;
+  authorized_domains?: string[];
+  email_routing_enabled?: boolean;
 }
 
 const ClientEdit: React.FC = () => {
@@ -25,6 +27,7 @@ const ClientEdit: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [newDomain, setNewDomain] = useState('');
 
   const [clientData, setClientData] = useState<ClientData>({
     name: '',
@@ -35,7 +38,9 @@ const ClientEdit: React.FC = () => {
     city: '',
     state: '',
     country: 'México',
-    postal_code: ''
+    postal_code: '',
+    authorized_domains: [],
+    email_routing_enabled: true
   });
 
   const canEditClients = user?.role === 'superadmin' || user?.role === 'admin';
@@ -67,7 +72,9 @@ const ClientEdit: React.FC = () => {
           city: client.city || '',
           state: client.state || '',
           country: client.country || 'México',
-          postal_code: client.postal_code || ''
+          postal_code: client.postal_code || '',
+          authorized_domains: client.authorized_domains || [],
+          email_routing_enabled: client.email_routing_enabled !== false
         });
       } else {
         setErrors({ general: 'Error al cargar los datos del cliente' });
@@ -150,6 +157,24 @@ const ClientEdit: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // Domain management functions
+  const addDomain = () => {
+    if (newDomain.trim() && !clientData.authorized_domains?.includes(newDomain.trim())) {
+      setClientData(prev => ({
+        ...prev,
+        authorized_domains: [...(prev.authorized_domains || []), newDomain.trim()]
+      }));
+      setNewDomain('');
+    }
+  };
+
+  const removeDomain = (domainToRemove: string) => {
+    setClientData(prev => ({
+      ...prev,
+      authorized_domains: prev.authorized_domains?.filter(domain => domain !== domainToRemove) || []
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -168,7 +193,9 @@ const ClientEdit: React.FC = () => {
         address: clientData.address || null,
         city: clientData.city || null,
         state: clientData.state || null,
-        postal_code: clientData.postal_code || null
+        postal_code: clientData.postal_code || null,
+        authorized_domains: clientData.authorized_domains || [],
+        email_routing_enabled: clientData.email_routing_enabled !== false
       };
 
       const response = await apiService.put(`/clients/${clientId}`, updateData);
@@ -429,6 +456,87 @@ const ClientEdit: React.FC = () => {
               />
               {errors.postal_code && (
                 <p className="mt-1 text-sm text-red-600">{errors.postal_code}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Email Authorization Section */}
+          <div className="bg-gray-50 p-6 rounded-lg">
+            <div className="flex items-center mb-4">
+              <Mail className="h-5 w-5 text-blue-600 mr-2" />
+              <h3 className="text-lg font-medium text-gray-900">Configuración de Email</h3>
+            </div>
+
+            {/* Email Routing Toggle */}
+            <div className="mb-6">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={clientData.email_routing_enabled}
+                  onChange={(e) => updateField('email_routing_enabled', e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <span className="ml-2 text-sm font-medium text-gray-700">
+                  Habilitar enrutamiento automático de emails
+                </span>
+              </label>
+              <p className="mt-1 text-sm text-gray-500">
+                Permite que los emails de este cliente se conviertan automáticamente en tickets
+              </p>
+            </div>
+
+            {/* Authorized Domains */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Dominios Autorizados
+              </label>
+              <p className="text-sm text-gray-500 mb-3">
+                Solo los emails de estos dominios podrán crear tickets automáticamente
+              </p>
+
+              {/* Add Domain Input */}
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={newDomain}
+                  onChange={(e) => setNewDomain(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addDomain())}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="ejemplo.com"
+                />
+                <button
+                  type="button"
+                  onClick={addDomain}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Agregar
+                </button>
+              </div>
+
+              {/* Domain List */}
+              {clientData.authorized_domains && clientData.authorized_domains.length > 0 && (
+                <div className="space-y-2">
+                  {clientData.authorized_domains.map((domain, index) => (
+                    <div key={index} className="flex items-center justify-between bg-white p-3 rounded-lg border">
+                      <span className="text-sm font-medium text-gray-900">{domain}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeDomain(domain)}
+                        className="text-red-600 hover:text-red-800 focus:outline-none"
+                        title="Eliminar dominio"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(!clientData.authorized_domains || clientData.authorized_domains.length === 0) && (
+                <div className="text-center py-4 text-gray-500 text-sm">
+                  No hay dominios autorizados. Agregue al menos uno para habilitar el enrutamiento automático.
+                </div>
               )}
             </div>
           </div>

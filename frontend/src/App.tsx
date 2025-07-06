@@ -16,6 +16,11 @@ import TicketCreatePage from '@/pages/tickets/TicketCreatePage';
 import TicketDetailPage from '@/pages/tickets/TicketDetailPage';
 import TicketEditPage from '@/pages/tickets/TicketEditPage';
 import CategoriesManagement from '@/pages/categories/CategoriesManagement';
+import EmailSettings from '@/pages/admin/EmailSettings';
+import EmailConfigTabs from '@/pages/admin/EmailConfigTabs';
+import EmailTemplates from '@/pages/admin/EmailTemplates';
+import EmailMonitoring from '@/pages/admin/EmailMonitoring';
+import EmailConfigForm from '@/pages/admin/EmailConfigForm';
 import './App.css';
 
 const App: React.FC = () => {
@@ -56,9 +61,13 @@ const App: React.FC = () => {
               {/* Admin routes */}
               <Route path="admin/categories" element={<div className="p-6">Categorías - En desarrollo</div>} />
               <Route path="admin/sla-management" element={<div className="p-6">Gestión SLA - En desarrollo</div>} />
-              <Route path="admin/email-config" element={<div className="p-6">Configuración Email - En desarrollo</div>} />
+              <Route path="admin/email-config" element={<EmailConfigTabs />} />
+              <Route path="admin/email-config/new" element={<EmailConfigForm />} />
+              <Route path="admin/email-config/edit/:id" element={<EmailConfigForm />} />
+              <Route path="admin/email-templates" element={<EmailTemplates />} />
+              <Route path="admin/email-monitoring" element={<EmailMonitoring />} />
               <Route path="admin/system-config" element={<div className="p-6">Configuración Sistema - En desarrollo</div>} />
-              <Route path="email-templates" element={<div className="p-6">Plantillas Email - En desarrollo</div>} />
+              <Route path="email-templates" element={<EmailTemplates />} />
 
               {/* Default redirect */}
               <Route index element={<Navigate to="/dashboard" replace />} />

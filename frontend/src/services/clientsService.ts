@@ -70,7 +70,7 @@ class ClientsService {
   async getAllClients() {
     try {
       const response = await this.getClients({ per_page: 1000 });
-      return response?.data?.clients || [];
+      return response?.data || [];
     } catch (error: any) {
       console.error('Error fetching all clients:', error);
       throw new Error(error.response?.data?.message || 'Failed to fetch clients');

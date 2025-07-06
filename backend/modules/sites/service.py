@@ -28,7 +28,7 @@ class SitesService:
             
             query = """
             SELECT s.site_id, s.client_id, s.name, s.address, s.city, s.state, s.country,
-                   s.postal_code, s.latitude, s.longitude, s.is_active,
+                   s.postal_code, s.latitude, s.longitude, s.authorized_emails, s.is_active,
                    s.created_at, s.updated_at,
                    c.name as client_name,
                    COUNT(DISTINCT usa.user_id) as assigned_users,
@@ -39,7 +39,7 @@ class SitesService:
             LEFT JOIN tickets t ON s.site_id = t.site_id
             WHERE s.client_id = %s AND s.is_active = true
             GROUP BY s.site_id, s.client_id, s.name, s.address, s.city, s.state, s.country,
-                     s.postal_code, s.latitude, s.longitude, s.is_active,
+                     s.postal_code, s.latitude, s.longitude, s.authorized_emails, s.is_active,
                      s.created_at, s.updated_at, c.name
             ORDER BY s.name
             """
@@ -60,8 +60,8 @@ class SitesService:
         """Get a specific site by ID with RLS enforcement"""
         try:
             query = """
-            SELECT s.site_id, s.client_id, s.name, s.address, s.city, s.state, 
-                   s.country, s.postal_code, s.latitude, s.longitude, s.is_active,
+            SELECT s.site_id, s.client_id, s.name, s.address, s.city, s.state,
+                   s.country, s.postal_code, s.latitude, s.longitude, s.authorized_emails, s.is_active,
                    s.created_at, s.updated_at, s.created_by,
                    c.name as client_name
             FROM sites s
@@ -143,6 +143,7 @@ class SitesService:
                 'postal_code': site_data['postal_code'].strip(),
                 'latitude': site_data.get('latitude'),
                 'longitude': site_data.get('longitude'),
+                'authorized_emails': site_data.get('authorized_emails', []),
                 'is_active': True,
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow(),
@@ -202,7 +203,7 @@ class SitesService:
             update_data = {'updated_at': datetime.utcnow()}
             
             # Add fields that are being updated
-            updatable_fields = ['name', 'address', 'city', 'state', 'country', 'postal_code', 'latitude', 'longitude']
+            updatable_fields = ['name', 'address', 'city', 'state', 'country', 'postal_code', 'latitude', 'longitude', 'authorized_emails']
             for field in updatable_fields:
                 if field in site_data:
                     if field in ['name', 'address', 'city', 'state', 'country', 'postal_code']:

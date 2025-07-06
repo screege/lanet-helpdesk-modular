@@ -78,9 +78,19 @@ class SecurityUtils:
     def _get_encryption_key() -> bytes:
         """Get or generate encryption key for sensitive data"""
         # In production, this should be stored securely (environment variable, key management service)
-        # For now, we'll use a derived key from JWT secret
+        # For now, we'll use a derived key from JWT secret or environment variable
         try:
-            jwt_secret = current_app.config.get('JWT_SECRET_KEY', 'default-secret-key')
+            # First try to get from environment variable (consistent across all contexts)
+            jwt_secret = os.getenv('JWT_SECRET_KEY')
+
+            # If not in environment, try current_app config (web application context)
+            if not jwt_secret:
+                try:
+                    jwt_secret = current_app.config.get('JWT_SECRET_KEY', 'dev-secret-key-change-in-production')
+                except RuntimeError:
+                    # No application context (e.g., SLA monitor), use default
+                    jwt_secret = 'dev-secret-key-change-in-production'
+
             # Derive a 32-byte key from JWT secret
             key = hashlib.sha256(jwt_secret.encode()).digest()
             return base64.urlsafe_b64encode(key)

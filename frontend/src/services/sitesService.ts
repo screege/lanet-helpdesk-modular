@@ -11,6 +11,7 @@ export interface Site {
   postal_code: string;
   latitude?: number;
   longitude?: number;
+  authorized_emails?: string[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -40,6 +41,7 @@ export interface CreateSiteData {
   postal_code: string;
   latitude?: number;
   longitude?: number;
+  authorized_emails?: string[];
 }
 
 export interface UpdateSiteData {
@@ -51,6 +53,7 @@ export interface UpdateSiteData {
   postal_code?: string;
   latitude?: number;
   longitude?: number;
+  authorized_emails?: string[];
 }
 
 class SitesService {

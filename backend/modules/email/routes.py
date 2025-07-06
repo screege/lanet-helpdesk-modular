@@ -9,7 +9,8 @@ from flask import Blueprint, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.security import require_role
 from .service import email_service
-from datetime import datetime
+from datetime import datetime, timezone
+import json
 
 email_bp = Blueprint('email', __name__)
 
@@ -21,7 +22,7 @@ def get_email_configurations():
     try:
         query = """
         SELECT config_id, name, description, smtp_host, smtp_port, smtp_username,
-               smtp_use_ssl, smtp_use_tls, imap_host, imap_port, imap_username,
+               smtp_use_ssl, smtp_use_tls, smtp_reply_to, imap_host, imap_port, imap_username,
                enable_email_to_ticket, default_priority, subject_prefix,
                is_active, is_default, created_at, updated_at
         FROM email_configurations
@@ -124,6 +125,12 @@ def get_email_templates():
             "SELECT * FROM email_templates WHERE is_active = true ORDER BY name"
         )
 
+        # Map variables field for frontend compatibility
+        if templates:
+            for template in templates:
+                if 'variables' in template:
+                    template['available_variables'] = template['variables']
+
         return current_app.response_manager.success(templates)
 
     except Exception as e:
@@ -138,7 +145,7 @@ def get_email_configuration(config_id):
     try:
         query = """
         SELECT config_id, name, description, smtp_host, smtp_port, smtp_username,
-               smtp_use_tls, smtp_use_ssl, imap_host, imap_port, imap_username,
+               smtp_use_tls, smtp_use_ssl, smtp_reply_to, imap_host, imap_port, imap_username,
                imap_use_ssl, imap_folder, enable_email_to_ticket,
                default_priority, subject_prefix, ticket_number_regex,
                auto_assign_to, default_client_id, default_category_id,
@@ -191,6 +198,7 @@ def create_email_configuration():
             'smtp_password_encrypted': smtp_password_encrypted,
             'smtp_use_tls': data.get('smtp_use_tls', True),
             'smtp_use_ssl': data.get('smtp_use_ssl', False),
+            'smtp_reply_to': data.get('smtp_reply_to'),
             'imap_host': data.get('imap_host'),
             'imap_port': data.get('imap_port', 993),
             'imap_username': data.get('imap_username'),
@@ -260,7 +268,7 @@ def update_email_configuration(config_id):
 
         # Basic fields (only include fields that exist in the database)
         valid_fields = ['name', 'description', 'smtp_host', 'smtp_port', 'smtp_username',
-                       'smtp_use_tls', 'smtp_use_ssl', 'imap_host', 'imap_port', 'imap_username',
+                       'smtp_use_tls', 'smtp_use_ssl', 'smtp_reply_to', 'imap_host', 'imap_port', 'imap_username',
                        'imap_use_ssl', 'imap_folder', 'enable_email_to_ticket', 'default_priority',
                        'subject_prefix', 'ticket_number_regex', 'is_active']
 
@@ -277,9 +285,8 @@ def update_email_configuration(config_id):
             from utils.security import SecurityUtils
             update_data['imap_password_encrypted'] = SecurityUtils.encrypt_password(data['imap_password'])
 
-        # Add updated timestamp (use datetime object, not string)
-        from datetime import datetime
-        update_data['updated_at'] = datetime.now()
+        # Add updated timestamp - let database handle it
+        # Don't set updated_at manually, let the database trigger handle it
 
         # Update configuration
         current_app.logger.info(f"🔧 UPDATE_DATA TO SAVE: {update_data}")
@@ -491,7 +498,7 @@ def get_email_template(template_id):
     try:
         query = """
         SELECT template_id, name, description, template_type, subject_template,
-               body_template, is_html, available_variables, is_active, is_default,
+               body_template, is_html, variables, is_active, is_default,
                created_at, updated_at
         FROM email_templates
         WHERE template_id = %s
@@ -501,6 +508,10 @@ def get_email_template(template_id):
 
         if not template:
             return current_app.response_manager.not_found('Email template not found')
+
+        # Map variables field for frontend compatibility
+        if template and 'variables' in template:
+            template['available_variables'] = template['variables']
 
         return current_app.response_manager.success(template)
 
@@ -543,7 +554,7 @@ def create_email_template():
             'subject_template': data['subject_template'],
             'body_template': data['body_template'],
             'is_html': data.get('is_html', True),
-            'available_variables': template_variables.get(data['template_type'], []),
+            'variables': json.dumps(template_variables.get(data['template_type'], [])),
             'is_active': data.get('is_active', True),
             'is_default': data.get('is_default', False)
         }
@@ -601,7 +612,7 @@ def update_email_template(template_id):
         # Prepare update data
         update_data = {}
 
-        # Basic fields
+        # Basic fields - use the new column names directly
         for field in ['name', 'description', 'template_type', 'subject_template',
                      'body_template', 'is_html', 'is_active', 'is_default']:
             if field in data:
@@ -618,7 +629,7 @@ def update_email_template(template_id):
                 'sla_breach': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{priority}}', '{{breach_type}}', '{{time_elapsed}}'],
                 'auto_response': ['{{sender_name}}', '{{ticket_number}}', '{{subject}}', '{{original_subject}}', '{{client_name}}']
             }
-            update_data['available_variables'] = template_variables.get(data['template_type'], [])
+            update_data['variables'] = json.dumps(template_variables.get(data['template_type'], []))
 
         # If setting as default, remove default from others of same type
         if data.get('is_default'):
@@ -630,7 +641,7 @@ def update_email_template(template_id):
             )
 
         # Add updated timestamp
-        update_data['updated_at'] = 'CURRENT_TIMESTAMP'
+        update_data['updated_at'] = datetime.now(timezone.utc)
 
         # Update template
         current_app.db_manager.execute_update(
@@ -646,6 +657,10 @@ def update_email_template(template_id):
             (template_id,),
             fetch='one'
         )
+
+        # Map variables field for frontend compatibility
+        if updated_template and 'variables' in updated_template:
+            updated_template['available_variables'] = updated_template['variables']
 
         return current_app.response_manager.success(updated_template)
 
@@ -863,10 +878,12 @@ def cancel_email_queue(queue_id):
 def process_email_queue():
     """Process pending emails in queue"""
     try:
-        # Get pending emails
+        current_app.logger.info("📧 EMAIL QUEUE: Starting email queue processing")
+
+        # Get pending emails with details for better logging
         pending_emails = current_app.db_manager.execute_query(
             """
-            SELECT queue_id FROM email_queue
+            SELECT queue_id, to_email, subject, attempts FROM email_queue
             WHERE status = 'pending'
             AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP)
             ORDER BY priority ASC, created_at ASC
@@ -874,21 +891,60 @@ def process_email_queue():
             """
         )
 
-        processed_count = 0
+        if not pending_emails:
+            current_app.logger.info("📧 EMAIL QUEUE: No pending emails to process")
+            return current_app.response_manager.success({
+                'processed_count': 0,
+                'success_count': 0,
+                'failed_count': 0,
+                'message': 'No pending emails to process'
+            })
 
-        for email_item in (pending_emails or []):
+        current_app.logger.info(f"📧 EMAIL QUEUE: Found {len(pending_emails)} pending emails to process")
+
+        processed_count = 0
+        success_count = 0
+        failed_count = 0
+        failed_details = []
+
+        for email_item in pending_emails:
             try:
+                current_app.logger.info(f"📧 EMAIL QUEUE: Processing email to {email_item['to_email']}")
                 # Process individual email
                 success = email_service.process_queue_item(email_item['queue_id'])
+                processed_count += 1
                 if success:
-                    processed_count += 1
+                    success_count += 1
+                else:
+                    failed_count += 1
+                    failed_details.append({
+                        'email': email_item['to_email'],
+                        'subject': email_item['subject'],
+                        'attempts': email_item['attempts']
+                    })
             except Exception as e:
-                current_app.logger.error(f"Error processing queue item {email_item['queue_id']}: {e}")
-                continue
+                current_app.logger.error(f"❌ EMAIL QUEUE: Error processing queue item {email_item['queue_id']}: {e}")
+                processed_count += 1
+                failed_count += 1
+                failed_details.append({
+                    'email': email_item['to_email'],
+                    'subject': email_item['subject'],
+                    'error': str(e)
+                })
+
+        # Log summary
+        current_app.logger.info(f"📧 EMAIL QUEUE SUMMARY: Processed {processed_count} emails - {success_count} successful, {failed_count} failed")
+        if failed_count > 0:
+            current_app.logger.warning(f"📧 EMAIL QUEUE FAILURES: {failed_count} emails failed to send")
+            for failure in failed_details:
+                current_app.logger.warning(f"  - Failed: {failure['email']} - {failure.get('error', 'Processing failed')}")
 
         return current_app.response_manager.success({
-            'processed': processed_count,
-            'message': f'Processed {processed_count} emails from queue'
+            'processed_count': processed_count,
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'failed_details': failed_details if failed_count > 0 else [],
+            'message': f'Processed {processed_count} emails - {success_count} successful, {failed_count} failed'
         })
 
     except Exception as e:
@@ -1032,13 +1088,14 @@ def check_emails(config_id):
             current_app.logger.info(f"🔧 BACKEND: Email processing result: {result}")
 
             return current_app.response_manager.success(
-                'Email check completed successfully',
                 {
                     'success': True,
                     'emails_found': result.get('emails_found', 0),
                     'tickets_created': result.get('tickets_created', 0),
-                    'message': f"Found {result.get('emails_found', 0)} emails, created {result.get('tickets_created', 0)} tickets"
-                }
+                    'emails_processed': result.get('emails_processed', 0),
+                    'message': f"Found {result.get('emails_found', 0)} emails, created {result.get('tickets_created', 0)} tickets, processed {result.get('emails_processed', 0)} emails"
+                },
+                'Email check completed successfully'
             )
         except Exception as e:
             current_app.logger.error(f"🔧 BACKEND: Email processing failed: {e}")
@@ -1047,3 +1104,172 @@ def check_emails(config_id):
     except Exception as e:
         current_app.logger.error(f"Error checking emails: {e}")
         return current_app.response_manager.server_error(f'Error checking emails: {str(e)}')
+
+
+@email_bp.route('/routing/test', methods=['POST'])
+@jwt_required()
+def test_email_routing():
+    """Test email routing logic with a given sender email"""
+    try:
+        data = request.get_json()
+        sender_email = data.get('sender_email')
+
+        if not sender_email:
+            return current_app.response_manager.bad_request('sender_email is required')
+
+        current_app.logger.info(f"🔧 BACKEND: Testing email routing for: {sender_email}")
+
+        # First test database connection
+        try:
+            current_app.logger.info(f"🔧 BACKEND: Testing database connection")
+            with current_app.db_manager.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(*) FROM clients WHERE authorized_domains IS NOT NULL")
+                    result = cursor.fetchone()
+                    count = result['count'] if result else 0
+                    current_app.logger.info(f"🔧 BACKEND: Found {count} clients with authorized domains")
+        except Exception as db_error:
+            current_app.logger.error(f"🔧 BACKEND: Database connection test failed: {db_error}")
+            return current_app.response_manager.server_error(f'Database connection failed: {str(db_error)}')
+
+        # Now test the routing logic
+        from .routing_service import email_routing_service
+
+        current_app.logger.info(f"🔧 BACKEND: Starting routing service test")
+        routing_result = email_routing_service.route_email_to_client_site(sender_email)
+        current_app.logger.info(f"🔧 BACKEND: Routing test result: {routing_result}")
+
+        return current_app.response_manager.success(
+            {
+                'sender_email': sender_email,
+                'routing_result': routing_result,
+                'explanation': {
+                    'exact_match': 'Email address found in site authorized_emails',
+                    'domain_match': 'Email domain found in client authorized_domains',
+                    'pattern_match': 'Email matched a regex pattern rule',
+                    'unauthorized': 'No matching authorization rules found'
+                }.get(routing_result.get('routing_decision'), 'Unknown routing decision')
+            },
+            'Email routing test completed'
+        )
+
+    except Exception as e:
+        import traceback
+        error_details = f"Error: {str(e)}, Traceback: {traceback.format_exc()}"
+        current_app.logger.error(f"Error testing email routing: {error_details}")
+        return current_app.response_manager.server_error(f'Error testing email routing: {str(e)}')
+
+
+@email_bp.route('/routing/rules', methods=['GET'])
+@jwt_required()
+def get_routing_rules():
+    """Get all email routing rules for management"""
+    try:
+        current_app.logger.info("🔧 BACKEND: Getting email routing rules")
+
+        with current_app.db_manager.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT
+                        err.rule_id,
+                        err.rule_type,
+                        err.rule_value,
+                        err.priority,
+                        err.is_active,
+                        c.name as client_name,
+                        s.name as site_name,
+                        err.created_at
+                    FROM email_routing_rules err
+                    JOIN clients c ON err.client_id = c.client_id
+                    LEFT JOIN sites s ON err.site_id = s.site_id
+                    ORDER BY err.priority ASC, c.name, s.name
+                """)
+
+                rules = []
+                for row in cursor.fetchall():
+                    rules.append({
+                        'rule_id': row[0],
+                        'rule_type': row[1],
+                        'rule_value': row[2],
+                        'priority': row[3],
+                        'is_active': row[4],
+                        'client_name': row[5],
+                        'site_name': row[6],
+                        'created_at': row[7].isoformat() if row[7] else None
+                    })
+
+                return current_app.response_manager.success(
+                    'Email routing rules retrieved successfully',
+                    {'rules': rules, 'total_rules': len(rules)}
+                )
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting routing rules: {e}")
+        return current_app.response_manager.server_error(f'Error getting routing rules: {str(e)}')
+
+
+@email_bp.route('/routing/analysis', methods=['GET'])
+@jwt_required()
+def get_routing_analysis():
+    """Get email routing analysis and statistics"""
+    try:
+        current_app.logger.info("🔧 BACKEND: Getting email routing analysis")
+
+        with current_app.db_manager.get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Get routing analysis from view
+                cursor.execute("SELECT * FROM email_routing_analysis ORDER BY client_name, site_name")
+
+                analysis = []
+                for row in cursor.fetchall():
+                    analysis.append({
+                        'client_name': row[0],
+                        'authorized_domains': row[1],
+                        'site_name': row[2],
+                        'authorized_emails': row[3],
+                        'is_primary_site': row[4],
+                        'total_routed_emails': row[5] or 0,
+                        'exact_matches': row[6] or 0,
+                        'domain_matches': row[7] or 0,
+                        'fallback_routes': row[8] or 0,
+                        'unauthorized_emails': row[9] or 0
+                    })
+
+                # Get recent routing decisions
+                cursor.execute("""
+                    SELECT
+                        sender_email,
+                        sender_domain,
+                        routing_decision,
+                        routing_confidence,
+                        processing_time_ms,
+                        created_at
+                    FROM email_routing_log
+                    ORDER BY created_at DESC
+                    LIMIT 50
+                """)
+
+                recent_decisions = []
+                for row in cursor.fetchall():
+                    recent_decisions.append({
+                        'sender_email': row[0],
+                        'sender_domain': row[1],
+                        'routing_decision': row[2],
+                        'routing_confidence': float(row[3]) if row[3] else 0.0,
+                        'processing_time_ms': row[4],
+                        'created_at': row[5].isoformat() if row[5] else None
+                    })
+
+                return current_app.response_manager.success(
+                    'Email routing analysis retrieved successfully',
+                    {
+                        'analysis': analysis,
+                        'recent_decisions': recent_decisions,
+                        'total_clients': len(set(item['client_name'] for item in analysis)),
+                        'total_sites': len([item for item in analysis if item['site_name']])
+                    }
+                )
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting routing analysis: {e}")
+        return current_app.response_manager.server_error(f'Error getting routing analysis: {str(e)}')
