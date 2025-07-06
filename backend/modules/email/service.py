@@ -849,8 +849,8 @@ LANET Helpdesk V3
             # Create ticket with system user
             result = tickets_service.create_ticket(ticket_data, created_by)
 
-            if result.get('success') and result.get('ticket_id'):
-                ticket_id = result['ticket_id']
+            if result.get('success') and result.get('ticket'):
+                ticket_id = result['ticket']['ticket_id']
                 current_app.logger.info(f"Ticket created from authorized email: {ticket_id} from {sender_email}")
 
                 # Process email attachments if any
