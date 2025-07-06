@@ -16,7 +16,8 @@
 5. [API Endpoints](#api-endpoints)
 6. [Data Flow](#data-flow)
 7. [Function Dependencies](#function-dependencies)
-8. [Deployment Architecture](#deployment-architecture)
+8. [Agent System Architecture](#agent-system-architecture)
+9. [Deployment Architecture](#deployment-architecture)
 
 ---
 
@@ -31,7 +32,7 @@ graph TB
         AUTH[Auth Context]
         SERVICES[API Services]
     end
-    
+
     subgraph "Backend Layer (Flask + Python)"
         API[API Gateway]
         AUTH_MOD[Auth Module]
@@ -41,27 +42,37 @@ graph TB
         TICKETS_MOD[Tickets Module]
         EMAIL_MOD[Email Module]
         NOTIF_MOD[Notifications Module]
+        AGENT_MOD[Agent Management Module]
     end
-    
+
     subgraph "Core Services"
         DB_MGR[Database Manager]
         AUTH_MGR[Auth Manager]
         RESP_MGR[Response Manager]
         REDIS[Redis Cache]
+        SCRIPT_MGR[Script Manager]
+        ALERT_MGR[Alert Manager]
     end
-    
+
     subgraph "Database Layer (PostgreSQL)"
         MAIN_DB[(Main Database)]
         RLS[Row Level Security]
         POLICIES[RLS Policies]
     end
-    
+
     subgraph "External Services"
         SMTP[SMTP Server]
         IMAP[IMAP Server]
         EMAIL_QUEUE[Email Queue]
     end
-    
+
+    subgraph "Client Sites (Agent Network)"
+        AGENT1[LANET Agent - Site A]
+        AGENT2[LANET Agent - Site B]
+        AGENT3[LANET Agent - Site C]
+        AGENT4[LANET Agent - Site N...]
+    end
+
     UI --> SERVICES
     SERVICES --> API
     API --> AUTH_MOD
@@ -71,7 +82,8 @@ graph TB
     API --> TICKETS_MOD
     API --> EMAIL_MOD
     API --> NOTIF_MOD
-    
+    API --> AGENT_MOD
+
     AUTH_MOD --> AUTH_MGR
     USERS_MOD --> DB_MGR
     CLIENTS_MOD --> DB_MGR
@@ -79,17 +91,32 @@ graph TB
     TICKETS_MOD --> DB_MGR
     EMAIL_MOD --> DB_MGR
     NOTIF_MOD --> DB_MGR
-    
+    AGENT_MOD --> DB_MGR
+    AGENT_MOD --> SCRIPT_MGR
+    AGENT_MOD --> ALERT_MGR
+
     DB_MGR --> MAIN_DB
     AUTH_MGR --> MAIN_DB
     RESP_MGR --> REDIS
-    
+    SCRIPT_MGR --> MAIN_DB
+    ALERT_MGR --> MAIN_DB
+
     MAIN_DB --> RLS
     RLS --> POLICIES
-    
+
     EMAIL_MOD --> SMTP
     EMAIL_MOD --> IMAP
     NOTIF_MOD --> EMAIL_QUEUE
+
+    AGENT1 -.->|HTTPS/SSL| API
+    AGENT2 -.->|HTTPS/SSL| API
+    AGENT3 -.->|HTTPS/SSL| API
+    AGENT4 -.->|HTTPS/SSL| API
+
+    AGENT_MOD --> AGENT1
+    AGENT_MOD --> AGENT2
+    AGENT_MOD --> AGENT3
+    AGENT_MOD --> AGENT4
 ```
 
 ### **Core Principles**
@@ -115,54 +142,67 @@ graph LR
         CLIENTS[Clients Module]
         SITES[Sites Module]
     end
-    
+
     subgraph "Business Modules (In Progress)"
         TICKETS[Tickets Module]
         EMAIL[Email Module]
         NOTIF[Notifications Module]
+        AGENTS[Agent Management Module]
         SLA[SLA Module]
     end
-    
+
     subgraph "Core Services"
         DB[Database Manager]
         AUTH_SVC[Auth Manager]
         RESP[Response Manager]
+        SCRIPT_SVC[Script Manager]
+        ALERT_SVC[Alert Manager]
     end
-    
+
     AUTH --> AUTH_SVC
     AUTH --> DB
-    
+
     USERS --> AUTH
     USERS --> DB
     USERS --> RESP
-    
+
     CLIENTS --> AUTH
     CLIENTS --> USERS
     CLIENTS --> DB
-    
+
     SITES --> AUTH
     SITES --> CLIENTS
     SITES --> DB
-    
+
     TICKETS --> AUTH
     TICKETS --> USERS
     TICKETS --> CLIENTS
     TICKETS --> SITES
     TICKETS --> NOTIF
     TICKETS --> DB
-    
+
     EMAIL --> AUTH
     EMAIL --> TICKETS
     EMAIL --> NOTIF
     EMAIL --> DB
-    
+
     NOTIF --> AUTH
     NOTIF --> EMAIL
     NOTIF --> DB
-    
+
+    AGENTS --> AUTH
+    AGENTS --> CLIENTS
+    AGENTS --> SITES
+    AGENTS --> TICKETS
+    AGENTS --> NOTIF
+    AGENTS --> DB
+    AGENTS --> SCRIPT_SVC
+    AGENTS --> ALERT_SVC
+
     SLA --> AUTH
     SLA --> CLIENTS
     SLA --> TICKETS
+    SLA --> AGENTS
     SLA --> DB
 ```
 
@@ -177,6 +217,7 @@ graph LR
 | **Tickets** | 🔄 In Progress | 85% | Unified numbering, web/email creation, lifecycle management |
 | **Email** | 🔄 In Progress | 75% | SMTP/IMAP integration, email-to-ticket, templates |
 | **Notifications** | 🔄 In Progress | 70% | Email notifications, template system, queue management |
+| **Agents** | ⏳ Planned | 0% | Asset monitoring, inventory collection, script execution, auto-ticketing |
 | **SLA** | ⏳ Planned | 0% | SLA policies, compliance tracking, escalation |
 
 ---
@@ -641,6 +682,408 @@ sequenceDiagram
   - `get_notification_recipients(ticket, type)`: Determine recipients
   - `render_email_template(template, variables)`: Template rendering
   - `queue_email(recipient, subject, body)`: Email queue management
+
+---
+
+## 🤖 **AGENT SYSTEM ARCHITECTURE**
+
+### **Agent System Overview Diagram**
+
+```mermaid
+graph TB
+    subgraph "LANET Helpdesk Central Server"
+        API[API Gateway]
+        AGENT_MGR[Agent Manager]
+        ASSET_DB[(Assets Database)]
+        TICKET_SYS[Ticket System]
+        SCRIPT_REPO[Script Repository]
+        ALERT_SYS[Alert System]
+    end
+
+    subgraph "Client Site A"
+        AGENT_A1[LANET Agent - PC001]
+        AGENT_A2[LANET Agent - PC002]
+        AGENT_A3[LANET Agent - Server01]
+        ROUTER_A[Network Router]
+    end
+
+    subgraph "Client Site B"
+        AGENT_B1[LANET Agent - PC010]
+        AGENT_B2[LANET Agent - PC011]
+        AGENT_B3[LANET Agent - Server02]
+        ROUTER_B[Network Router]
+    end
+
+    subgraph "Client Site C"
+        AGENT_C1[LANET Agent - PC020]
+        AGENT_C2[LANET Agent - PC021]
+        ROUTER_C[Network Router]
+    end
+
+    AGENT_A1 -->|HTTPS/SSL| API
+    AGENT_A2 -->|HTTPS/SSL| API
+    AGENT_A3 -->|HTTPS/SSL| API
+
+    AGENT_B1 -->|HTTPS/SSL| API
+    AGENT_B2 -->|HTTPS/SSL| API
+    AGENT_B3 -->|HTTPS/SSL| API
+
+    AGENT_C1 -->|HTTPS/SSL| API
+    AGENT_C2 -->|HTTPS/SSL| API
+
+    API --> AGENT_MGR
+    AGENT_MGR --> ASSET_DB
+    AGENT_MGR --> TICKET_SYS
+    AGENT_MGR --> SCRIPT_REPO
+    AGENT_MGR --> ALERT_SYS
+
+    ROUTER_A -.->|Firewall Rules| AGENT_A1
+    ROUTER_B -.->|Firewall Rules| AGENT_B1
+    ROUTER_C -.->|Firewall Rules| AGENT_C1
+```
+
+### **Agent Architecture Components**
+
+#### **LANET Agent (Client-Side)**
+```mermaid
+graph LR
+    subgraph "LANET Agent Process"
+        CORE[Agent Core]
+        INVENTORY[Inventory Collector]
+        MONITOR[System Monitor]
+        EXECUTOR[Script Executor]
+        COMM[Communication Module]
+        SECURITY[Security Module]
+    end
+
+    subgraph "System Integration"
+        WMI[WMI/PowerShell]
+        REGISTRY[Windows Registry]
+        SERVICES[Windows Services]
+        EVENTLOG[Event Logs]
+        FILESYSTEM[File System]
+    end
+
+    subgraph "Network Communication"
+        HTTPS[HTTPS Client]
+        WEBSOCKET[WebSocket Client]
+        ENCRYPTION[AES Encryption]
+    end
+
+    CORE --> INVENTORY
+    CORE --> MONITOR
+    CORE --> EXECUTOR
+    CORE --> COMM
+    CORE --> SECURITY
+
+    INVENTORY --> WMI
+    INVENTORY --> REGISTRY
+    MONITOR --> SERVICES
+    MONITOR --> EVENTLOG
+    EXECUTOR --> FILESYSTEM
+
+    COMM --> HTTPS
+    COMM --> WEBSOCKET
+    SECURITY --> ENCRYPTION
+```
+
+### **Agent Functionality Matrix**
+
+| Function | Description | Frequency | Data Sent | Triggers |
+|----------|-------------|-----------|-----------|----------|
+| **Hardware Inventory** | CPU, RAM, Storage, Network cards | Daily | JSON payload | Scheduled + On demand |
+| **Software Inventory** | Installed programs, versions, licenses | Daily | JSON payload | Scheduled + On demand |
+| **System Status** | CPU usage, RAM usage, disk space | Every 5 min | Metrics JSON | Real-time monitoring |
+| **Service Monitoring** | Windows services status | Every 10 min | Service states | Service changes |
+| **Event Log Monitoring** | Critical system events | Real-time | Event details | Error/Warning events |
+| **Security Status** | Antivirus, firewall, updates | Hourly | Security state | Status changes |
+| **Network Status** | Connectivity, bandwidth usage | Every 5 min | Network metrics | Connection issues |
+| **Automatic Ticketing** | Create tickets for critical issues | Real-time | Issue details | Threshold breaches |
+| **Script Execution** | Run PowerShell/batch scripts | On demand | Execution results | Technician request |
+| **Remote Assistance** | Enable remote desktop access | On demand | Session details | Support request |
+
+### **Agent Database Schema**
+
+#### **Assets Table (Extended for Agents)**
+```sql
+CREATE TABLE assets (
+    asset_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    client_id UUID NOT NULL REFERENCES clients(client_id),
+    site_id UUID NOT NULL REFERENCES sites(site_id),
+
+    -- Basic asset info
+    asset_type asset_type NOT NULL, -- 'workstation', 'server', 'laptop', 'printer', etc.
+    name VARCHAR(255) NOT NULL,
+    serial_number VARCHAR(255),
+
+    -- Agent-specific fields
+    agent_status agent_status DEFAULT 'offline', -- 'online', 'offline', 'error', 'installing'
+    agent_version VARCHAR(50),
+    last_seen TIMESTAMP WITH TIME ZONE,
+    last_inventory_update TIMESTAMP WITH TIME ZONE,
+
+    -- Hardware specifications (JSON)
+    hardware_specs JSONB,
+    software_inventory JSONB,
+    system_metrics JSONB,
+
+    -- Network and security
+    ip_address INET,
+    mac_address VARCHAR(17),
+    domain_joined BOOLEAN DEFAULT false,
+    antivirus_status VARCHAR(100),
+    firewall_enabled BOOLEAN,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### **Agent Metrics Table**
+```sql
+CREATE TABLE agent_metrics (
+    metric_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    asset_id UUID NOT NULL REFERENCES assets(asset_id),
+
+    -- System performance metrics
+    cpu_usage_percent DECIMAL(5,2),
+    memory_usage_percent DECIMAL(5,2),
+    disk_usage_percent DECIMAL(5,2),
+    network_usage_mbps DECIMAL(10,2),
+
+    -- System health indicators
+    uptime_hours INTEGER,
+    temperature_celsius INTEGER,
+    error_count INTEGER,
+    warning_count INTEGER,
+
+    -- Timestamp
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- Indexes for performance
+    INDEX idx_agent_metrics_asset_time (asset_id, recorded_at),
+    INDEX idx_agent_metrics_recorded_at (recorded_at)
+);
+```
+
+#### **Agent Scripts Table**
+```sql
+CREATE TABLE agent_scripts (
+    script_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    script_type VARCHAR(50) NOT NULL, -- 'powershell', 'batch', 'python'
+    script_content TEXT NOT NULL,
+
+    -- Execution parameters
+    timeout_seconds INTEGER DEFAULT 300,
+    requires_admin BOOLEAN DEFAULT false,
+    client_id UUID REFERENCES clients(client_id), -- NULL for global scripts
+
+    -- Security and approval
+    is_approved BOOLEAN DEFAULT false,
+    approved_by UUID REFERENCES users(user_id),
+    approved_at TIMESTAMP WITH TIME ZONE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID REFERENCES users(user_id)
+);
+```
+
+#### **Script Execution Log**
+```sql
+CREATE TABLE script_executions (
+    execution_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    script_id UUID NOT NULL REFERENCES agent_scripts(script_id),
+    asset_id UUID NOT NULL REFERENCES assets(asset_id),
+    executed_by UUID NOT NULL REFERENCES users(user_id),
+
+    -- Execution details
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(50) DEFAULT 'running', -- 'running', 'completed', 'failed', 'timeout'
+    exit_code INTEGER,
+
+    -- Results
+    stdout_output TEXT,
+    stderr_output TEXT,
+    execution_time_seconds INTEGER,
+
+    -- Context
+    ticket_id UUID REFERENCES tickets(ticket_id), -- If executed as part of ticket resolution
+
+    INDEX idx_script_executions_asset (asset_id),
+    INDEX idx_script_executions_script (script_id),
+    INDEX idx_script_executions_time (started_at)
+);
+```
+
+### **Agent Communication Protocol**
+
+#### **Agent Registration Flow**
+```mermaid
+sequenceDiagram
+    participant Agent as LANET Agent
+    participant API as Helpdesk API
+    participant DB as Database
+    participant Auth as Auth System
+
+    Agent->>API: POST /api/agents/register
+    Note over Agent,API: {client_key, site_key, hardware_info}
+
+    API->>Auth: Validate client/site keys
+    Auth-->>API: Validation result
+
+    API->>DB: INSERT INTO assets (agent registration)
+    DB-->>API: asset_id + agent_token
+
+    API-->>Agent: {agent_id, auth_token, config}
+
+    Note over Agent: Store credentials securely
+
+    Agent->>API: POST /api/agents/heartbeat
+    Note over Agent,API: Regular heartbeat every 60 seconds
+```
+
+#### **Inventory Update Flow**
+```mermaid
+sequenceDiagram
+    participant Agent as LANET Agent
+    participant API as Helpdesk API
+    participant DB as Database
+    participant Alert as Alert System
+
+    Note over Agent: Collect system inventory
+
+    Agent->>API: POST /api/agents/inventory
+    Note over Agent,API: {hardware_specs, software_list, system_metrics}
+
+    API->>DB: UPDATE assets SET hardware_specs = ?, software_inventory = ?
+    DB-->>API: Update confirmation
+
+    API->>Alert: Check for threshold breaches
+    Alert->>Alert: Evaluate disk space, CPU, memory
+
+    alt Critical threshold exceeded
+        Alert->>DB: CREATE ticket (auto-generated)
+        Alert->>API: Send notification
+    end
+
+    API-->>Agent: {status: 'success', next_update: 3600}
+```
+
+#### **Script Execution Flow**
+```mermaid
+sequenceDiagram
+    participant Tech as Technician
+    participant Web as Web Portal
+    participant API as Helpdesk API
+    participant Agent as LANET Agent
+    participant DB as Database
+
+    Tech->>Web: Select asset + script to execute
+    Web->>API: POST /api/agents/execute-script
+    Note over Web,API: {asset_id, script_id, parameters}
+
+    API->>DB: INSERT INTO script_executions
+    API->>Agent: WebSocket: execute_script command
+
+    Agent->>Agent: Validate script permissions
+    Agent->>Agent: Execute PowerShell/batch script
+
+    Agent->>API: WebSocket: execution_progress
+    Agent->>API: WebSocket: execution_completed
+    Note over Agent,API: {exit_code, stdout, stderr, execution_time}
+
+    API->>DB: UPDATE script_executions SET status = 'completed'
+    API-->>Web: Real-time execution results
+    Web-->>Tech: Display script output
+```
+
+### **Agent Security Model**
+
+#### **Authentication & Authorization**
+- **Agent Registration**: Client-specific keys for initial registration
+- **Token-Based Auth**: JWT tokens for ongoing communication
+- **Certificate Pinning**: SSL certificate validation
+- **Encrypted Communication**: AES-256 encryption for sensitive data
+
+#### **Script Execution Security**
+- **Approval Workflow**: Scripts must be approved by superadmin/admin
+- **Permission Levels**: Scripts marked as requiring admin privileges
+- **Execution Sandboxing**: Limited execution environment
+- **Audit Trail**: Complete logging of all script executions
+
+#### **Network Security**
+- **Firewall Rules**: Outbound HTTPS only (port 443)
+- **IP Whitelisting**: Optional IP restriction for agent communication
+- **VPN Support**: Agents can work through VPN connections
+- **Proxy Support**: Corporate proxy server compatibility
+
+### **Agent Deployment & Management**
+
+#### **Agent Installation Methods**
+1. **MSI Installer**: Windows installer package with client/site pre-configuration
+2. **Group Policy**: Domain-wide deployment via Active Directory
+3. **Manual Installation**: Individual workstation setup
+4. **Remote Installation**: Deploy via existing RMM tools
+
+#### **Agent Configuration**
+```json
+{
+  "server_url": "https://helpdesk.lanet.mx/api",
+  "client_id": "75f6b906-db3a-404d-b032-3a52eac324c4",
+  "site_id": "d01df78a-c48b-40c2-b943-ef0830e26bf1",
+  "update_intervals": {
+    "heartbeat": 60,
+    "inventory": 3600,
+    "metrics": 300
+  },
+  "monitoring": {
+    "cpu_threshold": 90,
+    "memory_threshold": 85,
+    "disk_threshold": 90,
+    "auto_ticket_creation": true
+  },
+  "security": {
+    "require_approval_for_scripts": true,
+    "allow_remote_assistance": true,
+    "encrypt_communications": true
+  }
+}
+```
+
+#### **Agent Update Mechanism**
+- **Automatic Updates**: Agents check for updates daily
+- **Staged Rollouts**: Updates deployed to test sites first
+- **Rollback Capability**: Ability to revert to previous version
+- **Update Notifications**: Alerts when agents need updates
+
+### **Integration with Helpdesk System**
+
+#### **Automatic Ticket Creation**
+```python
+# Example: Agent detects critical disk space
+def check_disk_space_threshold():
+    if disk_usage > 90:
+        ticket_data = {
+            "subject": f"Critical Disk Space Alert - {asset_name}",
+            "description": f"Disk usage at {disk_usage}% on {asset_name}",
+            "priority": "critica",
+            "category": "hardware",
+            "auto_generated": True,
+            "asset_id": asset_id,
+            "affected_person": "System Administrator",
+            "affected_person_contact": site_admin_phone
+        }
+        create_ticket(ticket_data)
+```
+
+#### **Asset Lifecycle Management**
+- **Discovery**: Automatic asset discovery when agents install
+- **Tracking**: Real-time status and location tracking
+- **Maintenance**: Scheduled maintenance reminders
+- **Retirement**: Asset decommissioning workflow
 
 ---
 
