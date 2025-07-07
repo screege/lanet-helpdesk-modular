@@ -81,6 +81,19 @@ export interface TicketActivity {
   user_role?: string;
 }
 
+export interface TicketResolution {
+  resolution_id: string;
+  ticket_id: string;
+  resolved_by: string;
+  resolution_notes: string;
+  resolved_at: string;
+  created_at: string;
+  updated_at: string;
+  // Related data
+  resolved_by_name?: string;
+  resolved_by_role?: string;
+}
+
 export interface CreateTicketData {
   client_id: string;
   site_id: string;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/api';
+import { ApiResponse } from '../../types';
 import { 
   Users, 
   Search, 
@@ -123,8 +124,8 @@ const UsersManagement: React.FC = () => {
 
       // Load users and clients in parallel
       const [usersResponse, clientsResponse] = await Promise.all([
-        apiService.get('/users?per_page=1000'),
-        apiService.get('/clients?per_page=1000')
+        apiService.get('/users?per_page=1000') as Promise<ApiResponse<{ users: User[] }>>,
+        apiService.get('/clients?per_page=1000') as Promise<ApiResponse<{ clients: Client[] }>>
       ]);
 
       if (usersResponse.success) {
@@ -164,7 +165,7 @@ const UsersManagement: React.FC = () => {
 
     if (confirmed) {
       try {
-        const response = await apiService.delete(`/users/${user.user_id}`);
+        const response = await apiService.delete(`/users/${user.user_id}`) as ApiResponse;
         if (response.success) {
           await loadData(); // Reload data
         }

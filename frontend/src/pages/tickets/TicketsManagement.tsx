@@ -37,9 +37,9 @@ const TicketsManagement: React.FC = () => {
       const response = await ticketsService.getAllTickets(searchFilters);
       setTickets(response.tickets);
       setPagination(response.pagination);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading tickets:', err);
-      setError(err.response?.data?.message || 'Error al cargar tickets');
+      setError(err instanceof Error ? err.message : 'Error al cargar tickets');
     } finally {
       setLoading(false);
     }
@@ -56,7 +56,7 @@ const TicketsManagement: React.FC = () => {
   };
 
   // Handle filter change
-  const handleFilterChange = (key: keyof TicketFilters, value: any) => {
+  const handleFilterChange = (key: keyof TicketFilters, value: string | undefined) => {
     setFilters(prev => ({
       ...prev,
       [key]: value,

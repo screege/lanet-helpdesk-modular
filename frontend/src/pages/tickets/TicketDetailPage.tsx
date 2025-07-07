@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, User, AlertCircle, Send, CheckCircle, Paperclip, Download } from 'lucide-react';
-import { Ticket, TicketComment, TicketAttachment, ticketsService } from '../../services/ticketsService';
+import { Ticket, TicketComment, TicketAttachment, TicketResolution, ticketsService } from '../../services/ticketsService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import ResolveTicketModal from '../../components/tickets/ResolveTicketModal';
@@ -16,7 +16,7 @@ const TicketDetailPage: React.FC = () => {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [attachments, setAttachments] = useState<TicketAttachment[]>([]);
-  const [resolutions, setResolutions] = useState<any[]>([]);
+  const [resolutions, setResolutions] = useState<TicketResolution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -53,9 +53,9 @@ const TicketDetailPage: React.FC = () => {
 
       // Cargar historial de resoluciones
       await loadResolutions();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading ticket data:', err);
-      setError(err.response?.data?.message || 'Error al cargar el ticket');
+      setError(err instanceof Error ? err.message : 'Error al cargar el ticket');
     } finally {
       setLoading(false);
     }
@@ -85,9 +85,9 @@ const TicketDetailPage: React.FC = () => {
       await ticketsService.addTicketComment(ticketId, newComment.trim(), isInternal);
       // RELOAD THE ENTIRE PAGE - no more reactive bullshit
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding comment:', err);
-      setError(err.response?.data?.message || 'Error al agregar comentario');
+      setError(err instanceof Error ? err.message : 'Error al agregar comentario');
       setSubmittingComment(false);
     }
   };
@@ -113,9 +113,9 @@ const TicketDetailPage: React.FC = () => {
 
       // RELOAD THE ENTIRE PAGE
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating ticket status:', err);
-      setError(err.response?.data?.message || 'Error al cambiar estado del ticket');
+      setError(err instanceof Error ? err.message : 'Error al cambiar estado del ticket');
       setLoading(false);
     }
   };
@@ -128,9 +128,9 @@ const TicketDetailPage: React.FC = () => {
       setLoading(true);
       await ticketsService.updateTicketStatus(ticketId, 'resuelto', resolutionNotes);
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resolving ticket:', err);
-      throw new Error(err.message || 'Error al resolver el ticket');
+      throw new Error(err instanceof Error ? err.message : 'Error al resolver el ticket');
     }
   };
 
@@ -145,9 +145,9 @@ const TicketDetailPage: React.FC = () => {
       // Then change status
       await ticketsService.updateTicketStatus(ticketId, 'reabierto');
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening ticket:', err);
-      throw new Error(err.message || 'Error al reabrir el ticket');
+      throw new Error(err instanceof Error ? err.message : 'Error al reabrir el ticket');
     }
   };
 
@@ -199,9 +199,9 @@ const TicketDetailPage: React.FC = () => {
       window.URL.revokeObjectURL(url);
 
       console.log('✅ Download completed successfully');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Download error:', err);
-      setError(`Error al descargar archivo: ${err.message}`);
+      setError(`Error al descargar archivo: ${err instanceof Error ? err.message : 'Error desconocido'}`);
     } finally {
       // Remove attachment from downloading set
       setDownloadingAttachments(prev => {
@@ -223,9 +223,9 @@ const TicketDetailPage: React.FC = () => {
       // Then change status
       await ticketsService.updateTicketStatus(ticketId, 'reabierto');
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening ticket:', err);
-      setError(err.response?.data?.message || 'Error al reabrir el ticket');
+      setError(err instanceof Error ? err.message : 'Error al reabrir el ticket');
       setLoading(false);
     }
   };

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiService } from '@/services/api';
+import { ApiResponse } from '@/types';
 import {
   Ticket,
   Clock,
@@ -44,7 +45,7 @@ const Dashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       // Load real dashboard stats from backend
-      const response = await apiService.get('/dashboard/stats');
+      const response = await apiService.get('/dashboard/stats') as ApiResponse<DashboardStats>;
 
       if (response.success) {
         const realStats: DashboardStats = {
@@ -74,7 +75,7 @@ const Dashboard: React.FC = () => {
           sla_compliance: 0
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error loading dashboard data:', error);
       // Fallback to empty stats
       setStats({

@@ -68,8 +68,8 @@ const EmailTemplates: React.FC = () => {
       setLoading(true);
       const templateList = await emailService.getEmailTemplates();
       setTemplates(templateList);
-    } catch (err: any) {
-      setError(err.message || 'Error loading email templates');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error loading email templates');
     } finally {
       setLoading(false);
     }
@@ -88,8 +88,8 @@ const EmailTemplates: React.FC = () => {
       setEditingTemplate(null);
       resetForm();
       await loadTemplates();
-    } catch (err: any) {
-      setError(err.message || 'Error saving email template');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error saving email template');
     }
   };
 
@@ -113,8 +113,8 @@ const EmailTemplates: React.FC = () => {
       try {
         await emailService.deleteEmailTemplate(templateId);
         await loadTemplates();
-      } catch (err: any) {
-        setError(err.message || 'Error deleting email template');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Error deleting email template');
       }
     }
   };
@@ -138,8 +138,8 @@ const EmailTemplates: React.FC = () => {
       const preview = await emailService.previewEmailTemplate(template.template_id, sampleVariables);
       setPreviewData(preview);
       setShowPreview(true);
-    } catch (err: any) {
-      setError(err.message || 'Error generating preview');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error generating preview');
     }
   };
 

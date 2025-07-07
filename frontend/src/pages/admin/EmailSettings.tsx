@@ -36,8 +36,8 @@ const EmailSettings: React.FC = () => {
       setLoading(true);
       const configs = await emailService.getEmailConfigurations();
       setConfigurations(configs);
-    } catch (err: any) {
-      setError(err.message || 'Error loading email configurations');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error loading email configurations');
     } finally {
       setLoading(false);
     }
@@ -56,8 +56,8 @@ const EmailSettings: React.FC = () => {
       try {
         await emailService.deleteEmailConfiguration(configId);
         await loadConfigurations();
-      } catch (err: any) {
-        setError(err.message || 'Error deleting email configuration');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Error deleting email configuration');
       }
     }
   };
@@ -72,8 +72,8 @@ const EmailSettings: React.FC = () => {
       } else {
         alert('Error de conexión: ' + result.message);
       }
-    } catch (err: any) {
-      alert('Error probando conexión: ' + err.message);
+    } catch (err: unknown) {
+      alert('Error probando conexión: ' + (err instanceof Error ? err.message : 'Error desconocido'));
     } finally {
       setTestingConfig(null);
     }
@@ -83,8 +83,8 @@ const EmailSettings: React.FC = () => {
     try {
       await emailService.setDefaultConfiguration(configId);
       await loadConfigurations();
-    } catch (err: any) {
-      setError(err.message || 'Error setting default configuration');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error setting default configuration');
     }
   };
 

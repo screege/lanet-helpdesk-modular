@@ -69,8 +69,8 @@ const EmailMonitoring: React.FC = () => {
       } else if (activeTab === 'stats') {
         await loadStatistics();
       }
-    } catch (err: any) {
-      setError(err.message || 'Error loading data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error loading data');
     } finally {
       setLoading(false);
     }
@@ -107,8 +107,8 @@ const EmailMonitoring: React.FC = () => {
       const result = await emailService.processEmailQueue();
       alert(`Procesados: ${result.processed} emails. ${result.message}`);
       await loadQueue();
-    } catch (err: any) {
-      setError(err.message || 'Error processing email queue');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error processing email queue');
     } finally {
       setProcessing(false);
     }
@@ -118,8 +118,8 @@ const EmailMonitoring: React.FC = () => {
     try {
       await emailService.retryEmailQueue(queueId);
       await loadQueue();
-    } catch (err: any) {
-      setError(err.message || 'Error retrying email');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error retrying email');
     }
   };
 
@@ -128,8 +128,8 @@ const EmailMonitoring: React.FC = () => {
       try {
         await emailService.cancelEmailQueue(queueId);
         await loadQueue();
-      } catch (err: any) {
-        setError(err.message || 'Error canceling email');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Error canceling email');
       }
     }
   };
@@ -232,7 +232,7 @@ const EmailMonitoring: React.FC = () => {
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as 'queue' | 'logs' | 'stats')}
               className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-600'
