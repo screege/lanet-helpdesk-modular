@@ -11,10 +11,8 @@ import {
   Mail, 
   Phone,
   Building2,
-  MapPin,
   Filter,
   UserCheck,
-  UserX,
   Shield
 } from 'lucide-react';
 import UserForm from '../../components/users/UserForm';
@@ -306,19 +304,16 @@ const UsersManagement: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Usuario
                 </th>
-                <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="hidden lg:table-cell px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Cliente
                 </th>
-                <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contacto
-                </th>
-                <th className="hidden sm:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                   Acciones
                 </th>
               </tr>
@@ -326,7 +321,7 @@ const UsersManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 sm:px-6 py-12 text-center text-gray-500">
+                  <td colSpan={4} className="px-3 py-12 text-center text-gray-500">
                     <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                     <p className="text-lg font-medium">No se encontraron usuarios</p>
                     <p className="text-sm">
@@ -337,68 +332,32 @@ const UsersManagement: React.FC = () => {
               ) : (
                 paginatedUsers.map((user) => (
                   <tr key={user.user_id} className="hover:bg-gray-50">
-                    <td className="px-3 sm:px-6 py-4">
+                    <td className="px-3 py-4">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 h-8 w-8 sm:h-10 sm:w-10">
-                          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        <div className="flex-shrink-0 h-8 w-8">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
                             {getRoleIcon(user.role)}
                           </div>
                         </div>
-                        <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                        <div className="ml-3 min-w-0 flex-1">
                           <div className="text-sm font-medium text-gray-900 truncate">
                             {user.name}
                           </div>
                           <div className="text-sm text-gray-500 truncate">
                             {user.email}
                           </div>
-                          {/* Show role and client on mobile */}
-                          <div className="md:hidden mt-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                                {getRoleLabel(user.role)}
-                              </span>
-                              {user.client_name && (
-                                <span className="text-xs text-gray-600 truncate">
-                                  {user.client_name}
-                                </span>
-                              )}
-                            </div>
-                            {user.phone && (
-                              <div className="flex items-center mt-1">
-                                <Phone className="w-3 h-3 mr-1 text-gray-400" />
-                                <span className="text-xs text-gray-600">{user.phone}</span>
-                              </div>
-                            )}
+                          <div className="text-xs text-gray-400 truncate">
+                            {getRoleLabel(user.role)}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="hidden md:table-cell px-3 sm:px-6 py-4">
+                    <td className="hidden lg:table-cell px-3 py-4">
                       <div className="text-sm text-gray-900 truncate">
                         {user.client_name || 'Sin cliente'}
                       </div>
-                      <div className="flex items-center mt-1">
-                        {getRoleIcon(user.role)}
-                        <span className="ml-1 text-xs text-gray-500">
-                          {getRoleLabel(user.role)}
-                        </span>
-                      </div>
                     </td>
-                    <td className="hidden lg:table-cell px-3 sm:px-6 py-4">
-                      <div className="text-sm text-gray-900">
-                        {user.phone && (
-                          <div className="flex items-center mb-1">
-                            <Phone className="w-3 h-3 mr-1 text-gray-400 flex-shrink-0" />
-                            <span className="truncate">{user.phone}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center">
-                          <Mail className="w-3 h-3 mr-1 text-gray-400 flex-shrink-0" />
-                          <span className="truncate text-xs">{user.email}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="hidden sm:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         user.is_active
                           ? 'bg-green-100 text-green-800'
@@ -407,14 +366,14 @@ const UsersManagement: React.FC = () => {
                         {user.is_active ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
-                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center space-x-2">
+                    <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-1">
                         <button
                           onClick={() => handleViewUser(user)}
                           className="text-blue-600 hover:text-blue-900 p-1"
                           title="Ver detalles"
                         >
-                          <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
+                          <Eye className="w-4 h-4" />
                         </button>
                         {canManageUsers && (
                           <>
@@ -423,14 +382,14 @@ const UsersManagement: React.FC = () => {
                               className="text-yellow-600 hover:text-yellow-900 p-1"
                               title="Editar"
                             >
-                              <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
+                              <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteUser(user)}
                               className="text-red-600 hover:text-red-900 p-1"
                               title="Eliminar"
                             >
-                              <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </>
                         )}

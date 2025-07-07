@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, UserPlus, MessageSquare, Clock, User, MapPin, AlertCircle, Send, CheckCircle, Paperclip, Download } from 'lucide-react';
+import { ArrowLeft, Edit, User, AlertCircle, Send, CheckCircle, Paperclip, Download } from 'lucide-react';
 import { Ticket, TicketComment, TicketAttachment, ticketsService } from '../../services/ticketsService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
@@ -368,8 +368,8 @@ const TicketDetailPage: React.FC = () => {
               </button>
               
               {/* Status Change Buttons */}
-              {/* Iniciar Trabajo - Solo técnicos/admins pueden iniciar trabajo en tickets */}
-              {ticket.status === 'nuevo' && user?.role && ['superadmin', 'technician'].includes(user.role) && (
+              {/* Iniciar Trabajo - Solo técnicos/admins pueden iniciar trabajo en tickets nuevos o asignados */}
+              {(ticket.status === 'nuevo' || ticket.status === 'asignado') && user?.role && ['superadmin', 'technician'].includes(user.role) && (
                 <button
                   onClick={() => handleStatusChange('en_proceso')}
                   className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"

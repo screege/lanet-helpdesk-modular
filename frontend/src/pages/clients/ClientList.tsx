@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2,
-  Users,
   MapPin,
   Plus,
   Search,
   Eye,
   Edit,
   Trash2,
-  Filter,
   Ticket
 } from 'lucide-react';
 import { apiService } from '../../services/api';

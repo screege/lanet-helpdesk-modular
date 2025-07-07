@@ -42,9 +42,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (storedUser && accessToken) {
         try {
-          // Parse stored user data safely
-          const parsedUser = JSON.parse(storedUser);
-
           // Verify token is still valid by getting current user
           const response = await apiService.getCurrentUser();
           if (response.success && response.data) {

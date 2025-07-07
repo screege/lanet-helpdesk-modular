@@ -16,7 +16,7 @@ import TicketCreatePage from '@/pages/tickets/TicketCreatePage';
 import TicketDetailPage from '@/pages/tickets/TicketDetailPage';
 import TicketEditPage from '@/pages/tickets/TicketEditPage';
 import CategoriesManagement from '@/pages/categories/CategoriesManagement';
-import EmailSettings from '@/pages/admin/EmailSettings';
+
 import EmailConfigTabs from '@/pages/admin/EmailConfigTabs';
 import EmailTemplates from '@/pages/admin/EmailTemplates';
 import EmailMonitoring from '@/pages/admin/EmailMonitoring';

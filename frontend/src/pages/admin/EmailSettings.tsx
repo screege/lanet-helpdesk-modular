@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { emailService, EmailConfiguration } from '../../services/emailService';
 import {
@@ -7,17 +7,10 @@ import {
   Plus,
   Edit,
   Trash2,
-  Settings,
-  CheckCircle,
-  XCircle,
   AlertCircle,
-  Eye,
-  EyeOff,
   TestTube,
   Star,
-  StarOff,
-  ArrowLeft,
-  Save
+  StarOff
 } from 'lucide-react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';

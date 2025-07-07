@@ -1,19 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { emailService, EmailTemplate } from '../../services/emailService';
-import { 
-  Mail, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  Copy,
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
   AlertCircle,
   FileText,
   Star,
-  StarOff,
-  Code,
-  Type
+  Code
 } from 'lucide-react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { emailService, EmailConfiguration } from '../../services/emailService';
+import { emailService } from '../../services/emailService';
 import { 
   ArrowLeft, 
   Save, 

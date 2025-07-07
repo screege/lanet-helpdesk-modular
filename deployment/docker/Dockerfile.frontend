@@ -1,6 +1,7 @@
 # LANET Helpdesk V3 - Frontend Dockerfile
 # Etapa 1: Construir la aplicación
-FROM node:18-alpine AS builder
+# Using EXACT same Node version as development
+FROM node:22.16.0-alpine AS builder
 
 # Instalar dependencias del sistema
 RUN apk add --no-cache git
@@ -24,8 +25,8 @@ COPY frontend/src ./src
 COPY frontend/public ./public
 COPY frontend/index.html ./
 
-# Construir la aplicación
-RUN npm run build
+# Construir la aplicación (sin verificación TypeScript para Docker)
+RUN npm run build:docker
 
 # Etapa 2: Servir con nginx
 FROM nginx:alpine

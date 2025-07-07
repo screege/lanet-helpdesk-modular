@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Eye, Edit, Trash2, UserPlus, Clock, AlertCircle, Ticket as TicketIcon } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon } from 'lucide-react';
 import { ticketsService, Ticket, TicketFilters } from '../../services/ticketsService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';

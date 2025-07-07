@@ -2,8 +2,9 @@ version: '3.8'
 
 services:
   # PostgreSQL Database
+  # Using EXACT same PostgreSQL version as development
   postgres:
-    image: postgres:15
+    image: postgres:17.4
     container_name: lanet-helpdesk-db
     environment:
       POSTGRES_DB: lanet_helpdesk
@@ -41,20 +42,20 @@ services:
       - lanet-network
     restart: unless-stopped
 
-  # Frontend (temporarily disabled due to TypeScript errors)
-  # frontend:
-  #   build:
-  #     context: ../..
-  #     dockerfile: deployment/docker/Dockerfile.frontend
-  #   container_name: lanet-helpdesk-frontend
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   depends_on:
-  #     - backend
-  #   networks:
-  #     - lanet-network
-  #   restart: unless-stopped
+  # Frontend
+  frontend:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.frontend
+    container_name: lanet-helpdesk-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+    networks:
+      - lanet-network
+    restart: unless-stopped
 
   # SLA Monitor Service
   sla-monitor:

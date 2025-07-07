@@ -10,8 +10,6 @@ import {
   Trash2, 
   MapPin, 
   Ticket,
-  ChevronLeft,
-  ChevronRight,
   Filter
 } from 'lucide-react';
 import SiteForm from '../../components/sites/SiteForm';

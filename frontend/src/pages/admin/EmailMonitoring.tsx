@@ -12,9 +12,7 @@ import {
   Pause,
   RotateCcw,
   Activity,
-  TrendingUp,
-  Filter,
-  Search
+  TrendingUp
 } from 'lucide-react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';

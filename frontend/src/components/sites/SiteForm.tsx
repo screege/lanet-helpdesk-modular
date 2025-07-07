@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, MapPin, Save, Mail, Plus, Trash2 } from 'lucide-react';
+import { X, Building2, Save, Mail, Plus, Trash2 } from 'lucide-react';
 import { sitesService, Site, CreateSiteData, UpdateSiteData } from '../../services/sitesService';
-import { apiService } from '../../services/api';
+import { clientsService } from '../../services/clientsService';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 

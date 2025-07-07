@@ -6,13 +6,9 @@ import {
   Clock,
   Users,
   Building2,
-  TrendingUp,
   AlertTriangle,
   CheckCircle,
-  XCircle,
   Plus,
-  ArrowUpRight,
-  Calendar,
   Activity,
 } from 'lucide-react';
 

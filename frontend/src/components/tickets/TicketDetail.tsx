@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit, UserPlus, MessageSquare, Clock, User, MapPin, AlertCircle, Send } from 'lucide-react';
+import { X, Edit, UserPlus, MessageSquare, Clock, User, Send } from 'lucide-react';
 import { Ticket, TicketComment, ticketsService } from '../../services/ticketsService';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
