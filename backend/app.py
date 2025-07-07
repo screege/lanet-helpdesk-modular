@@ -49,7 +49,7 @@ def create_app(config_name='development'):
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire for development
     app.config['DATABASE_URL'] = os.getenv('DATABASE_URL', 'postgresql://postgres:Poikl55+*@localhost:5432/lanet_helpdesk')
     app.config['REDIS_URL'] = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-    app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), '..', 'uploads')
+    app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', os.path.join(os.path.dirname(__file__), 'uploads'))
     app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max file size
     
     # Ensure upload directory exists

@@ -269,6 +269,7 @@ class NotificationsService:
             'site_name': ticket['site_name'] or 'Sitio',
             'category_name': ticket['category_name'] or 'Sin categoría',
             'affected_person': ticket['affected_person'] or 'Usuario',
+            'contact_name': ticket['affected_person'] or 'Usuario',  # Add alias for contact_name
             'affected_person_phone': ticket.get('affected_person_phone') or '',
             'notification_email': ticket.get('notification_email') or '',
             'created_by_name': ticket['created_by_name'] or 'Sistema',
@@ -277,13 +278,26 @@ class NotificationsService:
             'created_at': ticket['created_at'].strftime('%d/%m/%Y %H:%M') if ticket['created_at'] else '',
             'updated_at': ticket['updated_at'].strftime('%d/%m/%Y %H:%M') if ticket['updated_at'] else '',
             'assigned_at': ticket['assigned_at'].strftime('%d/%m/%Y %H:%M') if ticket['assigned_at'] else '',
-            'resolved_at': ticket['resolved_at'].strftime('%d/%m/%Y %H:%M') if ticket['resolved_at'] else ''
+            'resolved_at': ticket['resolved_at'].strftime('%d/%m/%Y %H:%M') if ticket['resolved_at'] else '',
+            'created_date': ticket['created_at'].strftime('%d/%m/%Y %H:%M') if ticket['created_at'] else '',
+            'assigned_date': ticket['assigned_at'].strftime('%d/%m/%Y %H:%M') if ticket['assigned_at'] else '',
+            'update_date': ticket['updated_at'].strftime('%d/%m/%Y %H:%M') if ticket['updated_at'] else '',
+            'resolved_date': ticket['resolved_at'].strftime('%d/%m/%Y %H:%M') if ticket['resolved_at'] else '',
+            'closed_date': ticket.get('closed_at', '').strftime('%d/%m/%Y %H:%M') if ticket.get('closed_at') else '',
+            'technician_name': ticket['assigned_to_name'] or 'Sin asignar',  # Add alias for technician_name
+            'assigned_technician': ticket['assigned_to_name'] or 'Sin asignar',  # Add alias for assigned_technician
+            'updated_by': ticket['assigned_to_name'] or ticket['created_by_name'] or 'Sistema',
+            'resolved_by': ticket['assigned_to_name'] or 'Sistema',
+            'closed_by': ticket['assigned_to_name'] or 'Sistema',
+            'portal_url': 'https://helpdesk.lanet.mx'  # Add portal URL (can be made configurable later)
         }
-        
+
         # Add additional data if provided
         if additional_data:
             variables.update(additional_data)
-        
+
+        current_app.logger.debug(f"🔔 VARIABLES: Prepared {len(variables)} template variables")
+
         return variables
     
     def _send_email_notification(self, recipient: Dict, template: Dict,
@@ -293,6 +307,11 @@ class NotificationsService:
             # Replace template variables
             subject = self._replace_template_variables(template['subject_template'], variables)
             body = self._replace_template_variables(template['body_template'], variables)
+
+            # Enhance subject with ticket number and client name if not already included
+            if variables.get('ticket_number') and variables.get('client_name'):
+                if variables['ticket_number'] not in subject:
+                    subject = f"{variables['ticket_number']} - {subject} - {variables['client_name']}"
 
             current_app.logger.info(f"🔔 NOTIFICATION: Queueing email to {recipient['email']} - {subject}")
 
@@ -327,11 +346,18 @@ class NotificationsService:
     def _replace_template_variables(self, template: str, variables: Dict) -> str:
         """Replace template variables with actual values"""
         try:
+            original_template = template
             for key, value in variables.items():
-                template = template.replace(f'{{{{{key}}}}}', str(value or ''))
+                placeholder = f'{{{{{key}}}}}'
+                replacement = str(value or '')
+                if placeholder in template:
+                    template = template.replace(placeholder, replacement)
+                    current_app.logger.debug(f"🔔 TEMPLATE: Replaced {placeholder} with '{replacement}'")
+
             return template
-        except Exception:
-            return template
+        except Exception as e:
+            current_app.logger.error(f"🔔 TEMPLATE: Error in template replacement: {e}")
+            return original_template
     
     def send_sla_warning(self, ticket_id: str, sla_type: str, time_remaining: int) -> bool:
         """Send SLA warning notification"""

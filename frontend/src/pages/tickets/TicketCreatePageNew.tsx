@@ -412,28 +412,27 @@ const TicketCreatePageNew: React.FC = () => {
           {/* Asignación (solo para admin/technician) */}
           {(user?.role === 'superadmin' || user?.role === 'admin' || user?.role === 'technician') && (
             <div className="bg-white shadow rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Asignación</h3>
-
-                <div>
-                  <label htmlFor="assigned_to" className="block text-sm font-medium text-gray-700">
-                    Asignar a
-                  </label>
-                  <select
-                    name="assigned_to"
-                    id="assigned_to"
-                    value={formData.assigned_to}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  >
-                    <option value="">Sin asignar</option>
-                    {Array.isArray(technicians) && technicians.map((tech) => (
-                      <option key={tech.user_id} value={tech.user_id}>
-                        {tech.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Asignación</h3>
+              <div>
+                <label htmlFor="assigned_to" className="block text-sm font-medium text-gray-700">
+                  Asignar a
+                </label>
+                <select
+                  name="assigned_to"
+                  id="assigned_to"
+                  value={formData.assigned_to}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="">Sin asignar</option>
+                  {Array.isArray(technicians) && technicians.map((tech) => (
+                    <option key={tech.user_id} value={tech.user_id}>
+                      {tech.name}
+                    </option>
+                  ))}
+                </select>
               </div>
+            </div>
           )}
 
           {/* Archivos Adjuntos */}

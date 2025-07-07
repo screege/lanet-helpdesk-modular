@@ -220,6 +220,13 @@ class TicketService:
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow()
             }
+
+            # Auto-assignment logic: assign to available technician if not explicitly assigned
+            if not new_ticket_data['assigned_to']:
+                auto_assigned_technician = self._get_auto_assignment_technician(ticket_data['client_id'], ticket_data['priority'])
+                if auto_assigned_technician:
+                    new_ticket_data['assigned_to'] = auto_assigned_technician
+                    self.logger.info(f"Auto-assigned ticket {ticket_number} to technician {auto_assigned_technician}")
             
             # Auto-assign if assigned_to is provided
             if new_ticket_data['assigned_to']:
@@ -288,6 +295,51 @@ class TicketService:
             self.logger.error(f"Error generating ticket number: {e}")
             # Final fallback to UUID-based number
             return f"TKT-{str(uuid.uuid4())[:8].upper()}"
+
+    def _get_auto_assignment_technician(self, client_id: str, priority: str) -> Optional[str]:
+        """Get technician for auto-assignment using round-robin algorithm"""
+        try:
+            # Get available technicians (superadmin, admin, technician roles)
+            technicians_query = """
+            SELECT user_id, name, email, role
+            FROM users
+            WHERE role IN ('superadmin', 'admin', 'technician')
+            AND is_active = true
+            ORDER BY role DESC, name ASC
+            """
+
+            technicians = self.db.execute_query(technicians_query)
+
+            if not technicians:
+                self.logger.warning("No available technicians found for auto-assignment")
+                return None
+
+            # For now, use simple round-robin: get technician with least assigned tickets
+            # This can be enhanced later with more sophisticated algorithms
+            assignment_query = """
+            SELECT u.user_id, u.name, COUNT(t.ticket_id) as ticket_count
+            FROM users u
+            LEFT JOIN tickets t ON u.user_id = t.assigned_to
+                AND t.status NOT IN ('cerrado', 'resuelto')
+            WHERE u.role IN ('superadmin', 'admin', 'technician')
+            AND u.is_active = true
+            GROUP BY u.user_id, u.name
+            ORDER BY ticket_count ASC, u.name ASC
+            LIMIT 1
+            """
+
+            selected_technician = self.db.execute_query(assignment_query, fetch='one')
+
+            if selected_technician:
+                self.logger.info(f"Auto-assignment: Selected {selected_technician['name']} (current tickets: {selected_technician['ticket_count']})")
+                return selected_technician['user_id']
+
+            # Fallback: return first available technician
+            return technicians[0]['user_id']
+
+        except Exception as e:
+            self.logger.error(f"Error in auto-assignment logic: {e}")
+            return None
     
     def _create_activity_log(self, ticket_id: str, user_id: str, action: str, description: str):
         """Create activity log entry"""

@@ -14,8 +14,13 @@ import logging
 import os
 
 # Configure detailed logging for debugging
+import os
+log_dir = os.environ.get('LOG_FOLDER', '/app/logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'backend_tickets.log')
+
 logging.basicConfig(
-    filename='C:/temp/backend_tickets.log',
+    filename=log_file,
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     filemode='w'  # Overwrite on each restart

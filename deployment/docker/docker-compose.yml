@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: lanet-helpdesk-db
+    environment:
+      POSTGRES_DB: lanet_helpdesk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Poikl55+*}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ../database/initial_data.sql:/docker-entrypoint-initdb.d/02-data.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+  # Backend API
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: ../deployment/docker/Dockerfile.backend
+    container_name: lanet-helpdesk-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
+      JWT_SECRET_KEY: ${JWT_SECRET:-lanet-helpdesk-secret-2024}
+      FLASK_ENV: production
+      UPLOAD_FOLDER: /app/uploads
+    volumes:
+      - backend_logs:/app/logs
+      - backend_uploads:/app/uploads
+    ports:
+      - "5001:5001"
+    depends_on:
+      - postgres
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+  # Frontend (temporarily disabled due to TypeScript errors)
+  # frontend:
+  #   build:
+  #     context: ../..
+  #     dockerfile: deployment/docker/Dockerfile.frontend
+  #   container_name: lanet-helpdesk-frontend
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - lanet-network
+  #   restart: unless-stopped
+
+  # SLA Monitor Service
+  sla-monitor:
+    build:
+      context: ../../backend
+      dockerfile: ../deployment/docker/Dockerfile.sla-monitor
+    container_name: lanet-helpdesk-sla-monitor
+    environment:
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
+    volumes:
+      - sla_logs:/app/logs
+    depends_on:
+      - postgres
+      - backend
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+  # Email Processing Service
+  email-processor:
+    build:
+      context: ../../backend
+      dockerfile: ../deployment/docker/Dockerfile.email-processor
+    container_name: lanet-helpdesk-email-processor
+    environment:
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
+    volumes:
+      - email_logs:/app/logs
+    depends_on:
+      - postgres
+      - backend
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: lanet-helpdesk-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (temporarily disabled)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: lanet-helpdesk-nginx
+  #   volumes:
+  #     - ../configs/nginx.conf:/etc/nginx/nginx.conf
+  #     - nginx_logs:/var/log/nginx
+  #   ports:
+  #     - "8080:80"
+  #   depends_on:
+  #     - frontend
+  #     - backend
+  #   networks:
+  #     - lanet-network
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backend_logs:
+  backend_uploads:
+  redis_data:
+  nginx_logs:
+  sla_logs:
+  email_logs:
+
+networks:
+  lanet-network:
+    driver: bridge

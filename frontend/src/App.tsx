@@ -21,6 +21,7 @@ import EmailConfigTabs from '@/pages/admin/EmailConfigTabs';
 import EmailTemplates from '@/pages/admin/EmailTemplates';
 import EmailMonitoring from '@/pages/admin/EmailMonitoring';
 import EmailConfigForm from '@/pages/admin/EmailConfigForm';
+import SLASimple from '@/pages/admin/SLASimple';
 import './App.css';
 
 const App: React.FC = () => {
@@ -60,7 +61,7 @@ const App: React.FC = () => {
 
               {/* Admin routes */}
               <Route path="admin/categories" element={<div className="p-6">Categorías - En desarrollo</div>} />
-              <Route path="admin/sla-management" element={<div className="p-6">Gestión SLA - En desarrollo</div>} />
+              <Route path="admin/sla-management" element={<SLASimple />} />
               <Route path="admin/email-config" element={<EmailConfigTabs />} />
               <Route path="admin/email-config/new" element={<EmailConfigForm />} />
               <Route path="admin/email-config/edit/:id" element={<EmailConfigForm />} />

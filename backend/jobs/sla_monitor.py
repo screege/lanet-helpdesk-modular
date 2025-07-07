@@ -85,29 +85,32 @@ def run_sla_monitor():
             else:
                 logger.info("No emails in queue to process")
             
-            # 5. Check for incoming emails
+            # 5. Check for incoming emails (optional - skip if IMAP not configured)
             logger.info("Checking for incoming emails...")
             try:
-                incoming_emails = email_service.check_incoming_emails()
-                
-                if incoming_emails:
-                    logger.info(f"Found {len(incoming_emails)} incoming emails")
-                    
-                    # Process each incoming email
-                    processed_tickets = 0
-                    for email_data in incoming_emails:
-                        config = email_service.get_default_config()
-                        if config:
+                config = email_service.get_default_config()
+                if config and config.get('enable_email_to_ticket') and config.get('imap_host'):
+                    incoming_emails = email_service.check_incoming_emails()
+
+                    if incoming_emails:
+                        logger.info(f"Found {len(incoming_emails)} incoming emails")
+
+                        # Process each incoming email
+                        processed_tickets = 0
+                        for email_data in incoming_emails:
                             ticket_id = email_service.process_incoming_email(email_data, config)
                             if ticket_id:
                                 processed_tickets += 1
-                    
-                    logger.info(f"Created/updated {processed_tickets} tickets from incoming emails")
+
+                        logger.info(f"Created/updated {processed_tickets} tickets from incoming emails")
+                    else:
+                        logger.info("No new incoming emails")
                 else:
-                    logger.info("No new incoming emails")
-                    
+                    logger.info("IMAP not configured or email-to-ticket disabled - skipping incoming email check")
+
             except Exception as e:
-                logger.error(f"Error checking incoming emails: {e}")
+                logger.warning(f"Error checking incoming emails (non-critical): {e}")
+                logger.info("Continuing SLA monitoring without email processing")
             
             logger.info("SLA monitor job completed successfully")
             

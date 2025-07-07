@@ -587,5 +587,230 @@ class SLAService:
             current_app.logger.error(f"Error calculating time elapsed: {e}")
             return 'N/A'
 
+    def calculate_business_hours(self, start_time: datetime, end_time: datetime,
+                               business_start: int = 8, business_end: int = 17,
+                               business_days: List[int] = None) -> float:
+        """Calculate business hours between two datetime objects"""
+        try:
+            if business_days is None:
+                business_days = [0, 1, 2, 3, 4]  # Monday to Friday
+
+            if start_time >= end_time:
+                return 0.0
+
+            total_hours = 0.0
+            current_time = start_time
+
+            while current_time.date() <= end_time.date():
+                # Check if current day is a business day
+                if current_time.weekday() in business_days:
+                    # Calculate business hours for this day
+                    day_start = current_time.replace(hour=business_start, minute=0, second=0, microsecond=0)
+                    day_end = current_time.replace(hour=business_end, minute=0, second=0, microsecond=0)
+
+                    # Adjust for start and end times
+                    if current_time.date() == start_time.date():
+                        day_start = max(day_start, start_time)
+                    if current_time.date() == end_time.date():
+                        day_end = min(day_end, end_time)
+
+                    # Calculate hours for this day
+                    if day_start < day_end:
+                        day_hours = (day_end - day_start).total_seconds() / 3600
+                        total_hours += day_hours
+
+                # Move to next day
+                current_time = (current_time + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+            return total_hours
+
+        except Exception as e:
+            current_app.logger.error(f"Error calculating business hours: {e}")
+            return 0.0
+
+    def run_sla_monitor(self) -> Dict[str, int]:
+        """Run SLA monitoring - check breaches, warnings, and process escalations"""
+        try:
+            current_app.logger.info("🔍 SLA Monitor: Starting SLA monitoring cycle")
+
+            results = {
+                'breaches_found': 0,
+                'warnings_found': 0,
+                'escalations_processed': 0,
+                'notifications_sent': 0
+            }
+
+            # Check for SLA breaches
+            breaches = self.check_sla_breaches()
+            results['breaches_found'] = len(breaches)
+
+            if breaches:
+                current_app.logger.warning(f"🚨 SLA Monitor: Found {len(breaches)} SLA breaches")
+                for breach in breaches:
+                    # Send breach notification
+                    if self.send_sla_breach_notification(breach):
+                        results['notifications_sent'] += 1
+
+            # Check for SLA warnings
+            warnings = self.check_sla_warnings(warning_hours=2)
+            results['warnings_found'] = len(warnings)
+
+            if warnings:
+                current_app.logger.info(f"⚠️ SLA Monitor: Found {len(warnings)} SLA warnings")
+
+            # Process escalations
+            escalations = self.process_escalations()
+            results['escalations_processed'] = escalations
+
+            if escalations > 0:
+                current_app.logger.info(f"📈 SLA Monitor: Processed {escalations} escalations")
+
+            current_app.logger.info(f"✅ SLA Monitor: Completed monitoring cycle - {results}")
+            return results
+
+        except Exception as e:
+            current_app.logger.error(f"❌ SLA Monitor: Error in monitoring cycle: {e}")
+            return {'error': str(e)}
+
+    def create_sla_policy(self, data: Dict) -> Optional[str]:
+        """Create a new SLA policy"""
+        try:
+            import uuid
+            policy_id = str(uuid.uuid4())
+
+            query = """
+            INSERT INTO sla_policies (
+                policy_id, name, description, priority,
+                response_time_hours, resolution_time_hours,
+                business_hours_only, escalation_enabled, escalation_levels,
+                client_id, category_id, is_active, is_default
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+
+            params = (
+                policy_id,
+                data['name'],
+                data.get('description'),
+                data['priority'],
+                data['response_time_hours'],
+                data['resolution_time_hours'],
+                data.get('business_hours_only', True),
+                data.get('escalation_enabled', False),
+                json.dumps(data.get('escalation_levels', 1)),  # Convert to JSON
+                data.get('client_id') if data.get('client_id') else None,
+                data.get('category_id') if data.get('category_id') else None,
+                data.get('is_active', True),
+                False  # New policies are not default by default
+            )
+
+            current_app.db_manager.execute_query(query, params, fetch='none')
+            current_app.logger.info(f"Created SLA policy: {data['name']} (ID: {policy_id})")
+            return policy_id
+
+        except Exception as e:
+            current_app.logger.error(f"Error creating SLA policy: {e}")
+            return None
+
+    def update_sla_policy(self, policy_id: str, data: Dict) -> bool:
+        """Update an existing SLA policy"""
+        try:
+            # Build dynamic update query
+            update_fields = []
+            params = []
+
+            if 'name' in data:
+                update_fields.append("name = %s")
+                params.append(data['name'])
+            if 'description' in data:
+                update_fields.append("description = %s")
+                params.append(data['description'])
+            if 'priority' in data:
+                update_fields.append("priority = %s")
+                params.append(data['priority'])
+            if 'response_time_hours' in data:
+                update_fields.append("response_time_hours = %s")
+                params.append(data['response_time_hours'])
+            if 'resolution_time_hours' in data:
+                update_fields.append("resolution_time_hours = %s")
+                params.append(data['resolution_time_hours'])
+            if 'business_hours_only' in data:
+                update_fields.append("business_hours_only = %s")
+                params.append(data['business_hours_only'])
+            if 'escalation_enabled' in data:
+                update_fields.append("escalation_enabled = %s")
+                params.append(data['escalation_enabled'])
+            if 'escalation_levels' in data:
+                update_fields.append("escalation_levels = %s")
+                params.append(json.dumps(data['escalation_levels']))
+            if 'client_id' in data:
+                update_fields.append("client_id = %s")
+                params.append(data['client_id'] if data['client_id'] else None)
+            if 'category_id' in data:
+                update_fields.append("category_id = %s")
+                params.append(data['category_id'] if data['category_id'] else None)
+            if 'is_active' in data:
+                update_fields.append("is_active = %s")
+                params.append(data['is_active'])
+
+            if not update_fields:
+                return False
+
+            update_fields.append("updated_at = NOW()")
+            params.append(policy_id)
+
+            query = f"""
+            UPDATE sla_policies
+            SET {', '.join(update_fields)}
+            WHERE policy_id = %s
+            """
+
+            current_app.db_manager.execute_query(query, params, fetch='none')
+            current_app.logger.info(f"Updated SLA policy: {policy_id}")
+            return True
+
+        except Exception as e:
+            current_app.logger.error(f"Error updating SLA policy: {e}")
+            return False
+
+    def delete_sla_policy(self, policy_id: str) -> bool:
+        """Delete an SLA policy"""
+        try:
+            # Check if policy is default
+            check_query = "SELECT is_default FROM sla_policies WHERE policy_id = %s"
+            policy = current_app.db_manager.execute_query(check_query, (policy_id,), fetch='one')
+
+            if policy and policy['is_default']:
+                current_app.logger.warning(f"Cannot delete default SLA policy: {policy_id}")
+                return False
+
+            # Delete the policy
+            query = "DELETE FROM sla_policies WHERE policy_id = %s"
+            current_app.db_manager.execute_query(query, (policy_id,), fetch='none')
+            current_app.logger.info(f"Deleted SLA policy: {policy_id}")
+            return True
+
+        except Exception as e:
+            current_app.logger.error(f"Error deleting SLA policy: {e}")
+            return False
+
+    def set_default_policy(self, policy_id: str) -> bool:
+        """Set an SLA policy as default"""
+        try:
+            # First, unset all other default policies
+            current_app.db_manager.execute_query(
+                "UPDATE sla_policies SET is_default = false WHERE is_default = true",
+                fetch='none'
+            )
+
+            # Set the new default policy
+            query = "UPDATE sla_policies SET is_default = true WHERE policy_id = %s"
+            current_app.db_manager.execute_query(query, (policy_id,), fetch='none')
+            current_app.logger.info(f"Set default SLA policy: {policy_id}")
+            return True
+
+        except Exception as e:
+            current_app.logger.error(f"Error setting default SLA policy: {e}")
+            return False
+
 # Global SLA service instance
 sla_service = SLAService()
