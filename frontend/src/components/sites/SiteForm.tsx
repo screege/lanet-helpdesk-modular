@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Building2, Save, Mail, Plus, Trash2 } from 'lucide-react';
 import { sitesService, Site, CreateSiteData, UpdateSiteData } from '../../services/sitesService';
-import { clientsService } from '../../services/clientsService';
+import { clientsService, Client } from '../../services/clientsService';
+import { ApiResponse } from '../../types';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 
@@ -33,7 +34,7 @@ const SiteForm: React.FC<SiteFormProps> = ({
     authorized_emails: site?.authorized_emails || []
   });
 
-  const [clients, setClients] = useState<any[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingClients, setLoadingClients] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +70,11 @@ const SiteForm: React.FC<SiteFormProps> = ({
   const loadClients = async () => {
     try {
       setLoadingClients(true);
-      const response = await clientsService.getAllClients({ per_page: 100 });
+      const response = await clientsService.getAllClients({ per_page: 100 }) as ApiResponse<{ clients: Client[] }>;
       if (response.success) {
         setClients(response.data.clients || []);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading clients:', err);
     } finally {
       setLoadingClients(false);
@@ -169,7 +170,7 @@ const SiteForm: React.FC<SiteFormProps> = ({
       let response;
       if (isEditing) {
         const updateData: UpdateSiteData = { ...siteData };
-        delete (updateData as any).client_id; // Can't change client_id when editing
+        delete (updateData as Record<string, unknown>).client_id; // Can't change client_id when editing
         response = await sitesService.updateSite(site.site_id, updateData);
       } else {
         response = await sitesService.createSite(siteData as CreateSiteData);
@@ -180,8 +181,8 @@ const SiteForm: React.FC<SiteFormProps> = ({
       } else {
         setError(response.message || `Failed to ${isEditing ? 'update' : 'create'} site`);
       }
-    } catch (err: any) {
-      setError(err.message || `Failed to ${isEditing ? 'update' : 'create'} site`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : `Failed to ${isEditing ? 'update' : 'create'} site`);
     } finally {
       setLoading(false);
     }

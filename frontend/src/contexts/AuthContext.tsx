@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
           }
-        } catch (parseError) {
+        } catch (parseError: unknown) {
           console.error('Error parsing stored user data:', parseError);
           // Clear corrupted data
           localStorage.removeItem('user');
@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           localStorage.removeItem('refresh_token');
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Auth initialization error:', error);
       // Clear invalid tokens
       localStorage.removeItem('user');
@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         return { success: false, error: response.error || 'Login failed' };
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
       return { success: false, error: 'Login failed' };
     } finally {

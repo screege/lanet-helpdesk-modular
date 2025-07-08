@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { apiService } from '../../services/api';
 
 const ApiTest: React.FC = () => {
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
 
   const testUsersAPI = async () => {

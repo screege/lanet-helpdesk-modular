@@ -37,9 +37,9 @@ const ReopenTicketModal: React.FC<ReopenTicketModalProps> = ({
       setReopenReason('');
       onClose();
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening ticket:', err);
-      setError(err.message || 'Error al reabrir el ticket');
+      setError(err instanceof Error ? err.message : 'Error al reabrir el ticket');
     } finally {
       setSubmitting(false);
     }

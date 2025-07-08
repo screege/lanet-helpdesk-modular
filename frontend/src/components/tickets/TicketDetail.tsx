@@ -52,9 +52,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       
       setTicket(ticketData);
       setComments(commentsData);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading ticket data:', err);
-      setError(err.response?.data?.message || 'Error al cargar el ticket');
+      setError(err instanceof Error ? err.message : 'Error al cargar el ticket');
     } finally {
       setLoading(false);
     }
@@ -90,9 +90,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.error || 'Error al agregar comentario');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding comment:', err);
-      setError(err.response?.data?.error || err.message || 'Error al agregar comentario');
+      setError(err instanceof Error ? err.message : 'Error al agregar comentario');
     } finally {
       setSubmittingComment(false);
     }
@@ -125,9 +125,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.message || 'Error al cambiar estado del ticket');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating ticket status:', err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.details?.status || err.message || 'Error al cambiar estado del ticket';
+      const errorMessage = err instanceof Error ? err.message : 'Error al cambiar estado del ticket';
       setError(errorMessage);
       setLoading(false);
     }
@@ -149,9 +149,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.message || 'Error al resolver el ticket');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resolving ticket:', err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.details?.resolution_notes || err.message || 'Error al resolver el ticket';
+      const errorMessage = err instanceof Error ? err.message : 'Error al resolver el ticket';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
@@ -178,9 +178,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.message || 'Error al reabrir el ticket');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening ticket:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Error al reabrir el ticket';
+      const errorMessage = err instanceof Error ? err.message : 'Error al reabrir el ticket';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);

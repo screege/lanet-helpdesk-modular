@@ -1,4 +1,5 @@
 import { apiService } from './api';
+import { ApiResponse } from '../types';
 
 export interface EmailConfiguration {
   config_id: string;
@@ -120,7 +121,7 @@ class EmailService {
     return response.data;
   }
 
-  async sendTestEmail(configId: string, toEmail: string): Promise<any> {
+  async sendTestEmail(configId: string, toEmail: string): Promise<{ success: boolean; message: string }> {
     const response = await apiService.post(`/email/configurations/${configId}/send-test`, {
       to_email: toEmail
     });
@@ -226,13 +227,13 @@ class EmailService {
   }
 
   // Email Checking/Monitoring
-  async checkEmails(configId: string): Promise<any> {
+  async checkEmails(configId: string): Promise<ApiResponse> {
     const response = await apiService.post(`/email/configurations/${configId}/check-emails`, {});
     // Return the full response to maintain consistency with response manager format
     return response;
   }
 
-  async checkIncomingEmails(configId?: string): Promise<{ processed_tickets: any[]; message: string }> {
+  async checkIncomingEmails(configId?: string): Promise<{ processed_tickets: unknown[]; message: string }> {
     const response = await apiService.post('/email/incoming/check', { config_id: configId });
     return response.data;
   }

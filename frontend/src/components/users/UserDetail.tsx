@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, Calendar, Building2, Shield, MapPin, Clock } from 'lucide-react';
-import { usersService } from '../../services/usersService';
+import { X, User as UserIcon, Mail, Phone, Calendar, Building2, Shield, MapPin, Clock } from 'lucide-react';
+import { usersService, User } from '../../services/usersService';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 
 interface UserDetailProps {
   isOpen: boolean;
   onClose: () => void;
-  user: any;
+  user: User;
 }
 
 interface UserSite {
@@ -24,7 +24,7 @@ const UserDetail: React.FC<UserDetailProps> = ({
   onClose,
   user
 }) => {
-  const [userDetails, setUserDetails] = useState<any>(null);
+  const [userDetails, setUserDetails] = useState<User | null>(null);
   const [userSites, setUserSites] = useState<UserSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,13 +56,13 @@ const UserDetail: React.FC<UserDetailProps> = ({
         console.log('Sites response:', sitesResponse);
         // Filter only assigned sites and map to expected format
         const assignedSites = (sitesResponse.data.sites || [])
-          .filter((site: any) => site.is_assigned)
-          .map((site: any) => ({
-            site_id: site.site_id,
-            site_name: site.name,
-            client_name: site.client_name || 'Cliente',
-            city: site.city,
-            state: site.state,
+          .filter((site: unknown) => (site as any).is_assigned)
+          .map((site: unknown) => ({
+            site_id: (site as any).site_id,
+            site_name: (site as any).name,
+            client_name: (site as any).client_name || 'Cliente',
+            city: (site as any).city,
+            state: (site as any).state,
             assigned_at: site.assigned_at || new Date().toISOString()
           }));
         console.log('Mapped assigned sites:', assignedSites);
@@ -116,7 +116,7 @@ const UserDetail: React.FC<UserDetailProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
-            <User className="h-6 w-6 text-blue-600" />
+            <UserIcon className="h-6 w-6 text-blue-600" />
             <h3 className="text-lg font-medium text-gray-900">
               Detalles del Usuario
             </h3>
@@ -144,7 +144,7 @@ const UserDetail: React.FC<UserDetailProps> = ({
                 {/* User Avatar and Name */}
                 <div className="flex items-center space-x-4">
                   <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center">
-                    <User className="h-8 w-8 text-blue-600" />
+                    <UserIcon className="h-8 w-8 text-blue-600" />
                   </div>
                   <div>
                     <h5 className="text-xl font-semibold text-gray-900">{userDetails.name}</h5>
@@ -294,7 +294,7 @@ const UserDetail: React.FC<UserDetailProps> = ({
           </div>
         ) : (
           <div className="text-center py-8">
-            <User className="mx-auto h-12 w-12 text-gray-400" />
+            <UserIcon className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">Usuario no encontrado</h3>
             <p className="mt-1 text-sm text-gray-500">
               No se pudo cargar la información del usuario.
