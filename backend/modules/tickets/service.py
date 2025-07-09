@@ -680,6 +680,8 @@ class TicketService:
     def bulk_actions(self, ticket_ids: list, action: str, action_data: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
         """Perform bulk actions on multiple tickets"""
         try:
+            self.logger.info(f"🔧 SERVICE BULK_ACTIONS: Starting with {len(ticket_ids)} tickets, action: {action}")
+
             # Validate all ticket IDs exist and user has access
             accessible_tickets = []
             inaccessible_tickets = []
@@ -760,8 +762,11 @@ class TicketService:
             return response
 
         except Exception as e:
-            self.logger.error(f"Error in bulk actions: {e}")
-            return {'success': False, 'errors': {'general': 'Internal server error'}}
+            self.logger.error(f"🔧 SERVICE BULK_ACTIONS: Exception occurred: {e}")
+            self.logger.error(f"🔧 SERVICE BULK_ACTIONS: Exception type: {type(e)}")
+            import traceback
+            self.logger.error(f"🔧 SERVICE BULK_ACTIONS: Traceback: {traceback.format_exc()}")
+            return {'success': False, 'errors': {'general': f'Internal server error: {str(e)}'}}
 
     def _bulk_update_status(self, ticket: dict, action_data: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
         """Update ticket status in bulk operation"""
