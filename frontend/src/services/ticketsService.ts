@@ -164,6 +164,41 @@ export interface PaginatedTicketsResponse {
   };
 }
 
+// Bulk actions types
+export interface BulkActionRequest {
+  ticket_ids: string[];
+  action: 'update_status' | 'assign' | 'update_priority' | 'delete';
+  action_data: {
+    status?: string;
+    assigned_to?: string;
+    priority?: string;
+  };
+}
+
+export interface BulkActionResponse {
+  success: boolean;
+  total_requested: number;
+  successful_updates: number;
+  failed_updates: number;
+  inaccessible_tickets: number;
+  details: {
+    successful: Array<{
+      ticket_id: string;
+      ticket_number: string;
+      action: string;
+    }>;
+    failed: Array<{
+      ticket_id: string;
+      ticket_number: string;
+      error: string;
+    }>;
+    inaccessible: Array<{
+      ticket_id: string;
+      reason: string;
+    }>;
+  };
+}
+
 class TicketsService {
   // Get all tickets with pagination and filters
   async getAllTickets(filters?: TicketFilters): Promise<PaginatedTicketsResponse> {
@@ -275,6 +310,45 @@ class TicketsService {
   // Search tickets
   async searchTickets(filters: TicketFilters): Promise<PaginatedTicketsResponse> {
     return this.getAllTickets(filters);
+  }
+
+  // Bulk actions
+  async bulkActions(request: BulkActionRequest): Promise<BulkActionResponse> {
+    const response = await apiService.post('/tickets/bulk-actions', request);
+    return response.data;
+  }
+
+  // Helper methods for specific bulk actions
+  async bulkUpdateStatus(ticketIds: string[], status: string): Promise<BulkActionResponse> {
+    return this.bulkActions({
+      ticket_ids: ticketIds,
+      action: 'update_status',
+      action_data: { status }
+    });
+  }
+
+  async bulkAssign(ticketIds: string[], assignedTo: string): Promise<BulkActionResponse> {
+    return this.bulkActions({
+      ticket_ids: ticketIds,
+      action: 'assign',
+      action_data: { assigned_to: assignedTo }
+    });
+  }
+
+  async bulkUpdatePriority(ticketIds: string[], priority: string): Promise<BulkActionResponse> {
+    return this.bulkActions({
+      ticket_ids: ticketIds,
+      action: 'update_priority',
+      action_data: { priority }
+    });
+  }
+
+  async bulkDelete(ticketIds: string[]): Promise<BulkActionResponse> {
+    return this.bulkActions({
+      ticket_ids: ticketIds,
+      action: 'delete',
+      action_data: {}
+    });
   }
 }
 

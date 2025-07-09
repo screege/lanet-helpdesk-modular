@@ -786,6 +786,62 @@ def update_ticket_status(ticket_id):
         current_app.logger.error(f"Update ticket status error: {e}")
         return current_app.response_manager.server_error('Failed to update ticket status')
 
+@tickets_bp.route('/bulk-actions', methods=['POST'])
+@jwt_required()
+@require_role(['superadmin', 'admin', 'technician'])
+def bulk_actions():
+    """Perform bulk actions on multiple tickets"""
+    try:
+        from .service import TicketService
+
+        data = request.get_json()
+        if not data:
+            return current_app.response_manager.bad_request('No data provided')
+
+        # Validate required fields
+        if 'ticket_ids' not in data or not data['ticket_ids']:
+            return current_app.response_manager.bad_request('ticket_ids is required')
+
+        if 'action' not in data or not data['action']:
+            return current_app.response_manager.bad_request('action is required')
+
+        ticket_ids = data['ticket_ids']
+        action = data['action']
+        action_data = data.get('action_data', {})
+
+        # Validate ticket_ids is a list
+        if not isinstance(ticket_ids, list):
+            return current_app.response_manager.bad_request('ticket_ids must be an array')
+
+        # Limit bulk operations to 100 tickets max (like Zendesk)
+        if len(ticket_ids) > 100:
+            return current_app.response_manager.bad_request('Maximum 100 tickets allowed per bulk operation')
+
+        # Validate action
+        valid_actions = ['update_status', 'assign', 'update_priority', 'delete']
+        if action not in valid_actions:
+            return current_app.response_manager.bad_request(f'Invalid action. Valid actions: {", ".join(valid_actions)}')
+
+        current_user_id = get_jwt_identity()
+        claims = get_jwt()
+        user_role = claims.get('role')
+
+        # Additional permission checks for delete action
+        if action == 'delete' and user_role not in ['superadmin', 'admin']:
+            return current_app.response_manager.forbidden('Only superadmin and admin can delete tickets')
+
+        ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
+        result = ticket_service.bulk_actions(ticket_ids, action, action_data, current_user_id, user_role)
+
+        if result['success']:
+            return current_app.response_manager.success(result, 'Bulk action completed successfully')
+        else:
+            return current_app.response_manager.error('Bulk action failed', 400, details=result.get('errors'))
+
+    except Exception as e:
+        current_app.logger.error(f"Bulk actions error: {e}")
+        return current_app.response_manager.server_error('Failed to perform bulk actions')
+
 @tickets_bp.route('/<ticket_id>/resolutions', methods=['GET'])
 @jwt_required()
 def get_ticket_resolutions(ticket_id):

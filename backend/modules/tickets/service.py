@@ -676,3 +676,244 @@ class TicketService:
         except Exception as e:
             self.logger.error(f"Error adding comment to ticket {ticket_id}: {e}")
             return {'success': False, 'errors': {'general': 'Internal server error'}}
+
+    def bulk_actions(self, ticket_ids: list, action: str, action_data: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
+        """Perform bulk actions on multiple tickets"""
+        try:
+            # Validate all ticket IDs exist and user has access
+            accessible_tickets = []
+            inaccessible_tickets = []
+
+            for ticket_id in ticket_ids:
+                # Validate UUID format
+                if not self.db.validate_uuid(ticket_id):
+                    inaccessible_tickets.append({'ticket_id': ticket_id, 'reason': 'Invalid UUID format'})
+                    continue
+
+                # Check if ticket exists and user has access (using RLS)
+                ticket = self.db.execute_query(
+                    "SELECT ticket_id, ticket_number, status, client_id FROM tickets WHERE ticket_id = %s",
+                    (ticket_id,),
+                    fetch='one'
+                )
+
+                if ticket:
+                    accessible_tickets.append(ticket)
+                else:
+                    inaccessible_tickets.append({'ticket_id': ticket_id, 'reason': 'Ticket not found or access denied'})
+
+            if not accessible_tickets:
+                return {'success': False, 'errors': {'general': 'No accessible tickets found'}}
+
+            # Perform the bulk action
+            successful_updates = []
+            failed_updates = []
+
+            for ticket in accessible_tickets:
+                try:
+                    if action == 'update_status':
+                        result = self._bulk_update_status(ticket, action_data, current_user_id, user_role)
+                    elif action == 'assign':
+                        result = self._bulk_assign(ticket, action_data, current_user_id)
+                    elif action == 'update_priority':
+                        result = self._bulk_update_priority(ticket, action_data, current_user_id)
+                    elif action == 'delete':
+                        result = self._bulk_delete(ticket, current_user_id, user_role)
+                    else:
+                        result = {'success': False, 'error': 'Invalid action'}
+
+                    if result['success']:
+                        successful_updates.append({
+                            'ticket_id': ticket['ticket_id'],
+                            'ticket_number': ticket['ticket_number'],
+                            'action': action
+                        })
+                    else:
+                        failed_updates.append({
+                            'ticket_id': ticket['ticket_id'],
+                            'ticket_number': ticket['ticket_number'],
+                            'error': result.get('error', 'Unknown error')
+                        })
+
+                except Exception as e:
+                    failed_updates.append({
+                        'ticket_id': ticket['ticket_id'],
+                        'ticket_number': ticket['ticket_number'],
+                        'error': str(e)
+                    })
+
+            # Prepare response
+            response = {
+                'success': len(successful_updates) > 0,
+                'total_requested': len(ticket_ids),
+                'successful_updates': len(successful_updates),
+                'failed_updates': len(failed_updates),
+                'inaccessible_tickets': len(inaccessible_tickets),
+                'details': {
+                    'successful': successful_updates,
+                    'failed': failed_updates,
+                    'inaccessible': inaccessible_tickets
+                }
+            }
+
+            self.logger.info(f"Bulk action {action} completed: {len(successful_updates)} successful, {len(failed_updates)} failed")
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error in bulk actions: {e}")
+            return {'success': False, 'errors': {'general': 'Internal server error'}}
+
+    def _bulk_update_status(self, ticket: dict, action_data: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
+        """Update ticket status in bulk operation"""
+        try:
+            new_status = action_data.get('status')
+            if not new_status:
+                return {'success': False, 'error': 'Status is required'}
+
+            # Validate status
+            valid_statuses = ['abierto', 'en_progreso', 'espera_cliente', 'resuelto', 'cerrado']
+            if new_status not in valid_statuses:
+                return {'success': False, 'error': 'Invalid status'}
+
+            # Check permissions for client users
+            if user_role in ['client_admin', 'solicitante']:
+                if new_status not in ['cerrado', 'reabierto']:
+                    return {'success': False, 'error': 'Clients can only close or reopen tickets'}
+
+            # Update ticket
+            update_data = {
+                'status': new_status,
+                'updated_at': datetime.utcnow()
+            }
+
+            # Set resolution timestamp if resolving
+            if new_status == 'resuelto':
+                update_data['resolved_at'] = datetime.utcnow()
+            elif new_status == 'cerrado':
+                update_data['closed_at'] = datetime.utcnow()
+
+            result = self.db.execute_query(
+                "UPDATE tickets SET status = %s, updated_at = %s, resolved_at = %s, closed_at = %s WHERE ticket_id = %s",
+                (update_data['status'], update_data['updated_at'],
+                 update_data.get('resolved_at'), update_data.get('closed_at'), ticket['ticket_id'])
+            )
+
+            # Log activity
+            self._log_ticket_activity(
+                ticket['ticket_id'],
+                current_user_id,
+                'status_changed',
+                f"Estado cambiado a '{new_status}' (acción masiva)"
+            )
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _bulk_assign(self, ticket: dict, action_data: dict, current_user_id: str) -> Dict[str, Any]:
+        """Assign ticket in bulk operation"""
+        try:
+            assigned_to = action_data.get('assigned_to')
+            if not assigned_to:
+                return {'success': False, 'error': 'assigned_to is required'}
+
+            # Validate assignee exists and can handle tickets
+            assignee = self.db.execute_query(
+                "SELECT user_id, name, role FROM users WHERE user_id = %s AND is_active = true",
+                (assigned_to,),
+                fetch='one'
+            )
+
+            if not assignee:
+                return {'success': False, 'error': 'Invalid assignee'}
+
+            if assignee['role'] not in ['superadmin', 'admin', 'technician']:
+                return {'success': False, 'error': 'User cannot be assigned tickets'}
+
+            # Update ticket
+            update_data = {
+                'assigned_to': assigned_to,
+                'status': 'asignado',
+                'updated_at': datetime.utcnow()
+            }
+
+            result = self.db.execute_query(
+                "UPDATE tickets SET assigned_to = %s, status = %s, updated_at = %s WHERE ticket_id = %s",
+                (update_data['assigned_to'], update_data['status'],
+                 update_data['updated_at'], ticket['ticket_id'])
+            )
+
+            # Log activity
+            self._log_ticket_activity(
+                ticket['ticket_id'],
+                current_user_id,
+                'assigned',
+                f"Asignado a {assignee['name']} (acción masiva)"
+            )
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _bulk_update_priority(self, ticket: dict, action_data: dict, current_user_id: str) -> Dict[str, Any]:
+        """Update ticket priority in bulk operation"""
+        try:
+            new_priority = action_data.get('priority')
+            if not new_priority:
+                return {'success': False, 'error': 'Priority is required'}
+
+            # Validate priority
+            valid_priorities = ['baja', 'media', 'alta', 'critica']
+            if new_priority not in valid_priorities:
+                return {'success': False, 'error': 'Invalid priority'}
+
+            # Update ticket
+            result = self.db.execute_query(
+                "UPDATE tickets SET priority = %s, updated_at = %s WHERE ticket_id = %s",
+                (new_priority, datetime.utcnow(), ticket['ticket_id'])
+            )
+
+            # Log activity
+            self._log_ticket_activity(
+                ticket['ticket_id'],
+                current_user_id,
+                'priority_changed',
+                f"Prioridad cambiada a '{new_priority}' (acción masiva)"
+            )
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _bulk_delete(self, ticket: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
+        """Delete ticket in bulk operation (only superadmin/admin)"""
+        try:
+            # Double-check permissions
+            if user_role not in ['superadmin', 'admin']:
+                return {'success': False, 'error': 'Insufficient permissions to delete tickets'}
+
+            # Cannot delete closed tickets (following Zendesk pattern)
+            if ticket['status'] == 'cerrado':
+                return {'success': False, 'error': 'Cannot delete closed tickets'}
+
+            # Log activity before deletion
+            self._log_ticket_activity(
+                ticket['ticket_id'],
+                current_user_id,
+                'deleted',
+                f"Ticket eliminado (acción masiva)"
+            )
+
+            # Hard delete - this will cascade to related records
+            result = self.db.execute_query(
+                "DELETE FROM tickets WHERE ticket_id = %s",
+                (ticket['ticket_id'],)
+            )
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}

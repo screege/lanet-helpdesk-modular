@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon } from 'lucide-react';
-import { ticketsService, Ticket, TicketFilters } from '../../services/ticketsService';
+import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon, Trash2, Users, Flag, CheckSquare } from 'lucide-react';
+import { ticketsService, Ticket, TicketFilters, BulkActionResponse } from '../../services/ticketsService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 
@@ -22,6 +22,11 @@ const TicketsManagement: React.FC = () => {
     total: 0,
     total_pages: 0
   });
+
+  // Bulk actions state
+  const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showBulkActions, setShowBulkActions] = useState(false);
 
   // Load tickets
   const loadTickets = async () => {
@@ -67,6 +72,103 @@ const TicketsManagement: React.FC = () => {
   // Handle page change
   const handlePageChange = (newPage: number) => {
     setFilters(prev => ({ ...prev, page: newPage }));
+  };
+
+  // Handle ticket selection
+  const handleTicketSelect = (ticketId: string, checked: boolean) => {
+    const newSelected = new Set(selectedTickets);
+    if (checked) {
+      newSelected.add(ticketId);
+    } else {
+      newSelected.delete(ticketId);
+    }
+    setSelectedTickets(newSelected);
+    setShowBulkActions(newSelected.size > 0);
+  };
+
+  // Handle select all tickets
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allTicketIds = new Set(tickets.map(ticket => ticket.ticket_id));
+      setSelectedTickets(allTicketIds);
+      setShowBulkActions(true);
+    } else {
+      setSelectedTickets(new Set());
+      setShowBulkActions(false);
+    }
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedTickets(new Set());
+    setShowBulkActions(false);
+  };
+
+  // Handle bulk actions
+  const handleBulkAction = async (action: string, actionData?: any) => {
+    if (selectedTickets.size === 0) return;
+
+    const confirmed = window.confirm(
+      `¿Estás seguro de que quieres ${action === 'delete' ? 'eliminar' : 'actualizar'} ${selectedTickets.size} ticket(s)?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setBulkActionLoading(true);
+      setError(null);
+
+      const ticketIds = Array.from(selectedTickets);
+      let result: BulkActionResponse;
+
+      switch (action) {
+        case 'close':
+          result = await ticketsService.bulkUpdateStatus(ticketIds, 'cerrado');
+          break;
+        case 'reopen':
+          result = await ticketsService.bulkUpdateStatus(ticketIds, 'abierto');
+          break;
+        case 'assign':
+          if (!actionData?.assignedTo) {
+            setError('Debe seleccionar un técnico para asignar');
+            return;
+          }
+          result = await ticketsService.bulkAssign(ticketIds, actionData.assignedTo);
+          break;
+        case 'priority':
+          if (!actionData?.priority) {
+            setError('Debe seleccionar una prioridad');
+            return;
+          }
+          result = await ticketsService.bulkUpdatePriority(ticketIds, actionData.priority);
+          break;
+        case 'delete':
+          result = await ticketsService.bulkDelete(ticketIds);
+          break;
+        default:
+          setError('Acción no válida');
+          return;
+      }
+
+      // Show results
+      if (result.successful_updates > 0) {
+        alert(`✅ ${result.successful_updates} ticket(s) actualizados exitosamente`);
+      }
+
+      if (result.failed_updates > 0) {
+        alert(`⚠️ ${result.failed_updates} ticket(s) fallaron al actualizar`);
+      }
+
+      // Reload tickets and clear selection
+      await loadTickets();
+      clearSelection();
+
+    } catch (err: unknown) {
+      console.error('Error in bulk action:', err);
+      setError(err instanceof Error ? err.message : 'Error en acción masiva');
+    } finally {
+      setBulkActionLoading(false);
+    }
   };
 
 
@@ -227,12 +329,92 @@ const TicketsManagement: React.FC = () => {
       {/* Error Message */}
       {error && <ErrorMessage message={error} />}
 
+      {/* Bulk Actions Bar */}
+      {showBulkActions && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-blue-900">
+                {selectedTickets.size} ticket(s) seleccionados
+              </span>
+              <button
+                onClick={clearSelection}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Limpiar selección
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleBulkAction('close')}
+                disabled={bulkActionLoading}
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+              >
+                <CheckSquare className="w-3 h-3 mr-1" />
+                Cerrar
+              </button>
+
+              <button
+                onClick={() => handleBulkAction('reopen')}
+                disabled={bulkActionLoading}
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              >
+                <AlertCircle className="w-3 h-3 mr-1" />
+                Reabrir
+              </button>
+
+              <button
+                onClick={() => {
+                  const assignedTo = prompt('ID del técnico a asignar:');
+                  if (assignedTo) handleBulkAction('assign', { assignedTo });
+                }}
+                disabled={bulkActionLoading}
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+              >
+                <Users className="w-3 h-3 mr-1" />
+                Asignar
+              </button>
+
+              <button
+                onClick={() => {
+                  const priority = prompt('Nueva prioridad (baja, media, alta, critica):');
+                  if (priority) handleBulkAction('priority', { priority });
+                }}
+                disabled={bulkActionLoading}
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
+              >
+                <Flag className="w-3 h-3 mr-1" />
+                Prioridad
+              </button>
+
+              <button
+                onClick={() => handleBulkAction('delete')}
+                disabled={bulkActionLoading}
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tickets Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedTickets.size === tickets.length && tickets.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                   Ticket
                 </th>
@@ -262,6 +444,14 @@ const TicketsManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {tickets.map((ticket) => (
                 <tr key={ticket.ticket_id} className="hover:bg-gray-50">
+                  <td className="px-3 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedTickets.has(ticket.ticket_id)}
+                      onChange={(e) => handleTicketSelect(ticket.ticket_id, e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </td>
                   <td className="px-3 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div>
