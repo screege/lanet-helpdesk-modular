@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon, Trash2, Users, Flag, CheckSquare } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon, Trash2, Users, Flag, CheckSquare, X } from 'lucide-react';
 import { ticketsService, Ticket, TicketFilters, BulkActionResponse } from '../../services/ticketsService';
+import { usersService, User } from '../../services/usersService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 
@@ -28,18 +29,22 @@ const TicketsManagement: React.FC = () => {
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
 
+  // Modal states
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showPriorityModal, setShowPriorityModal] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [technicians, setTechnicians] = useState<User[]>([]);
+  const [selectedTechnician, setSelectedTechnician] = useState('');
+  const [selectedPriority, setSelectedPriority] = useState('');
+  const [resolutionNotes, setResolutionNotes] = useState('');
+
   // Load tickets
   const loadTickets = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const searchFilters = {
-        ...filters,
-        search: searchTerm || undefined
-      };
-      
-      const response = await ticketsService.getAllTickets(searchFilters);
+
+      const response = await ticketsService.getAllTickets(filters);
       setTickets(response.tickets);
       setPagination(response.pagination);
     } catch (err: unknown) {
@@ -54,10 +59,28 @@ const TicketsManagement: React.FC = () => {
     loadTickets();
   }, [filters]);
 
+  // Load technicians for assignment
+  const loadTechnicians = async () => {
+    try {
+      const technicianUsers = await usersService.getUsersByRole('technician');
+      const adminUsers = await usersService.getUsersByRole('admin');
+      const superadminUsers = await usersService.getUsersByRole('superadmin');
+
+      // Combine all users who can be assigned tickets
+      const allAssignableUsers = [...technicianUsers, ...adminUsers, ...superadminUsers];
+      setTechnicians(allAssignableUsers);
+    } catch (error) {
+      console.error('Error loading technicians:', error);
+    }
+  };
+
   // Handle search
   const handleSearch = () => {
-    setFilters(prev => ({ ...prev, page: 1 }));
-    loadTickets();
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      search: searchTerm || undefined
+    }));
   };
 
   // Handle filter change
@@ -108,12 +131,6 @@ const TicketsManagement: React.FC = () => {
   const handleBulkAction = async (action: string, actionData?: any) => {
     if (selectedTickets.size === 0) return;
 
-    const confirmed = window.confirm(
-      `¿Estás seguro de que quieres ${action === 'delete' ? 'eliminar' : 'actualizar'} ${selectedTickets.size} ticket(s)?`
-    );
-
-    if (!confirmed) return;
-
     try {
       setBulkActionLoading(true);
       setError(null);
@@ -122,11 +139,24 @@ const TicketsManagement: React.FC = () => {
       let result: BulkActionResponse;
 
       switch (action) {
-        case 'close':
-          result = await ticketsService.bulkUpdateStatus(ticketIds, 'cerrado');
-          break;
         case 'reopen':
           result = await ticketsService.bulkUpdateStatus(ticketIds, 'abierto');
+          break;
+        case 'resolve':
+          // For resolve, we need resolution notes - this should be handled by modal
+          if (!actionData?.resolutionNotes) {
+            setError('Se requieren notas de resolución');
+            return;
+          }
+          // Use the bulk actions endpoint with resolution notes
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'update_status',
+            action_data: {
+              status: 'resuelto',
+              resolution_notes: actionData.resolutionNotes
+            }
+          });
           break;
         case 'assign':
           if (!actionData?.assignedTo) {
@@ -143,6 +173,11 @@ const TicketsManagement: React.FC = () => {
           result = await ticketsService.bulkUpdatePriority(ticketIds, actionData.priority);
           break;
         case 'delete':
+          const confirmed = window.confirm(
+            `⚠️ ¿Estás seguro de que quieres ELIMINAR ${selectedTickets.size} ticket(s)? Esta acción no se puede deshacer.`
+          );
+          if (!confirmed) return;
+
           result = await ticketsService.bulkDelete(ticketIds);
           break;
         default:
@@ -169,6 +204,53 @@ const TicketsManagement: React.FC = () => {
     } finally {
       setBulkActionLoading(false);
     }
+  };
+
+  // Modal handlers
+  const handleAssignModal = () => {
+    if (selectedTickets.size === 0) return;
+    loadTechnicians();
+    setShowAssignModal(true);
+  };
+
+  const handlePriorityModal = () => {
+    if (selectedTickets.size === 0) return;
+    setShowPriorityModal(true);
+  };
+
+  const handleResolveModal = () => {
+    if (selectedTickets.size === 0) return;
+    setShowResolveModal(true);
+  };
+
+  const confirmAssign = () => {
+    if (!selectedTechnician) {
+      setError('Debe seleccionar un técnico');
+      return;
+    }
+    handleBulkAction('assign', { assignedTo: selectedTechnician });
+    setShowAssignModal(false);
+    setSelectedTechnician('');
+  };
+
+  const confirmPriority = () => {
+    if (!selectedPriority) {
+      setError('Debe seleccionar una prioridad');
+      return;
+    }
+    handleBulkAction('priority', { priority: selectedPriority });
+    setShowPriorityModal(false);
+    setSelectedPriority('');
+  };
+
+  const confirmResolve = () => {
+    if (!resolutionNotes.trim()) {
+      setError('Debe proporcionar notas de resolución');
+      return;
+    }
+    handleBulkAction('resolve', { resolutionNotes: resolutionNotes.trim() });
+    setShowResolveModal(false);
+    setResolutionNotes('');
   };
 
 
@@ -347,12 +429,12 @@ const TicketsManagement: React.FC = () => {
 
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => handleBulkAction('close')}
+                onClick={handleResolveModal}
                 disabled={bulkActionLoading}
                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
               >
                 <CheckSquare className="w-3 h-3 mr-1" />
-                Cerrar
+                Resolver
               </button>
 
               <button
@@ -365,10 +447,7 @@ const TicketsManagement: React.FC = () => {
               </button>
 
               <button
-                onClick={() => {
-                  const assignedTo = prompt('ID del técnico a asignar:');
-                  if (assignedTo) handleBulkAction('assign', { assignedTo });
-                }}
+                onClick={handleAssignModal}
                 disabled={bulkActionLoading}
                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
               >
@@ -377,10 +456,7 @@ const TicketsManagement: React.FC = () => {
               </button>
 
               <button
-                onClick={() => {
-                  const priority = prompt('Nueva prioridad (baja, media, alta, critica):');
-                  if (priority) handleBulkAction('priority', { priority });
-                }}
+                onClick={handlePriorityModal}
                 disabled={bulkActionLoading}
                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
               >
@@ -624,6 +700,164 @@ const TicketsManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Assignment Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Asignar {selectedTickets.size} ticket(s)
+                </h3>
+                <button
+                  onClick={() => setShowAssignModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Seleccionar técnico:
+                </label>
+                <select
+                  value={selectedTechnician}
+                  onChange={(e) => setSelectedTechnician(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar técnico...</option>
+                  {technicians.map((tech) => (
+                    <option key={tech.user_id} value={tech.user_id}>
+                      {tech.name} ({tech.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowAssignModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmAssign}
+                  disabled={!selectedTechnician || bulkActionLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-md"
+                >
+                  {bulkActionLoading ? 'Asignando...' : 'Asignar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Priority Modal */}
+      {showPriorityModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Cambiar prioridad de {selectedTickets.size} ticket(s)
+                </h3>
+                <button
+                  onClick={() => setShowPriorityModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nueva prioridad:
+                </label>
+                <select
+                  value={selectedPriority}
+                  onChange={(e) => setSelectedPriority(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar prioridad...</option>
+                  <option value="baja">🟢 Baja</option>
+                  <option value="media">🟡 Media</option>
+                  <option value="alta">🟠 Alta</option>
+                  <option value="critica">🔴 Crítica</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowPriorityModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmPriority}
+                  disabled={!selectedPriority || bulkActionLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 rounded-md"
+                >
+                  {bulkActionLoading ? 'Actualizando...' : 'Actualizar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolve Modal */}
+      {showResolveModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Resolver {selectedTickets.size} ticket(s)
+                </h3>
+                <button
+                  onClick={() => setShowResolveModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notas de resolución: <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={resolutionNotes}
+                  onChange={(e) => setResolutionNotes(e.target.value)}
+                  placeholder="Describe cómo se resolvieron los tickets..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowResolveModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmResolve}
+                  disabled={!resolutionNotes.trim() || bulkActionLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-md"
+                >
+                  {bulkActionLoading ? 'Resolviendo...' : 'Resolver'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -780,30 +780,61 @@ class TicketService:
                 if new_status not in ['cerrado', 'reabierto']:
                     return {'success': False, 'error': 'Clients can only close or reopen tickets'}
 
+            # For resolution, require resolution notes
+            if new_status == 'resuelto':
+                resolution_notes = action_data.get('resolution_notes')
+                if not resolution_notes or not resolution_notes.strip():
+                    return {'success': False, 'error': 'Resolution notes are required when resolving tickets'}
+
+            # For closing, check if ticket is resolved first
+            if new_status == 'cerrado':
+                if ticket['status'] not in ['resuelto']:
+                    return {'success': False, 'error': 'Tickets must be resolved before closing'}
+
             # Update ticket
             update_data = {
                 'status': new_status,
                 'updated_at': datetime.utcnow()
             }
 
-            # Set resolution timestamp if resolving
+            # Set resolution data if resolving
             if new_status == 'resuelto':
                 update_data['resolved_at'] = datetime.utcnow()
+                update_data['resolution'] = action_data.get('resolution_notes', '').strip()
             elif new_status == 'cerrado':
                 update_data['closed_at'] = datetime.utcnow()
 
-            result = self.db.execute_query(
-                "UPDATE tickets SET status = %s, updated_at = %s, resolved_at = %s, closed_at = %s WHERE ticket_id = %s",
-                (update_data['status'], update_data['updated_at'],
-                 update_data.get('resolved_at'), update_data.get('closed_at'), ticket['ticket_id'])
-            )
+            # Build dynamic query based on what fields we're updating
+            set_clauses = ['status = %s', 'updated_at = %s']
+            params = [update_data['status'], update_data['updated_at']]
+
+            if 'resolved_at' in update_data:
+                set_clauses.append('resolved_at = %s')
+                params.append(update_data['resolved_at'])
+
+            if 'resolution' in update_data:
+                set_clauses.append('resolution = %s')
+                params.append(update_data['resolution'])
+
+            if 'closed_at' in update_data:
+                set_clauses.append('closed_at = %s')
+                params.append(update_data['closed_at'])
+
+            params.append(ticket['ticket_id'])
+
+            query = f"UPDATE tickets SET {', '.join(set_clauses)} WHERE ticket_id = %s"
+            result = self.db.execute_query(query, params)
 
             # Log activity
+            activity_desc = f"Estado cambiado a '{new_status}' (acción masiva)"
+            if new_status == 'resuelto' and 'resolution' in update_data:
+                activity_desc += f" - Resolución: {update_data['resolution'][:100]}..."
+
             self._log_ticket_activity(
                 ticket['ticket_id'],
                 current_user_id,
                 'status_changed',
-                f"Estado cambiado a '{new_status}' (acción masiva)"
+                activity_desc
             )
 
             return {'success': True}
