@@ -7,6 +7,7 @@ import ErrorMessage from '../../components/common/ErrorMessage';
 import ResolveTicketModal from '../../components/tickets/ResolveTicketModal';
 import ReopenTicketModal from '../../components/tickets/ReopenTicketModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { formatDateTime } from '../../utils/dateUtils';
 
 const TicketDetailPage: React.FC = () => {
   const { ticketId } = useParams<{ ticketId: string }>();
@@ -492,18 +493,24 @@ const TicketDetailPage: React.FC = () => {
             {/* Ticket Information */}
             <div className="bg-white shadow rounded-lg p-6">
               <h2 className="text-lg font-medium text-gray-900 mb-4">Información del Ticket</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Descripción</label>
-                  <p className="mt-1 text-gray-900">{ticket.description}</p>
-                </div>
+
+              {/* Description - Full Width */}
+              <div className="mb-6">
+                <label className="text-sm font-medium text-gray-500">Descripción</label>
+                <p className="mt-1 text-gray-900">{ticket.description}</p>
+              </div>
+
+              {/* Contact Information - Horizontal Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Persona Afectada</label>
                   <p className="mt-1 text-gray-900">{ticket.affected_person}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Contacto</label>
-                  <p className="mt-1 text-gray-900">{ticket.affected_person_contact}</p>
+                  <label className="text-sm font-medium text-gray-500">Teléfono de Contacto</label>
+                  <p className="mt-1 text-gray-900">
+                    {ticket.affected_person_phone || ticket.affected_person_contact || 'No especificado'}
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Canal</label>
@@ -514,6 +521,14 @@ const TicketDetailPage: React.FC = () => {
                   </p>
                 </div>
               </div>
+
+              {/* Email de Notificación - Full Width if exists */}
+              {ticket.notification_email && (
+                <div className="mt-4">
+                  <label className="text-sm font-medium text-gray-500">Email de Notificación</label>
+                  <p className="mt-1 text-gray-900">{ticket.notification_email}</p>
+                </div>
+              )}
             </div>
 
             {/* Attachments Section */}
@@ -533,7 +548,7 @@ const TicketDetailPage: React.FC = () => {
                         <div>
                           <p className="text-sm font-medium text-gray-900">{attachment.original_filename}</p>
                           <p className="text-xs text-gray-500">
-                            {attachment.file_size_display} • Subido por {attachment.uploaded_by_name} • {new Date(attachment.created_at).toLocaleDateString()}
+                            {attachment.file_size_display} • Subido por {attachment.uploaded_by_name} • {formatDateTime(attachment.created_at)}
                           </p>
                         </div>
                       </div>
@@ -597,7 +612,7 @@ const TicketDetailPage: React.FC = () => {
                           </div>
                           <span className="text-xs text-gray-500">•</span>
                           <span className="text-xs text-gray-500">
-                            {new Date(comment.created_at).toLocaleString('es-ES')}
+                            {formatDateTime(comment.created_at)}
                           </span>
                           {comment.is_internal && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -717,11 +732,11 @@ const TicketDetailPage: React.FC = () => {
               <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Creado</label>
-                  <p className="text-gray-900">{new Date(ticket.created_at).toLocaleString()}</p>
+                  <p className="text-gray-900">{formatDateTime(ticket.created_at)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Actualizado</label>
-                  <p className="text-gray-900">{new Date(ticket.updated_at).toLocaleString()}</p>
+                  <p className="text-gray-900">{formatDateTime(ticket.updated_at)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Asignado a</label>
@@ -735,6 +750,12 @@ const TicketDetailPage: React.FC = () => {
                   <label className="text-sm font-medium text-gray-500">Sitio</label>
                   <p className="text-gray-900">{ticket.site_name}</p>
                 </div>
+                {ticket.category_name && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Categoría</label>
+                    <p className="text-gray-900">{ticket.category_name}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

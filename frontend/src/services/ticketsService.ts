@@ -1,4 +1,4 @@
-import { apiService } from './api';
+import { apiService, ApiResponse } from './api';
 
 export interface Ticket {
   ticket_id: string;
@@ -247,9 +247,9 @@ class TicketsService {
   }
 
   // Update ticket
-  async updateTicket(ticketId: string, ticketData: UpdateTicketData): Promise<Ticket> {
+  async updateTicket(ticketId: string, ticketData: UpdateTicketData): Promise<ApiResponse<Ticket>> {
     const response = await apiService.put(`/tickets/${ticketId}`, ticketData);
-    return response.data;
+    return response;
   }
 
   // Assign ticket to technician

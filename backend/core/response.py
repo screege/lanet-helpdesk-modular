@@ -155,18 +155,22 @@ class ResponseManager:
         """Format ticket data for API response"""
         if not ticket:
             return None
-            
+
         safe_ticket = ticket.copy()
-        
+
+        # Handle phone number mapping: if affected_person_phone is empty, use affected_person_contact
+        if not safe_ticket.get('affected_person_phone') and safe_ticket.get('affected_person_contact'):
+            safe_ticket['affected_person_phone'] = safe_ticket['affected_person_contact']
+
         # Convert datetime objects to ISO format
         datetime_fields = [
-            'created_at', 'updated_at', 'assigned_at', 
+            'created_at', 'updated_at', 'assigned_at',
             'resolved_at', 'closed_at', 'approved_at'
         ]
         for field in datetime_fields:
             if field in safe_ticket and safe_ticket[field]:
                 safe_ticket[field] = safe_ticket[field].isoformat()
-                
+
         return safe_ticket
 
     def format_comment_data(self, comment: Dict) -> Dict:

@@ -62,10 +62,10 @@ const Dashboard: React.FC = () => {
             total_users: data.total_users || 0,
           };
           setStats(realStats);
+          console.log('✅ Dashboard loaded with real data:', realStats);
         } else {
           console.error('Invalid dashboard stats response');
         }
-        console.log('✅ Dashboard loaded with real data:', realStats);
       } else {
         console.error('Failed to load dashboard stats:', response.error);
         // Fallback to empty stats
