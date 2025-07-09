@@ -57,10 +57,14 @@ class ResponseManager:
         """Create an unauthorized response"""
         return self.error(message, 401)
     
+    def bad_request(self, message: str = "Bad request") -> tuple:
+        """Create a bad request response"""
+        return self.error(message, 400)
+
     def forbidden(self, message: str = "Access forbidden") -> tuple:
         """Create a forbidden response"""
         return self.error(message, 403)
-    
+
     def not_found(self, resource: str = "Resource") -> tuple:
         """Create a not found response"""
         return self.error(f"{resource} not found", 404)
