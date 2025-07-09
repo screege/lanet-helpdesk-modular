@@ -844,9 +844,10 @@ def bulk_actions():
             print(f"🚨 BULK ACTIONS: Invalid action", flush=True)
             return {'success': False, 'error': f'Invalid action. Valid actions: {", ".join(valid_actions)}'}, 400
 
-        print(f"🚨 BULK ACTIONS: All validations passed, returning success", flush=True)
+        print(f"🚨 BULK ACTIONS: All validations passed, returning simulated success", flush=True)
 
-        # Create the bulk action response data
+        # TEMPORARY: Return simulated success to not break existing functionality
+        # TODO: Implement real bulk actions after fixing ticket status enum values
         bulk_response_data = {
             'total_requested': len(ticket_ids),
             'successful_updates': len(ticket_ids),
@@ -862,7 +863,7 @@ def bulk_actions():
         # Use the response manager to wrap the response properly
         return current_app.response_manager.success(
             data=bulk_response_data,
-            message=f'Bulk action {action} completed successfully'
+            message=f'Bulk action {action} simulated successfully (not implemented yet)'
         )
 
     except Exception as e:
