@@ -230,7 +230,7 @@ class TicketService:
             
             # Auto-assign if assigned_to is provided
             if new_ticket_data['assigned_to']:
-                new_ticket_data['status'] = 'asignado'
+                new_ticket_data['status'] = 'en_progreso'
                 new_ticket_data['assigned_at'] = datetime.utcnow()
             
             # Insert ticket
@@ -377,7 +377,7 @@ class TicketService:
 
             # Handle status changes
             if 'status' in ticket_data and ticket_data['status'] != existing_ticket['status']:
-                valid_statuses = ['nuevo', 'asignado', 'en_proceso', 'espera_cliente', 'resuelto', 'cerrado', 'cancelado', 'pendiente_aprobacion', 'reabierto']
+                valid_statuses = ['abierto', 'en_progreso', 'espera_cliente', 'resuelto', 'cerrado']
                 if ticket_data['status'] not in valid_statuses:
                     return {'success': False, 'errors': {'status': 'Invalid status'}}
 
@@ -449,8 +449,8 @@ class TicketService:
 
                         update_data['assigned_to'] = ticket_data['assigned_to']
                         update_data['assigned_at'] = datetime.utcnow()
-                        if existing_ticket['status'] == 'nuevo':
-                            update_data['status'] = 'asignado'
+                        if existing_ticket['status'] == 'abierto':
+                            update_data['status'] = 'en_progreso'
                         changes.append(f"Asignado a {assignee['name']}")
                     else:
                         update_data['assigned_to'] = None
@@ -548,9 +548,9 @@ class TicketService:
                 'updated_at': datetime.utcnow()
             }
 
-            # Update status if currently new
-            if ticket['status'] == 'nuevo':
-                update_data['status'] = 'asignado'
+            # Update status if currently open
+            if ticket['status'] == 'abierto':
+                update_data['status'] = 'en_progreso'
 
             rows_updated = self.db.execute_update(
                 'tickets',
@@ -865,7 +865,7 @@ class TicketService:
             # Update ticket
             update_data = {
                 'assigned_to': assigned_to,
-                'status': 'asignado',
+                'status': 'en_progreso',  # Change to valid status
                 'updated_at': datetime.utcnow()
             }
 

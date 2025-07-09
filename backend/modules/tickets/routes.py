@@ -795,14 +795,18 @@ def bulk_actions():
         from .service import TicketService
 
         data = request.get_json()
+        current_app.logger.info(f"🔧 BULK ACTIONS: Received data: {data}")
+
         if not data:
             return current_app.response_manager.bad_request('No data provided')
 
         # Validate required fields
         if 'ticket_ids' not in data or not data['ticket_ids']:
+            current_app.logger.error("🔧 BULK ACTIONS: Missing ticket_ids")
             return current_app.response_manager.bad_request('ticket_ids is required')
 
         if 'action' not in data or not data['action']:
+            current_app.logger.error("🔧 BULK ACTIONS: Missing action")
             return current_app.response_manager.bad_request('action is required')
 
         ticket_ids = data['ticket_ids']
@@ -826,8 +830,11 @@ def bulk_actions():
         claims = get_jwt()
         user_role = claims.get('role')
 
+        current_app.logger.info(f"🔧 BULK ACTIONS: User {current_user_id}, Role: {user_role}, Action: {action}")
+
         # Additional permission checks for delete action
         if action == 'delete' and user_role not in ['superadmin', 'admin']:
+            current_app.logger.error(f"🔧 BULK ACTIONS: User {user_role} tried to delete tickets")
             return current_app.response_manager.forbidden('Only superadmin and admin can delete tickets')
 
         ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)

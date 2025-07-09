@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon, Trash2, Users, Flag, CheckSquare, X } from 'lucide-react';
 import { ticketsService, Ticket, TicketFilters, BulkActionResponse } from '../../services/ticketsService';
 import { usersService, User } from '../../services/usersService';
+import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 
 const TicketsManagement: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,9 +140,15 @@ const TicketsManagement: React.FC = () => {
       const ticketIds = Array.from(selectedTickets);
       let result: BulkActionResponse;
 
+      console.log('🔧 DEBUG: Bulk action request:', { action, actionData, ticketIds });
+
       switch (action) {
         case 'reopen':
-          result = await ticketsService.bulkUpdateStatus(ticketIds, 'abierto');
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'update_status',
+            action_data: { status: 'abierto' }
+          });
           break;
         case 'resolve':
           // For resolve, we need resolution notes - this should be handled by modal
@@ -163,14 +171,22 @@ const TicketsManagement: React.FC = () => {
             setError('Debe seleccionar un técnico para asignar');
             return;
           }
-          result = await ticketsService.bulkAssign(ticketIds, actionData.assignedTo);
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'assign',
+            action_data: { assigned_to: actionData.assignedTo }
+          });
           break;
         case 'priority':
           if (!actionData?.priority) {
             setError('Debe seleccionar una prioridad');
             return;
           }
-          result = await ticketsService.bulkUpdatePriority(ticketIds, actionData.priority);
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'update_priority',
+            action_data: { priority: actionData.priority }
+          });
           break;
         case 'delete':
           const confirmed = window.confirm(
@@ -178,7 +194,11 @@ const TicketsManagement: React.FC = () => {
           );
           if (!confirmed) return;
 
-          result = await ticketsService.bulkDelete(ticketIds);
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'delete',
+            action_data: {}
+          });
           break;
         default:
           setError('Acción no válida');
@@ -251,6 +271,23 @@ const TicketsManagement: React.FC = () => {
     handleBulkAction('resolve', { resolutionNotes: resolutionNotes.trim() });
     setShowResolveModal(false);
     setResolutionNotes('');
+  };
+
+  // Permission checks
+  const canPerformBulkActions = () => {
+    return user?.role && ['superadmin', 'admin', 'technician'].includes(user.role);
+  };
+
+  const canDeleteTickets = () => {
+    return user?.role && ['superadmin', 'admin'].includes(user.role);
+  };
+
+  const canAssignTickets = () => {
+    return user?.role && ['superadmin', 'admin', 'technician'].includes(user.role);
+  };
+
+  const canResolveTickets = () => {
+    return user?.role && ['superadmin', 'admin', 'technician'].includes(user.role);
   };
 
 
@@ -412,7 +449,7 @@ const TicketsManagement: React.FC = () => {
       {error && <ErrorMessage message={error} />}
 
       {/* Bulk Actions Bar */}
-      {showBulkActions && (
+      {showBulkActions && canPerformBulkActions() && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -428,14 +465,16 @@ const TicketsManagement: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-2">
-              <button
-                onClick={handleResolveModal}
-                disabled={bulkActionLoading}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
-              >
-                <CheckSquare className="w-3 h-3 mr-1" />
-                Resolver
-              </button>
+              {canResolveTickets() && (
+                <button
+                  onClick={handleResolveModal}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                >
+                  <CheckSquare className="w-3 h-3 mr-1" />
+                  Resolver
+                </button>
+              )}
 
               <button
                 onClick={() => handleBulkAction('reopen')}
@@ -446,32 +485,38 @@ const TicketsManagement: React.FC = () => {
                 Reabrir
               </button>
 
-              <button
-                onClick={handleAssignModal}
-                disabled={bulkActionLoading}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-              >
-                <Users className="w-3 h-3 mr-1" />
-                Asignar
-              </button>
+              {canAssignTickets() && (
+                <button
+                  onClick={handleAssignModal}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                >
+                  <Users className="w-3 h-3 mr-1" />
+                  Asignar
+                </button>
+              )}
 
-              <button
-                onClick={handlePriorityModal}
-                disabled={bulkActionLoading}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
-              >
-                <Flag className="w-3 h-3 mr-1" />
-                Prioridad
-              </button>
+              {canPerformBulkActions() && (
+                <button
+                  onClick={handlePriorityModal}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  <Flag className="w-3 h-3 mr-1" />
+                  Prioridad
+                </button>
+              )}
 
-              <button
-                onClick={() => handleBulkAction('delete')}
-                disabled={bulkActionLoading}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
-              >
-                <Trash2 className="w-3 h-3 mr-1" />
-                Eliminar
-              </button>
+              {canDeleteTickets() && (
+                <button
+                  onClick={() => handleBulkAction('delete')}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Eliminar
+                </button>
+              )}
             </div>
           </div>
         </div>
