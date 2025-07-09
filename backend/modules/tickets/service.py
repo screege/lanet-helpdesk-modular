@@ -818,7 +818,7 @@ class TicketService:
                 params.append(update_data['resolved_at'])
 
             if 'resolution' in update_data:
-                set_clauses.append('resolution = %s')
+                set_clauses.append('resolution_notes = %s')
                 params.append(update_data['resolution'])
 
             if 'closed_at' in update_data:
@@ -828,14 +828,14 @@ class TicketService:
             params.append(ticket['ticket_id'])
 
             query = f"UPDATE tickets SET {', '.join(set_clauses)} WHERE ticket_id = %s"
-            result = self.db.execute_query(query, params)
+            result = self.db.execute_query(query, params, fetch='none')
 
             # Log activity
             activity_desc = f"Estado cambiado a '{new_status}' (acción masiva)"
             if new_status == 'resuelto' and 'resolution' in update_data:
                 activity_desc += f" - Resolución: {update_data['resolution'][:100]}..."
 
-            self._log_ticket_activity(
+            self._create_activity_log(
                 ticket['ticket_id'],
                 current_user_id,
                 'status_changed',
@@ -877,11 +877,12 @@ class TicketService:
             result = self.db.execute_query(
                 "UPDATE tickets SET assigned_to = %s, status = %s, updated_at = %s WHERE ticket_id = %s",
                 (update_data['assigned_to'], update_data['status'],
-                 update_data['updated_at'], ticket['ticket_id'])
+                 update_data['updated_at'], ticket['ticket_id']),
+                fetch='none'
             )
 
             # Log activity
-            self._log_ticket_activity(
+            self._create_activity_log(
                 ticket['ticket_id'],
                 current_user_id,
                 'assigned',
@@ -908,11 +909,12 @@ class TicketService:
             # Update ticket
             result = self.db.execute_query(
                 "UPDATE tickets SET priority = %s, updated_at = %s WHERE ticket_id = %s",
-                (new_priority, datetime.utcnow(), ticket['ticket_id'])
+                (new_priority, datetime.utcnow(), ticket['ticket_id']),
+                fetch='none'
             )
 
             # Log activity
-            self._log_ticket_activity(
+            self._create_activity_log(
                 ticket['ticket_id'],
                 current_user_id,
                 'priority_changed',
@@ -936,17 +938,105 @@ class TicketService:
                 return {'success': False, 'error': 'Cannot delete closed tickets'}
 
             # Log activity before deletion
-            self._log_ticket_activity(
+            self._create_activity_log(
                 ticket['ticket_id'],
                 current_user_id,
                 'deleted',
                 f"Ticket eliminado (acción masiva)"
             )
 
-            # Hard delete - this will cascade to related records
+            # Delete related records first to avoid foreign key constraint violations
+            # Delete in order to respect dependencies
+
+            # Delete from notification_tracking
+            self.db.execute_query(
+                "DELETE FROM notification_tracking WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from notification_queue
+            self.db.execute_query(
+                "DELETE FROM notification_queue WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from email_routing_log
+            self.db.execute_query(
+                "DELETE FROM email_routing_log WHERE created_ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from email_processing_log
+            self.db.execute_query(
+                "DELETE FROM email_processing_log WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from email_queue
+            self.db.execute_query(
+                "DELETE FROM email_queue WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from sla_tracking
+            self.db.execute_query(
+                "DELETE FROM sla_tracking WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from sla_compliance
+            self.db.execute_query(
+                "DELETE FROM sla_compliance WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_resolutions
+            self.db.execute_query(
+                "DELETE FROM ticket_resolutions WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_attachments
+            self.db.execute_query(
+                "DELETE FROM ticket_attachments WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from file_attachments
+            self.db.execute_query(
+                "DELETE FROM file_attachments WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_activities
+            self.db.execute_query(
+                "DELETE FROM ticket_activities WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_comments
+            self.db.execute_query(
+                "DELETE FROM ticket_comments WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Finally, delete the ticket itself
             result = self.db.execute_query(
                 "DELETE FROM tickets WHERE ticket_id = %s",
-                (ticket['ticket_id'],)
+                (ticket['ticket_id'],),
+                fetch='none'
             )
 
             return {'success': True}

@@ -844,27 +844,35 @@ def bulk_actions():
             print(f"🚨 BULK ACTIONS: Invalid action", flush=True)
             return {'success': False, 'error': f'Invalid action. Valid actions: {", ".join(valid_actions)}'}, 400
 
-        print(f"🚨 BULK ACTIONS: All validations passed, returning simulated success", flush=True)
+        print(f"🚨 BULK ACTIONS: All validations passed, calling real service implementation", flush=True)
 
-        # TEMPORARY: Return simulated success to not break existing functionality
-        # TODO: Implement real bulk actions after fixing ticket status enum values
-        bulk_response_data = {
-            'total_requested': len(ticket_ids),
-            'successful_updates': len(ticket_ids),
-            'failed_updates': 0,
-            'inaccessible_tickets': 0,
-            'details': {
-                'successful': [{'ticket_id': tid, 'ticket_number': f'TKT-{tid[:6]}', 'action': action} for tid in ticket_ids],
-                'failed': [],
-                'inaccessible': []
-            }
-        }
+        current_user_id = get_jwt_identity()
+        claims = get_jwt()
+        user_role = claims.get('role')
 
-        # Use the response manager to wrap the response properly
-        return current_app.response_manager.success(
-            data=bulk_response_data,
-            message=f'Bulk action {action} simulated successfully (not implemented yet)'
-        )
+        print(f"🚨 BULK ACTIONS: User {current_user_id}, Role: {user_role}", flush=True)
+
+        # Additional permission checks for delete action
+        if action == 'delete' and user_role not in ['superadmin', 'admin']:
+            print(f"🚨 BULK ACTIONS: User {user_role} tried to delete tickets", flush=True)
+            return current_app.response_manager.forbidden('Only superadmin and admin can delete tickets')
+
+        # Create ticket service and execute bulk action
+        ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
+        print(f"🚨 BULK ACTIONS: About to call service.bulk_actions", flush=True)
+
+        result = ticket_service.bulk_actions(ticket_ids, action, action_data, current_user_id, user_role)
+
+        print(f"🚨 BULK ACTIONS: Service returned: {result}", flush=True)
+
+        if result['success']:
+            return current_app.response_manager.success(
+                data=result,
+                message=f'Bulk action {action} completed successfully'
+            )
+        else:
+            print(f"🚨 BULK ACTIONS: Service failed with: {result}", flush=True)
+            return current_app.response_manager.error('Bulk action failed', 400, details=result.get('errors'))
 
     except Exception as e:
         current_app.logger.error(f"Bulk actions error: {e}")

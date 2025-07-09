@@ -13,6 +13,6 @@ Helpdesk MSP es un sistema de soporte técnico bajo demanda para Lanet Systems (
 you can have the access credentials from the web portal login instead of guessing everytime
 the posgresql user is postgres and password is Poikl55+*
 DATABASE_URL=postgresql://postgres:Poikl55+*@localhost:5432/lanet_helpdesk
-you must have all code before making changes and see if other modules get affected by new code implementation
+you must have all code, workflow, database associations, api calls and frontend calls present before making changes and see if other modules get affected by new code implementation
 you must always act as a full stack developer
 you must always commit to github and before creating new modules which after tests work create a new branch
