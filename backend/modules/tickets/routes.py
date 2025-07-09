@@ -787,7 +787,6 @@ def update_ticket_status(ticket_id):
         return current_app.response_manager.server_error('Failed to update ticket status')
 
 @tickets_bp.route('/bulk-actions', methods=['POST'])
-@jwt_required()
 @require_role(['superadmin', 'admin', 'technician'])
 def bulk_actions():
     """Perform bulk actions on multiple tickets"""
@@ -838,11 +837,16 @@ def bulk_actions():
             return current_app.response_manager.forbidden('Only superadmin and admin can delete tickets')
 
         ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
+        current_app.logger.info(f"🔧 BULK ACTIONS: About to call service.bulk_actions")
+
         result = ticket_service.bulk_actions(ticket_ids, action, action_data, current_user_id, user_role)
+
+        current_app.logger.info(f"🔧 BULK ACTIONS: Service returned: {result}")
 
         if result['success']:
             return current_app.response_manager.success(result, 'Bulk action completed successfully')
         else:
+            current_app.logger.error(f"🔧 BULK ACTIONS: Service failed with: {result}")
             return current_app.response_manager.error('Bulk action failed', 400, details=result.get('errors'))
 
     except Exception as e:
