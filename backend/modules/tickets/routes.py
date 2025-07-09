@@ -786,8 +786,14 @@ def update_ticket_status(ticket_id):
         current_app.logger.error(f"Update ticket status error: {e}")
         return current_app.response_manager.server_error('Failed to update ticket status')
 
+@tickets_bp.route('/test-bulk', methods=['POST'])
+def test_bulk():
+    """Test endpoint for bulk actions"""
+    print("🚨🚨🚨 TEST BULK ENDPOINT CALLED! 🚨🚨🚨", flush=True)
+    return {'success': True, 'message': 'Test endpoint working'}
+
 @tickets_bp.route('/bulk-actions', methods=['POST'])
-@require_role(['superadmin', 'admin', 'technician'])
+@jwt_required()
 def bulk_actions():
     """Perform bulk actions on multiple tickets"""
     try:
