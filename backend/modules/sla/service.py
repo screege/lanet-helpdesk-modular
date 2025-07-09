@@ -177,7 +177,7 @@ class SLAService:
             now = datetime.now()
             breaches = []
             
-            # Check response SLA breaches
+            # Check response SLA breaches (only new ones, not already notified)
             response_breaches = current_app.db_manager.execute_query("""
                 SELECT st.tracking_id, st.ticket_id, st.response_deadline, st.escalation_level,
                        t.ticket_number, t.subject, t.priority, t.assigned_to,
@@ -185,9 +185,10 @@ class SLAService:
                 FROM sla_tracking st
                 JOIN tickets t ON st.ticket_id = t.ticket_id
                 JOIN sla_policies sp ON st.policy_id = sp.policy_id
-                WHERE st.response_status = 'pending' 
+                WHERE st.response_status = 'pending'
                 AND st.response_deadline < %s
                 AND t.status NOT IN ('resuelto', 'cerrado')
+                AND st.response_breached_at IS NULL
             """, (now,))
             
             for breach in (response_breaches or []):
@@ -197,7 +198,7 @@ class SLAService:
                     {
                         'response_status': 'breached',
                         'response_breached_at': now,
-                        'updated_at': 'CURRENT_TIMESTAMP'
+                        'updated_at': now
                     },
                     'tracking_id = %s',
                     (breach['tracking_id'],)
@@ -206,7 +207,7 @@ class SLAService:
                 breach['breach_type'] = 'response'
                 breaches.append(breach)
             
-            # Check resolution SLA breaches
+            # Check resolution SLA breaches (only new ones, not already notified)
             resolution_breaches = current_app.db_manager.execute_query("""
                 SELECT st.tracking_id, st.ticket_id, st.resolution_deadline, st.escalation_level,
                        t.ticket_number, t.subject, t.priority, t.assigned_to,
@@ -214,9 +215,10 @@ class SLAService:
                 FROM sla_tracking st
                 JOIN tickets t ON st.ticket_id = t.ticket_id
                 JOIN sla_policies sp ON st.policy_id = sp.policy_id
-                WHERE st.resolution_status = 'pending' 
+                WHERE st.resolution_status = 'pending'
                 AND st.resolution_deadline < %s
                 AND t.status NOT IN ('resuelto', 'cerrado')
+                AND st.resolution_breached_at IS NULL
             """, (now,))
             
             for breach in (resolution_breaches or []):
@@ -226,7 +228,7 @@ class SLAService:
                     {
                         'resolution_status': 'breached',
                         'resolution_breached_at': now,
-                        'updated_at': 'CURRENT_TIMESTAMP'
+                        'updated_at': now
                     },
                     'tracking_id = %s',
                     (breach['tracking_id'],)
@@ -467,22 +469,6 @@ class SLAService:
             success_count = 0
             for recipient in recipients:
                 try:
-                    # Create notification record
-                    notification_data = {
-                        'user_id': recipient.get('user_id'),
-                        'ticket_id': breach_data['ticket_id'],
-                        'type': 'sla_breach',
-                        'title': f'SLA Breach: {ticket["ticket_number"]}',
-                        'message': f'SLA {breach_data["breach_type"]} breach for ticket {ticket["ticket_number"]}',
-                        'data': {
-                            'breach_type': breach_data['breach_type'],
-                            'deadline': breach_data.get('deadline'),
-                            'escalation_level': breach_data.get('escalation_level', 0)
-                        }
-                    }
-
-                    current_app.db_manager.execute_insert('notifications', notification_data)
-
                     # Send email if recipient has email
                     if recipient.get('email'):
                         success = email_service.send_template_email(
@@ -493,6 +479,11 @@ class SLAService:
                         )
                         if success:
                             success_count += 1
+                            current_app.logger.info(f"SLA breach email sent to {recipient['email']} for ticket {ticket['ticket_number']}")
+                        else:
+                            current_app.logger.warning(f"Failed to send SLA breach email to {recipient['email']}")
+                    else:
+                        current_app.logger.warning(f"No email address for recipient: {recipient}")
 
                 except Exception as e:
                     current_app.logger.error(f"Error sending breach notification to {recipient}: {e}")

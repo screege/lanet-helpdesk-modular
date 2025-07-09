@@ -48,20 +48,23 @@ const Dashboard: React.FC = () => {
       const response = await apiService.get('/dashboard/stats') as ApiResponse<DashboardStats>;
 
       if (response.success) {
-        const realStats: DashboardStats = {
-          total_tickets: response.data.total_tickets || 0,
-          open_tickets: response.data.open_tickets || 0,
-          assigned_tickets: response.data.assigned_tickets || 0,
-          resolved_tickets: response.data.resolved_tickets || 0,
-          overdue_tickets: response.data.overdue_tickets || 0,
-          sla_compliance: response.data.sla_compliance || 0,
-          total_clients: response.data.total_clients,
-          total_users: response.data.total_users,
-          client_users: response.data.client_users,
-          client_sites: response.data.client_sites,
-        };
-
-        setStats(realStats);
+        // Type guard crítico para estadísticas del dashboard
+        if (response.data && typeof response.data === 'object') {
+          const data = response.data as any;
+          const realStats: DashboardStats = {
+            total_tickets: data.total_tickets || 0,
+            open_tickets: data.open_tickets || 0,
+            assigned_tickets: data.assigned_tickets || 0,
+            resolved_tickets: data.resolved_tickets || 0,
+            overdue_tickets: data.overdue_tickets || 0,
+            sla_compliance: data.sla_compliance || 0,
+            total_clients: data.total_clients || 0,
+            total_users: data.total_users || 0,
+          };
+          setStats(realStats);
+        } else {
+          console.error('Invalid dashboard stats response');
+        }
         console.log('✅ Dashboard loaded with real data:', realStats);
       } else {
         console.error('Failed to load dashboard stats:', response.error);

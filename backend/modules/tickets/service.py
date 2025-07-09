@@ -664,7 +664,7 @@ class TicketService:
                 # Send notification for ticket comment
                 try:
                     from modules.notifications.service import notifications_service
-                    notifications_service.send_ticket_notification('ticket_commented', ticket_id)
+                    notifications_service.send_ticket_notification('ticket_commented', ticket_id, comment_id=result['comment_id'])
                 except Exception as e:
                     self.logger.warning(f"Failed to send ticket comment notification: {e}")
 

@@ -224,10 +224,12 @@ class ApiService {
         }
 
         // Create config without Content-Type for FormData
+        // Type guard para config de seguridad
+        const safeConfig = config && typeof config === 'object' ? config as any : {};
         const formDataConfig = {
-          ...config,
+          ...safeConfig,
           headers: {
-            ...config?.headers,
+            ...(safeConfig.headers || {}),
             // Don't set Content-Type - let axios set multipart/form-data with boundary
           }
         };

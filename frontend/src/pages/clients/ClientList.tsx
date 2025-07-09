@@ -86,7 +86,19 @@ const ClientList: React.FC = () => {
       const response = await apiService.get('/clients?per_page=1000') as ApiResponse<{ clients: Client[] }>;
 
       if (response.success) {
-        setAllClients(response.data.clients || response.data || []);
+        // Type guard crítico para datos de clientes
+        if (response.data && typeof response.data === 'object') {
+          if ('clients' in response.data) {
+            setAllClients((response.data as any).clients || []);
+          } else if (Array.isArray(response.data)) {
+            setAllClients(response.data as any);
+          } else {
+            console.warn('Invalid clients response format');
+            setAllClients([]);
+          }
+        } else {
+          setAllClients([]);
+        }
         console.log('✅ All clients loaded for filtering:', response.data);
       } else {
         console.error('Failed to load clients:', response.error);

@@ -72,7 +72,13 @@ const SiteForm: React.FC<SiteFormProps> = ({
       setLoadingClients(true);
       const response = await clientsService.getAllClients({ per_page: 100 }) as ApiResponse<{ clients: Client[] }>;
       if (response.success) {
-        setClients(response.data.clients || []);
+        // Type guard para validar response.data
+        if (response.data && typeof response.data === 'object' && 'clients' in response.data) {
+          setClients((response.data as any).clients || []);
+        } else {
+          console.warn('Invalid clients response format');
+          setClients([]);
+        }
       }
     } catch (err: unknown) {
       console.error('Error loading clients:', err);

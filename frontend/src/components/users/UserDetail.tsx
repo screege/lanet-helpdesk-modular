@@ -47,7 +47,12 @@ const UserDetail: React.FC<UserDetailProps> = ({
       ]);
 
       if (userResponse.success) {
-        setUserDetails(userResponse.data);
+        // Type guard crítico para datos de usuario
+        if (userResponse.data && typeof userResponse.data === 'object') {
+          setUserDetails(userResponse.data as User);
+        } else {
+          throw new Error('Invalid user data received');
+        }
       } else {
         setError('Error al cargar detalles del usuario');
       }
@@ -55,7 +60,11 @@ const UserDetail: React.FC<UserDetailProps> = ({
       if (sitesResponse.success) {
         console.log('Sites response:', sitesResponse);
         // Filter only assigned sites and map to expected format
-        const assignedSites = (sitesResponse.data.sites || [])
+        // Type guard para datos de sitios
+        const sitesData = sitesResponse.data && typeof sitesResponse.data === 'object' && 'sites' in sitesResponse.data
+          ? (sitesResponse.data as any).sites
+          : [];
+        const assignedSites = (sitesData || [])
           .filter((site: unknown) => (site as any).is_assigned)
           .map((site: unknown) => ({
             site_id: (site as any).site_id,

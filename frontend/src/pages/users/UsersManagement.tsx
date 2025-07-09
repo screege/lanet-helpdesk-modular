@@ -129,12 +129,36 @@ const UsersManagement: React.FC = () => {
       ]);
 
       if (usersResponse.success) {
-        const userData = usersResponse.data;
-        setAllUsers(userData.users || userData || []);
+        // Type guard crítico para datos de usuarios
+        if (usersResponse.data && typeof usersResponse.data === 'object') {
+          const userData = usersResponse.data as any;
+          if ('users' in userData) {
+            setAllUsers(userData.users || []);
+          } else if (Array.isArray(userData)) {
+            setAllUsers(userData);
+          } else {
+            console.warn('Invalid users response format');
+            setAllUsers([]);
+          }
+        } else {
+          setAllUsers([]);
+        }
       }
 
       if (clientsResponse.success) {
-        setClients(clientsResponse.data.clients || clientsResponse.data || []);
+        // Type guard para datos de clientes
+        if (clientsResponse.data && typeof clientsResponse.data === 'object') {
+          if ('clients' in clientsResponse.data) {
+            setClients((clientsResponse.data as any).clients || []);
+          } else if (Array.isArray(clientsResponse.data)) {
+            setClients(clientsResponse.data as any);
+          } else {
+            console.warn('Invalid clients response format');
+            setClients([]);
+          }
+        } else {
+          setClients([]);
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);

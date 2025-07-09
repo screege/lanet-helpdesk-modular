@@ -65,7 +65,19 @@ const UserForm: React.FC<UserFormProps> = ({
       setLoadingClients(true);
       const response = await apiService.get('/clients?per_page=1000') as ApiResponse<{ clients: Client[] }>;
       if (response.success) {
-        setClients(response.data.clients || response.data || []);
+        // Type guard para validar datos de clientes
+        if (response.data && typeof response.data === 'object') {
+          if ('clients' in response.data) {
+            setClients((response.data as any).clients || []);
+          } else if (Array.isArray(response.data)) {
+            setClients(response.data as any);
+          } else {
+            console.warn('Invalid clients response format');
+            setClients([]);
+          }
+        } else {
+          setClients([]);
+        }
       }
     } catch (error) {
       console.error('Error loading clients:', error);

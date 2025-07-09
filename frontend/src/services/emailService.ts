@@ -94,7 +94,12 @@ class EmailService {
   // Email Configuration Management
   async getEmailConfigurations(): Promise<EmailConfiguration[]> {
     const response = await apiService.get('/email/configurations');
-    return response.data;
+    // Type guard crítico para configuraciones de email
+    if (response.data && Array.isArray(response.data)) {
+      return response.data as EmailConfiguration[];
+    }
+    console.warn('Invalid email configurations response');
+    return [];
   }
 
   async getEmailConfigurationById(configId: string): Promise<EmailConfiguration> {
@@ -118,7 +123,11 @@ class EmailService {
 
   async testEmailConnection(configId: string): Promise<ConnectionTestResult> {
     const response = await apiService.post(`/email/configurations/${configId}/test`, {});
-    return response.data;
+    // Type guard crítico para test de conexión
+    if (response.data && typeof response.data === 'object') {
+      return response.data as ConnectionTestResult;
+    }
+    throw new Error('Invalid connection test response');
   }
 
   async sendTestEmail(configId: string, toEmail: string): Promise<{ success: boolean; message: string }> {

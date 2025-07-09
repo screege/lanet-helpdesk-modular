@@ -76,7 +76,19 @@ const SolicitanteForm: React.FC<SolicitanteFormProps> = ({
     try {
       const response = await apiService.get('/clients?per_page=1000') as ApiResponse<{ clients: Client[] }>;
       if (response.success) {
-        setClients(response.data.clients || response.data || []);
+        // Type guard crítico para datos de clientes
+        if (response.data && typeof response.data === 'object') {
+          if ('clients' in response.data) {
+            setClients((response.data as any).clients || []);
+          } else if (Array.isArray(response.data)) {
+            setClients(response.data as any);
+          } else {
+            console.warn('Invalid clients response format');
+            setClients([]);
+          }
+        } else {
+          setClients([]);
+        }
       }
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -90,7 +102,13 @@ const SolicitanteForm: React.FC<SolicitanteFormProps> = ({
       setLoadingSites(true);
       const response = await sitesService.getSites({ client_id: selectedClientId, per_page: 1000 }) as ApiResponse<{ sites: Site[] }>;
       if (response.success) {
-        setSites(response.data.sites || []);
+        // Type guard crítico para datos de sitios
+        if (response.data && typeof response.data === 'object' && 'sites' in response.data) {
+          setSites((response.data as any).sites || []);
+        } else {
+          console.warn('Invalid sites response format');
+          setSites([]);
+        }
       }
     } catch (error) {
       console.error('Error loading client sites:', error);

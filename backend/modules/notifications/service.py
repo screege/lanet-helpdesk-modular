@@ -55,14 +55,19 @@ class NotificationsService:
         }
     
     def send_ticket_notification(self, notification_type: str, ticket_id: str,
-                                additional_data: Dict = None) -> bool:
-        """Send notification for ticket event"""
+                                additional_data: Dict = None, comment_id: str = None) -> bool:
+        """Send notification for ticket event with proper deduplication"""
         try:
             current_app.logger.info(f"NOTIFICATION: Starting {notification_type} for ticket {ticket_id}")
 
             if notification_type not in self.notification_types:
                 current_app.logger.warning(f"NOTIFICATION: Unknown notification type: {notification_type}")
                 return False
+
+            # Check if notification already sent using tracking table
+            if self._is_notification_already_sent(ticket_id, notification_type, comment_id):
+                current_app.logger.info(f"NOTIFICATION: Skipping {notification_type} for ticket {ticket_id} - already sent")
+                return True
 
             # Get ticket details
             ticket = self._get_ticket_details(ticket_id)
@@ -77,7 +82,7 @@ class NotificationsService:
             # Get email template
             template = self._get_email_template(notification_config['template_type'])
             if not template:
-                current_app.logger.warning(f"❌ NOTIFICATION: No template found for: {notification_config['template_type']}")
+                current_app.logger.warning(f"NOTIFICATION: No template found for: {notification_config['template_type']}")
                 return False
 
             # Get recipients
@@ -106,12 +111,60 @@ class NotificationsService:
                     success_count += 1
 
             current_app.logger.info(
-                f"✅ NOTIFICATION: Sent {success_count}/{len(recipients)} notifications for {notification_type}"
+                f"NOTIFICATION: Sent {success_count}/{len(recipients)} notifications for {notification_type}"
             )
+
+            # Mark notification as sent in tracking table
+            if success_count > 0:
+                self._mark_notification_sent(ticket_id, notification_type, comment_id)
+
             return success_count > 0
-            
+
         except Exception as e:
             current_app.logger.error(f"Error sending ticket notification: {e}")
+            return False
+
+    def _is_notification_already_sent(self, ticket_id: str, notification_type: str, comment_id: str = None) -> bool:
+        """Check if notification was already sent using tracking table"""
+        try:
+            if comment_id:
+                # Check for comment-specific notification
+                existing = current_app.db_manager.execute_query("""
+                    SELECT tracking_id FROM notification_tracking
+                    WHERE ticket_id = %s AND comment_id = %s AND notification_type = %s
+                """, (ticket_id, comment_id, notification_type), fetch='one')
+            else:
+                # Check for ticket-level notification
+                existing = current_app.db_manager.execute_query("""
+                    SELECT tracking_id FROM notification_tracking
+                    WHERE ticket_id = %s AND notification_type = %s AND comment_id IS NULL
+                """, (ticket_id, notification_type), fetch='one')
+
+            return existing is not None
+
+        except Exception as e:
+            current_app.logger.error(f"Error checking notification tracking: {e}")
+            return False
+
+    def _mark_notification_sent(self, ticket_id: str, notification_type: str, comment_id: str = None) -> bool:
+        """Mark notification as sent in tracking table"""
+        try:
+            tracking_data = {
+                'ticket_id': ticket_id,
+                'notification_type': notification_type,
+                'sent_at': 'NOW()',
+                'created_at': 'NOW()'
+            }
+
+            if comment_id:
+                tracking_data['comment_id'] = comment_id
+
+            current_app.db_manager.execute_insert('notification_tracking', tracking_data)
+            current_app.logger.debug(f"Marked notification as sent: {notification_type} for ticket {ticket_id}")
+            return True
+
+        except Exception as e:
+            current_app.logger.error(f"Error marking notification as sent: {e}")
             return False
     
     def _get_ticket_details(self, ticket_id: str) -> Optional[Dict]:
@@ -334,13 +387,13 @@ class NotificationsService:
             }
 
             current_app.db_manager.execute_insert('email_queue', queue_data)
-            current_app.logger.info(f"✅ NOTIFICATION: Email queued successfully to {recipient['email']}")
+            current_app.logger.info(f"NOTIFICATION: Email queued successfully to {recipient['email']}")
             return True
 
         except Exception as e:
-            current_app.logger.error(f"❌ NOTIFICATION: Error sending email notification: {e}")
+            current_app.logger.error(f"NOTIFICATION: Error sending email notification: {e}")
             import traceback
-            current_app.logger.error(f"❌ NOTIFICATION: Traceback: {traceback.format_exc()}")
+            current_app.logger.error(f"NOTIFICATION: Traceback: {traceback.format_exc()}")
             return False
     
     def _replace_template_variables(self, template: str, variables: Dict) -> str:
@@ -378,6 +431,53 @@ class NotificationsService:
         }
         
         return self.send_ticket_notification('sla_breach', ticket_id, additional_data)
+
+    def process_pending_notifications(self) -> int:
+        """Process pending notifications for new tickets and comments"""
+        try:
+            processed = 0
+
+            # Check for very recent tickets (last 10 minutes) - with better duplicate detection
+            new_tickets = current_app.db_manager.execute_query("""
+                SELECT t.ticket_id, t.ticket_number, t.subject, t.client_id, t.assigned_to,
+                       t.created_at, c.name as client_name
+                FROM tickets t
+                JOIN clients c ON t.client_id = c.client_id
+                WHERE t.created_at > NOW() - INTERVAL '10 minutes'
+                ORDER BY t.created_at DESC
+                LIMIT 10
+            """)
+
+            for ticket in (new_tickets or []):
+                try:
+                    # Check if we already sent creation notifications for this specific ticket
+                    existing_emails = current_app.db_manager.execute_query("""
+                        SELECT COUNT(*) as count FROM email_queue
+                        WHERE ticket_id = %s
+                        AND (subject LIKE '%%Nuevo ticket%%' OR subject LIKE '%%Ticket Creado%%')
+                        AND status IN ('sent', 'pending')
+                    """, (ticket['ticket_id'],), fetch='one')
+
+                    if existing_emails and existing_emails['count'] == 0:
+                        success = self.send_ticket_notification('ticket_created', ticket['ticket_id'])
+                        if success:
+                            processed += 1
+                            current_app.logger.info(f"Sent new ticket notification for {ticket['ticket_number']}")
+                    else:
+                        current_app.logger.debug(f"Skipping ticket creation notification for {ticket['ticket_number']} - already sent ({existing_emails['count']} existing)")
+                except Exception as e:
+                    current_app.logger.error(f"Failed to send new ticket notification for {ticket['ticket_number']}: {e}")
+
+            # REMOVED: Comment processing from SLA Monitor
+            # Comments are now handled immediately when created in tickets/service.py
+            # This prevents duplicate processing and timing issues
+            current_app.logger.info("Comment notifications handled by ticket service - skipping SLA Monitor processing")
+
+            return processed
+
+        except Exception as e:
+            current_app.logger.error(f"Error processing pending notifications: {e}")
+            return 0
 
 # Global notifications service instance
 notifications_service = NotificationsService()

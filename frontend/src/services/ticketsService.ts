@@ -181,13 +181,21 @@ class TicketsService {
     const url = queryString ? `/tickets/search?${queryString}` : '/tickets/';
     
     const response = await apiService.get(url);
-    return response.data;
+    // Type guard crítico para datos de tickets
+    if (response.data && typeof response.data === 'object') {
+      return response.data as PaginatedTicketsResponse;
+    }
+    throw new Error('Invalid tickets response format');
   }
 
   // Get ticket by ID
   async getTicketById(ticketId: string): Promise<Ticket> {
     const response = await apiService.get(`/tickets/${ticketId}`);
-    return response.data;
+    // Type guard crítico para datos de ticket individual
+    if (response.data && typeof response.data === 'object') {
+      return response.data as Ticket;
+    }
+    throw new Error('Invalid ticket data received');
   }
 
   // Create new ticket
