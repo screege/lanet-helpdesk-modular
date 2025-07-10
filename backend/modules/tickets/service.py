@@ -66,19 +66,37 @@ class TicketService:
                     params.extend([search_term, search_term, search_term])
             
             where_clause = " AND ".join(where_conditions)
-            
+
+            # Handle sorting
+            sort_by = filters.get('sort_by', 'created_at') if filters else 'created_at'
+            sort_order = filters.get('sort_order', 'desc') if filters else 'desc'
+
+            # Validate sort fields to prevent SQL injection
+            valid_sort_fields = {
+                'ticket_number': 't.ticket_number',
+                'client_name': 'c.name',
+                'subject': 't.subject',
+                'status': 't.status',
+                'priority': 't.priority',
+                'created_at': 't.created_at',
+                'updated_at': 't.updated_at'
+            }
+
+            sort_field = valid_sort_fields.get(sort_by, 't.created_at')
+            sort_direction = 'ASC' if sort_order.lower() == 'asc' else 'DESC'
+
             # Get total count
             count_query = f"""
-            SELECT COUNT(*) as total 
-            FROM tickets t 
+            SELECT COUNT(*) as total
+            FROM tickets t
             WHERE {where_clause}
             """
             total_result = self.db.execute_query(count_query, tuple(params), fetch='one')
             total = total_result['total'] if total_result else 0
-            
+
             # Calculate offset
             offset = (page - 1) * per_page
-            
+
             # Get tickets with related data
             query = f"""
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
@@ -100,7 +118,7 @@ class TicketService:
             LEFT JOIN users creator ON t.created_by = creator.user_id
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
             WHERE {where_clause}
-            ORDER BY t.created_at DESC
+            ORDER BY {sort_field} {sort_direction}
             LIMIT %s OFFSET %s
             """
             

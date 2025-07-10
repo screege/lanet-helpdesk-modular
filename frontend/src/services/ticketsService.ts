@@ -136,6 +136,8 @@ export interface TicketFilters {
   assigned_to?: string;
   page?: number;
   per_page?: number;
+  sort_by?: string;
+  sort_order?: string;
 }
 
 export interface TicketStats {

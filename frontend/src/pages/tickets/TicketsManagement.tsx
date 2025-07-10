@@ -17,13 +17,19 @@ const TicketsManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<TicketFilters>({
     page: 1,
-    per_page: 20
+    per_page: 20,
+    sort_by: 'created_at',
+    sort_order: 'desc'
   });
   const [pagination, setPagination] = useState({
     page: 1,
     per_page: 20,
     total: 0,
     total_pages: 0
+  });
+  const [sortConfig, setSortConfig] = useState({
+    key: 'created_at',
+    direction: 'desc'
   });
 
   // Bulk actions state
@@ -83,6 +89,47 @@ const TicketsManagement: React.FC = () => {
       page: 1,
       search: searchTerm || undefined
     }));
+  };
+
+  // Handle search on Enter key
+  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  // Clear search
+  const clearSearch = () => {
+    setSearchTerm('');
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      search: undefined
+    }));
+  };
+
+  // Handle column sorting
+  const handleSort = (key: string) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+
+    setSortConfig({ key, direction });
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      sort_by: key,
+      sort_order: direction
+    }));
+  };
+
+  // Get sort icon for column headers
+  const getSortIcon = (columnKey: string) => {
+    if (sortConfig.key !== columnKey) {
+      return null;
+    }
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
   };
 
   // Handle filter change
@@ -392,8 +439,18 @@ const TicketsManagement: React.FC = () => {
               placeholder="Buscar tickets..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onKeyPress={handleSearchKeyPress}
+              className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+            {searchTerm && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                title="Limpiar búsqueda"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Status Filter */}
@@ -536,26 +593,56 @@ const TicketsManagement: React.FC = () => {
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                  Ticket
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('ticket_number')}
+                >
+                  <div className="flex items-center gap-1">
+                    Ticket {getSortIcon('ticket_number')}
+                  </div>
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0">
-                  Cliente/Sitio
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('client_name')}
+                >
+                  <div className="flex items-center gap-1">
+                    Cliente/Sitio {getSortIcon('client_name')}
+                  </div>
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0">
-                  Asunto
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('subject')}
+                >
+                  <div className="flex items-center gap-1">
+                    Asunto {getSortIcon('subject')}
+                  </div>
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                  Estado
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center gap-1">
+                    Estado {getSortIcon('status')}
+                  </div>
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                  Prioridad
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('priority')}
+                >
+                  <div className="flex items-center gap-1">
+                    Prioridad {getSortIcon('priority')}
+                  </div>
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 hidden sm:table-cell">
                   Asignado
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 hidden md:table-cell">
-                  Creado
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 hidden md:table-cell cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('created_at')}
+                >
+                  <div className="flex items-center gap-1">
+                    Creado {getSortIcon('created_at')}
+                  </div>
                 </th>
                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                   Acciones
