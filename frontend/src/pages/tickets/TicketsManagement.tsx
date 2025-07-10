@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon, Trash2, Users, Flag, CheckSquare, X } from 'lucide-react';
 import { ticketsService, Ticket, TicketFilters, BulkActionResponse } from '../../services/ticketsService';
@@ -6,6 +6,7 @@ import { usersService, User } from '../../services/usersService';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const TicketsManagement: React.FC = () => {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ const TicketsManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms delay
   const [filters, setFilters] = useState<TicketFilters>({
     page: 1,
     per_page: 20,
@@ -66,6 +68,15 @@ const TicketsManagement: React.FC = () => {
   useEffect(() => {
     loadTickets();
   }, [filters]);
+
+  // Auto-search when debounced search term changes
+  useEffect(() => {
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      search: debouncedSearchTerm || undefined
+    }));
+  }, [debouncedSearchTerm]);
 
   // Load technicians for assignment
   const loadTechnicians = async () => {

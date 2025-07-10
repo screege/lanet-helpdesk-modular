@@ -103,8 +103,15 @@ class NotificationsService:
 
             current_app.logger.info(f"NOTIFICATION: Found {len(recipients)} recipients: {[r['email'] for r in recipients]}")
 
+            # Get comment details if this is a comment notification
+            comment_data = None
+            if comment_id and notification_type == 'ticket_commented':
+                comment_data = self._get_comment_details(comment_id)
+                if comment_data:
+                    current_app.logger.info(f"NOTIFICATION: Found comment by {comment_data.get('author_name', 'Unknown')}")
+
             # Prepare template variables
-            template_vars = self._prepare_template_variables(ticket, additional_data)
+            template_vars = self._prepare_template_variables(ticket, additional_data, comment_data)
 
             # Send notifications
             success_count = 0
@@ -197,6 +204,30 @@ class NotificationsService:
             
         except Exception as e:
             current_app.logger.error(f"Error getting ticket details: {e}")
+            return None
+
+    def _get_comment_details(self, comment_id: str) -> Optional[Dict]:
+        """Get comment details for notifications"""
+        try:
+            query = """
+            SELECT tc.comment_id, tc.comment_text, tc.created_at, tc.is_internal,
+                   u.name as author_name, u.email as author_email
+            FROM ticket_comments tc
+            JOIN users u ON tc.user_id = u.user_id
+            WHERE tc.comment_id = %s
+            """
+
+            comment = current_app.db_manager.execute_query(query, (comment_id,), fetch='one')
+
+            if comment:
+                current_app.logger.debug(f"NOTIFICATION: Found comment {comment_id}")
+                return comment
+            else:
+                current_app.logger.warning(f"NOTIFICATION: Comment not found: {comment_id}")
+                return None
+
+        except Exception as e:
+            current_app.logger.error(f"Error getting comment details: {e}")
             return None
     
     def _get_email_template(self, template_type: str) -> Optional[Dict]:
@@ -314,7 +345,7 @@ class NotificationsService:
             current_app.logger.error(f"Error getting notification recipients: {e}")
             return []
     
-    def _prepare_template_variables(self, ticket: Dict, additional_data: Dict = None) -> Dict:
+    def _prepare_template_variables(self, ticket: Dict, additional_data: Dict = None, comment_data: Dict = None) -> Dict:
         """Prepare variables for email template"""
         variables = {
             'ticket_number': ticket['ticket_number'],
@@ -352,6 +383,16 @@ class NotificationsService:
             'reopen_reason': 'Ticket reabierto para atención adicional',
             'portal_url': 'https://helpdesk.lanet.mx'  # Add portal URL (can be made configurable later)
         }
+
+        # Add comment data if provided
+        if comment_data:
+            variables.update({
+                'comment_author': comment_data.get('author_name', 'Usuario'),
+                'comment_date': comment_data['created_at'].strftime('%d/%m/%Y %H:%M') if comment_data.get('created_at') else '',
+                'comment_text': comment_data.get('comment_text', ''),
+                'comment_author_email': comment_data.get('author_email', ''),
+                'is_internal_comment': 'Sí' if comment_data.get('is_internal') else 'No'
+            })
 
         # Add additional data if provided
         if additional_data:

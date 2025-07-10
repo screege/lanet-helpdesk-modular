@@ -32,17 +32,47 @@ tickets_bp = Blueprint('tickets', __name__)
 @tickets_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_tickets():
-    """Get all tickets"""
+    """Get all tickets with sorting support"""
     try:
-        tickets = current_app.db_manager.execute_query(
-            "SELECT * FROM tickets ORDER BY created_at DESC LIMIT 50"
-        )
-        
-        # Format tickets data
-        formatted_tickets = [current_app.response_manager.format_ticket_data(ticket) for ticket in tickets]
-        
-        return current_app.response_manager.success(formatted_tickets)
-        
+        from .service import TicketService
+
+        # Get query parameters for sorting
+        sort_by = request.args.get('sort_by', 'created_at')
+        sort_order = request.args.get('sort_order', 'desc')
+        page = int(request.args.get('page', 1))
+        per_page = min(int(request.args.get('per_page', 50)), 100)
+
+        # Apply RLS for client users
+        claims = get_jwt()
+        current_user_role = claims.get('role')
+        current_user_client_id = claims.get('client_id')
+
+        filters = {
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
+
+        if current_user_role in ['client_admin', 'solicitante']:
+            filters['client_id'] = current_user_client_id
+
+        ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
+        result = ticket_service.get_all_tickets(page, per_page, filters)
+
+        # Format tickets
+        formatted_tickets = [current_app.response_manager.format_ticket_data(ticket) for ticket in result['tickets']]
+
+        response_data = {
+            'tickets': formatted_tickets,
+            'pagination': {
+                'page': result['page'],
+                'per_page': result['per_page'],
+                'total': result['total'],
+                'total_pages': result['total_pages']
+            }
+        }
+
+        return current_app.response_manager.success(response_data)
+
     except Exception as e:
         current_app.logger.error(f"Get tickets error: {e}")
         return current_app.response_manager.server_error('Failed to get tickets')
@@ -696,11 +726,16 @@ def search_tickets():
         priority = request.args.get('priority')
         client_id = request.args.get('client_id')
         assigned_to = request.args.get('assigned_to')
+        sort_by = request.args.get('sort_by', 'created_at')
+        sort_order = request.args.get('sort_order', 'desc')
         page = int(request.args.get('page', 1))
         per_page = min(int(request.args.get('per_page', 20)), 100)
 
         # Build filters
-        filters = {}
+        filters = {
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
         if search:
             filters['search'] = search
         if status:

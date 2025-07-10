@@ -59,11 +59,11 @@ class TicketService:
                     where_conditions.append("t.assigned_to = %s")
                     params.append(filters['assigned_to'])
                 
-                # Search filter
+                # Search filter - include client name and site name
                 if filters.get('search'):
-                    where_conditions.append("(t.subject ILIKE %s OR t.description ILIKE %s OR t.ticket_number ILIKE %s)")
+                    where_conditions.append("(t.subject ILIKE %s OR t.description ILIKE %s OR t.ticket_number ILIKE %s OR c.name ILIKE %s OR s.name ILIKE %s)")
                     search_term = f"%{filters['search']}%"
-                    params.extend([search_term, search_term, search_term])
+                    params.extend([search_term, search_term, search_term, search_term, search_term])
             
             where_clause = " AND ".join(where_conditions)
 
@@ -89,6 +89,8 @@ class TicketService:
             count_query = f"""
             SELECT COUNT(*) as total
             FROM tickets t
+            LEFT JOIN clients c ON t.client_id = c.client_id
+            LEFT JOIN sites s ON t.site_id = s.site_id
             WHERE {where_clause}
             """
             total_result = self.db.execute_query(count_query, tuple(params), fetch='one')
