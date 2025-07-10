@@ -83,20 +83,18 @@ class TicketService:
             query = f"""
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_phone, t.affected_person_contact, t.notification_email, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
                    t.assigned_at, t.resolved_at, t.closed_at, t.resolution_notes,
                    c.name as client_name,
                    s.name as site_name,
-                   cat.name as category_name,
                    creator.name as created_by_name,
                    assignee.name as assigned_to_name
             FROM tickets t
             LEFT JOIN clients c ON t.client_id = c.client_id
             LEFT JOIN sites s ON t.site_id = s.site_id
-            LEFT JOIN categories cat ON t.category_id = cat.category_id
             LEFT JOIN users creator ON t.created_by = creator.user_id
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
             WHERE {where_clause}
@@ -128,20 +126,18 @@ class TicketService:
             query = """
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_phone, t.affected_person_contact, t.notification_email, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
                    t.assigned_at, t.resolved_at, t.closed_at, t.resolution_notes,
                    c.name as client_name,
                    s.name as site_name, s.address as site_address,
-                   cat.name as category_name,
                    creator.name as created_by_name, creator.email as created_by_email,
                    assignee.name as assigned_to_name, assignee.email as assigned_to_email
             FROM tickets t
             LEFT JOIN clients c ON t.client_id = c.client_id
             LEFT JOIN sites s ON t.site_id = s.site_id
-            LEFT JOIN categories cat ON t.category_id = cat.category_id
             LEFT JOIN users creator ON t.created_by = creator.user_id
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
             WHERE t.ticket_id = %s
@@ -220,9 +216,9 @@ class TicketService:
                 'from_email': ticket_data.get('from_email'),
                 'email_message_id': ticket_data.get('email_message_id'),
                 'email_thread_id': ticket_data.get('email_thread_id'),
-                'approval_status': 'pendiente'
-                # Note: created_at and updated_at will use DEFAULT CURRENT_TIMESTAMP from PostgreSQL
-                # which respects the database timezone (America/Mexico_City)
+                'approval_status': 'pendiente',
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow()
             }
 
             # Auto-assignment logic: assign to available technician if not explicitly assigned
@@ -235,8 +231,7 @@ class TicketService:
             # Auto-assign if assigned_to is provided
             if new_ticket_data['assigned_to']:
                 new_ticket_data['status'] = 'en_proceso'
-                # Note: assigned_at will be set by database trigger or explicit update later
-                # to maintain timezone consistency
+                new_ticket_data['assigned_at'] = datetime.utcnow()
             
             # Insert ticket
             result = self.db.execute_insert(
@@ -377,9 +372,7 @@ class TicketService:
                 return {'success': False, 'errors': {'ticket_id': 'Ticket not found'}}
 
             # Prepare update data
-            # Note: updated_at will be handled by PostgreSQL trigger (update_updated_at_column)
-            # which uses CURRENT_TIMESTAMP and respects the database timezone
-            update_data = {}
+            update_data = {'updated_at': datetime.utcnow()}
             changes = []
 
             # Handle status changes
@@ -481,7 +474,7 @@ class TicketService:
                     changes.append(f"{field} actualizado")
 
             # Update ticket
-            if len(update_data) > 0:  # Has actual changes to make
+            if len(update_data) > 1:  # More than just updated_at
                 rows_updated = self.db.execute_update(
                     'tickets',
                     update_data,
@@ -510,9 +503,6 @@ class TicketService:
                         # Check if this is a resolution
                         if 'resolution_notes' in ticket_data and ticket_data['resolution_notes']:
                             notifications_service.send_ticket_notification('ticket_resolved', ticket_id)
-                        elif 'status' in ticket_data and ticket_data['status'] == 'reabierto':
-                            # Send specific notification for ticket reopening
-                            notifications_service.send_ticket_notification('ticket_reopened', ticket_id)
                         elif 'status' in ticket_data:
                             notifications_service.send_ticket_notification('ticket_status_changed', ticket_id)
                         else:
@@ -613,9 +603,9 @@ class TicketService:
                 'user_id': created_by,
                 'comment_text': comment_data['content'].strip(),
                 'is_internal': comment_data.get('is_internal', False),
-                'is_email_reply': comment_data.get('is_email_reply', False)
-                # Note: created_at and updated_at will use DEFAULT CURRENT_TIMESTAMP from PostgreSQL
-                # which respects the database timezone (America/Mexico_City)
+                'is_email_reply': comment_data.get('is_email_reply', False),
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow()
             }
 
             # Insert comment
@@ -671,26 +661,12 @@ class TicketService:
                     f"Agregó {comment_type}"
                 )
 
-                # Send notifications for ticket comment and potential reopening
+                # Send notification for ticket comment
                 try:
                     from modules.notifications.service import notifications_service
-
-                    # Check if ticket was automatically reopened
-                    was_reopened = (ticket['status'] == 'espera_cliente' and
-                                  is_client_user and
-                                  not new_comment_data['is_internal'])
-
-                    if was_reopened:
-                        # Send ticket reopened notification instead of comment notification
-                        # This provides better context about what happened
-                        notifications_service.send_ticket_notification('ticket_reopened', ticket_id)
-                        self.logger.info(f"Sent ticket reopened notification for {ticket['ticket_number']}")
-                    else:
-                        # Send regular comment notification
-                        notifications_service.send_ticket_notification('ticket_commented', ticket_id, comment_id=result['comment_id'])
-
+                    notifications_service.send_ticket_notification('ticket_commented', ticket_id, comment_id=result['comment_id'])
                 except Exception as e:
-                    self.logger.warning(f"Failed to send ticket notification: {e}")
+                    self.logger.warning(f"Failed to send ticket comment notification: {e}")
 
                 self.logger.info(f"Comment added to ticket {ticket['ticket_number']}")
                 return {'success': True, 'comment': result}

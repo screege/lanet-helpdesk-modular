@@ -37,11 +37,6 @@ class NotificationsService:
                 'recipients': ['client', 'assigned_technician', 'admins'],
                 'priority': 2
             },
-            'ticket_reopened': {
-                'template_type': 'ticket_reopened',
-                'recipients': ['client', 'assigned_technician', 'admins'],
-                'priority': 2
-            },
             'ticket_closed': {
                 'template_type': 'ticket_closed',
                 'recipients': ['client'],
@@ -347,9 +342,6 @@ class NotificationsService:
             'updated_by': ticket['assigned_to_name'] or ticket['created_by_name'] or 'Sistema',
             'resolved_by': ticket['assigned_to_name'] or 'Sistema',
             'closed_by': ticket['assigned_to_name'] or 'Sistema',
-            'reopened_by': ticket['assigned_to_name'] or ticket['created_by_name'] or 'Sistema',
-            'reopened_date': ticket['updated_at'] or ticket['created_at'],
-            'reopen_reason': 'Ticket reabierto para atención adicional',
             'portal_url': 'https://helpdesk.lanet.mx'  # Add portal URL (can be made configurable later)
         }
 
