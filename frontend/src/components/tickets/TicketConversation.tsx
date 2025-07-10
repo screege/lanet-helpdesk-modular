@@ -90,12 +90,14 @@ const TicketConversation: React.FC<TicketConversationProps> = ({
                 <div className="flex items-center space-x-1 text-gray-400">
                   <Clock className="w-3 h-3" />
                   <span className="text-xs">
-                    {new Date(comment.created_at).toLocaleString('es-ES', {
+                    {new Date(comment.created_at).toLocaleString('es-MX', {
+                      timeZone: 'America/Mexico_City',
                       day: '2-digit',
                       month: '2-digit',
                       year: 'numeric',
                       hour: '2-digit',
-                      minute: '2-digit'
+                      minute: '2-digit',
+                      hour12: false
                     })}
                   </span>
                 </div>
@@ -117,7 +119,15 @@ const TicketConversation: React.FC<TicketConversationProps> = ({
               {/* Metadata */}
               {comment.updated_at !== comment.created_at && (
                 <div className="mt-1 text-xs text-gray-400">
-                  Editado: {new Date(comment.updated_at).toLocaleString('es-ES')}
+                  Editado: {new Date(comment.updated_at).toLocaleString('es-MX', {
+                    timeZone: 'America/Mexico_City',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  })}
                 </div>
               )}
             </div>

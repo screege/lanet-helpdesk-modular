@@ -18,7 +18,7 @@ const TicketsManagement: React.FC = () => {
   const [filters, setFilters] = useState<TicketFilters>({
     page: 1,
     per_page: 20,
-    sort_by: 'created_at',
+    sort_by: 'ticket_number',
     sort_order: 'desc'
   });
   const [pagination, setPagination] = useState({
@@ -28,7 +28,7 @@ const TicketsManagement: React.FC = () => {
     total_pages: 0
   });
   const [sortConfig, setSortConfig] = useState({
-    key: 'created_at',
+    key: 'ticket_number',
     direction: 'desc'
   });
 
@@ -704,7 +704,12 @@ const TicketsManagement: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 hidden md:table-cell">
-                    {new Date(ticket.created_at).toLocaleDateString('es-ES')}
+                    {new Date(ticket.created_at).toLocaleDateString('es-MX', {
+                      timeZone: 'America/Mexico_City',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })}
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-1">

@@ -492,7 +492,15 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
                         <div>
                           <label className="text-sm font-medium text-gray-500">Creado</label>
                           <p className="text-gray-900">
-                            {new Date(ticket.created_at).toLocaleString('es-ES')}
+                            {new Date(ticket.created_at).toLocaleString('es-MX', {
+                              timeZone: 'America/Mexico_City',
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false
+                            })}
                           </p>
                         </div>
                       </div>
@@ -502,7 +510,15 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
                           <div>
                             <label className="text-sm font-medium text-gray-500">Asignado</label>
                             <p className="text-gray-900">
-                              {new Date(ticket.assigned_at).toLocaleString('es-ES')}
+                              {new Date(ticket.assigned_at).toLocaleString('es-MX', {
+                                timeZone: 'America/Mexico_City',
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false
+                              })}
                             </p>
                           </div>
                         </div>

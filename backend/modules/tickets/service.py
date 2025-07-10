@@ -73,7 +73,7 @@ class TicketService:
 
             # Validate sort fields to prevent SQL injection
             valid_sort_fields = {
-                'ticket_number': 't.ticket_number',
+                'ticket_number': 'CAST(SUBSTRING(t.ticket_number FROM \'TKT-([0-9]+)\') AS BIGINT)',
                 'client_name': 'c.name',
                 'subject': 't.subject',
                 'status': 't.status',
