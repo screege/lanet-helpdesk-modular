@@ -16,6 +16,7 @@ import TicketCreatePage from '@/pages/tickets/TicketCreatePage';
 import TicketDetailPage from '@/pages/tickets/TicketDetailPage';
 import TicketEditPage from '@/pages/tickets/TicketEditPage';
 import CategoriesManagement from '@/pages/categories/CategoriesManagement';
+import ReportsManagement from '@/pages/reports/ReportsManagement';
 
 import EmailConfigTabs from '@/pages/admin/EmailConfigTabs';
 import EmailTemplates from '@/pages/admin/EmailTemplates';
@@ -55,9 +56,11 @@ const App: React.FC = () => {
               <Route path="clients/:clientId/edit" element={<ClientEdit />} />
               <Route path="users" element={<UsersManagement />} />
               <Route path="sites" element={<SitesManagement />} />
-              <Route path="reports" element={<div className="p-6">Reportes - En desarrollo</div>} />
               <Route path="profile" element={<div className="p-6">Mi Perfil - En desarrollo</div>} />
               <Route path="knowledge-base" element={<div className="p-6">Base de Conocimiento - En desarrollo</div>} />
+
+              {/* Reports */}
+              <Route path="reports" element={<ReportsManagement />} />
 
               {/* Admin routes */}
               <Route path="admin/categories" element={<div className="p-6">Categorías - En desarrollo</div>} />

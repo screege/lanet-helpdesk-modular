@@ -214,7 +214,8 @@ class ApiService {
 
   async post<T>(endpoint: string, data: unknown, config?: unknown): Promise<ApiResponse<T>> {
     try {
-      console.log('🚀 API POST:', endpoint, 'Data type:', data ? data.constructor.name : 'undefined');
+      console.log('🚀🚀🚀 API POST:', endpoint, 'Data type:', data ? data.constructor.name : 'undefined');
+      console.log('🚀🚀🚀 API POST DATA:', JSON.stringify(data, null, 2));
 
       // Handle FormData specially - don't set Content-Type, let axios handle it
       if (data instanceof FormData) {

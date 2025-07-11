@@ -37,6 +37,7 @@ from modules.categories.routes import categories_bp
 from modules.dashboard.routes import dashboard_bp
 from modules.sla.routes import sla_bp
 from modules.email.routes import email_bp
+from modules.reports.routes import reports_bp
 
 def create_app(config_name='development'):
     """Application factory pattern"""
@@ -202,6 +203,7 @@ def create_app(config_name='development'):
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(sla_bp, url_prefix='/api/sla')
     app.register_blueprint(email_bp, url_prefix='/api/email')
+    app.register_blueprint(reports_bp, url_prefix='/api/reports')
     
     # Global error handlers
     @app.errorhandler(400)

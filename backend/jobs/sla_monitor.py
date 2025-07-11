@@ -128,7 +128,22 @@ def run_sla_monitor():
             except Exception as e:
                 logger.warning(f"Error checking incoming emails (non-critical): {e}")
                 logger.info("Continuing SLA monitoring without email processing")
-            
+
+            # 7. Process scheduled reports
+            logger.info("Processing scheduled reports...")
+            try:
+                from modules.reports.scheduler import report_scheduler
+                processed_reports = report_scheduler.process_scheduled_reports()
+
+                if processed_reports > 0:
+                    logger.info(f"Processed {processed_reports} scheduled reports")
+                else:
+                    logger.info("No scheduled reports due for processing")
+
+            except Exception as e:
+                logger.warning(f"Error processing scheduled reports (non-critical): {e}")
+                logger.info("Continuing SLA monitoring without report processing")
+
             logger.info("SLA monitor job completed successfully")
             
         except Exception as e:

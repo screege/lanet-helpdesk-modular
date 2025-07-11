@@ -248,6 +248,40 @@ def get_recent_activity():
         logger.error(f"Recent activity error: {e}")
         return current_app.response_manager.server_error('Failed to get recent activity')
 
+@dashboard_bp.route('/charts', methods=['GET'])
+@jwt_required()
+def get_dashboard_charts():
+    """Get chart data for dashboard visualizations"""
+    try:
+        # Get current user info
+        claims = get_jwt()
+        current_user_role = claims.get('role')
+        current_user_client_id = claims.get('client_id')
+
+        charts_data = {}
+
+        # Tickets by status chart
+        charts_data['tickets_by_status'] = _get_tickets_by_status_chart(current_user_role, current_user_client_id)
+
+        # Tickets trend chart (last 30 days)
+        charts_data['tickets_trend'] = _get_tickets_trend_chart(current_user_role, current_user_client_id)
+
+        # SLA compliance chart
+        charts_data['sla_compliance'] = _get_sla_compliance_chart(current_user_role, current_user_client_id)
+
+        # Priority distribution chart
+        charts_data['priority_distribution'] = _get_priority_distribution_chart(current_user_role, current_user_client_id)
+
+        # Technician performance chart (admin only)
+        if current_user_role in ['superadmin', 'admin', 'technician']:
+            charts_data['technician_performance'] = _get_technician_performance_chart()
+
+        return current_app.response_manager.success(charts_data)
+
+    except Exception as e:
+        logger.error(f"Dashboard charts error: {e}")
+        return current_app.response_manager.server_error('Failed to get dashboard charts')
+
 def _get_activity_action(status: str) -> str:
     """Get activity action description based on status"""
     actions = {
@@ -261,3 +295,239 @@ def _get_activity_action(status: str) -> str:
         'reabierto': 'reabierto'
     }
     return actions.get(status, status)
+
+def _get_tickets_by_status_chart(user_role: str, client_id: str = None) -> list:
+    """Get tickets by status data for pie chart"""
+    try:
+        # Base query conditions
+        where_conditions = ["1=1"]
+        params = []
+
+        # Apply role-based filtering
+        if user_role in ['client_admin', 'solicitante'] and client_id:
+            where_conditions.append("t.client_id = %s")
+            params.append(client_id)
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
+        SELECT
+            t.status,
+            COUNT(*) as count
+        FROM tickets t
+        WHERE {where_clause}
+        GROUP BY t.status
+        ORDER BY count DESC
+        """
+
+        results = current_app.db_manager.execute_query(query, tuple(params))
+
+        # Format for chart
+        chart_data = []
+        status_labels = {
+            'nuevo': 'Nuevo',
+            'asignado': 'Asignado',
+            'en_proceso': 'En Proceso',
+            'espera_cliente': 'Espera Cliente',
+            'resuelto': 'Resuelto',
+            'cerrado': 'Cerrado',
+            'cancelado': 'Cancelado',
+            'reabierto': 'Reabierto'
+        }
+
+        for result in (results or []):
+            chart_data.append({
+                'name': status_labels.get(result['status'], result['status']),
+                'value': result['count'],
+                'status': result['status']
+            })
+
+        return chart_data
+
+    except Exception as e:
+        logger.error(f"Error getting tickets by status chart: {e}")
+        return []
+
+def _get_tickets_trend_chart(user_role: str, client_id: str = None) -> list:
+    """Get tickets trend data for line chart (last 30 days)"""
+    try:
+        # Base query conditions
+        where_conditions = ["t.created_at >= CURRENT_DATE - INTERVAL '30 days'"]
+        params = []
+
+        # Apply role-based filtering
+        if user_role in ['client_admin', 'solicitante'] and client_id:
+            where_conditions.append("t.client_id = %s")
+            params.append(client_id)
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
+        SELECT
+            DATE(t.created_at) as date,
+            COUNT(*) as tickets_created,
+            COUNT(CASE WHEN t.status IN ('resuelto', 'cerrado') THEN 1 END) as tickets_resolved
+        FROM tickets t
+        WHERE {where_clause}
+        GROUP BY DATE(t.created_at)
+        ORDER BY date ASC
+        """
+
+        results = current_app.db_manager.execute_query(query, tuple(params))
+
+        # Format for chart
+        chart_data = []
+        for result in (results or []):
+            chart_data.append({
+                'date': result['date'].strftime('%d/%m') if result['date'] else '',
+                'creados': result['tickets_created'],
+                'resueltos': result['tickets_resolved']
+            })
+
+        return chart_data
+
+    except Exception as e:
+        logger.error(f"Error getting tickets trend chart: {e}")
+        return []
+
+def _get_sla_compliance_chart(user_role: str, client_id: str = None) -> dict:
+    """Get SLA compliance data for gauge chart"""
+    try:
+        # Base query conditions
+        where_conditions = ["1=1"]
+        params = []
+
+        # Apply role-based filtering
+        if user_role in ['client_admin', 'solicitante'] and client_id:
+            where_conditions.append("t.client_id = %s")
+            params.append(client_id)
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
+        SELECT
+            COUNT(*) as total_tickets,
+            COUNT(CASE WHEN st.response_breach = false OR st.response_breach IS NULL THEN 1 END) as response_compliant,
+            COUNT(CASE WHEN st.resolution_breach = false OR st.resolution_breach IS NULL THEN 1 END) as resolution_compliant
+        FROM tickets t
+        LEFT JOIN sla_tracking st ON t.ticket_id = st.ticket_id
+        WHERE {where_clause}
+        AND t.status IN ('resuelto', 'cerrado')
+        """
+
+        result = current_app.db_manager.execute_query(query, tuple(params), fetch='one')
+
+        if result and result['total_tickets'] > 0:
+            total = result['total_tickets']
+            response_compliance = round((result['response_compliant'] / total) * 100, 1)
+            resolution_compliance = round((result['resolution_compliant'] / total) * 100, 1)
+            overall_compliance = round((response_compliance + resolution_compliance) / 2, 1)
+        else:
+            response_compliance = 0
+            resolution_compliance = 0
+            overall_compliance = 0
+
+        return {
+            'overall': overall_compliance,
+            'response': response_compliance,
+            'resolution': resolution_compliance,
+            'total_tickets': result['total_tickets'] if result else 0
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting SLA compliance chart: {e}")
+        return {'overall': 0, 'response': 0, 'resolution': 0, 'total_tickets': 0}
+
+def _get_priority_distribution_chart(user_role: str, client_id: str = None) -> list:
+    """Get priority distribution data for bar chart"""
+    try:
+        # Base query conditions
+        where_conditions = ["1=1"]
+        params = []
+
+        # Apply role-based filtering
+        if user_role in ['client_admin', 'solicitante'] and client_id:
+            where_conditions.append("t.client_id = %s")
+            params.append(client_id)
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
+        SELECT
+            t.priority,
+            COUNT(*) as count,
+            COUNT(CASE WHEN t.status IN ('nuevo', 'asignado', 'en_proceso', 'espera_cliente', 'reabierto') THEN 1 END) as open_count,
+            COUNT(CASE WHEN t.status IN ('resuelto', 'cerrado') THEN 1 END) as closed_count
+        FROM tickets t
+        WHERE {where_clause}
+        GROUP BY t.priority
+        ORDER BY
+            CASE t.priority
+                WHEN 'alta' THEN 1
+                WHEN 'media' THEN 2
+                WHEN 'baja' THEN 3
+                ELSE 4
+            END
+        """
+
+        results = current_app.db_manager.execute_query(query, tuple(params))
+
+        # Format for chart
+        chart_data = []
+        priority_labels = {
+            'alta': 'Alta',
+            'media': 'Media',
+            'baja': 'Baja'
+        }
+
+        for result in (results or []):
+            chart_data.append({
+                'priority': priority_labels.get(result['priority'], result['priority']),
+                'total': result['count'],
+                'abiertos': result['open_count'],
+                'cerrados': result['closed_count']
+            })
+
+        return chart_data
+
+    except Exception as e:
+        logger.error(f"Error getting priority distribution chart: {e}")
+        return []
+
+def _get_technician_performance_chart() -> list:
+    """Get technician performance data for bar chart"""
+    try:
+        query = """
+        SELECT
+            u.first_name,
+            u.last_name,
+            COUNT(t.ticket_id) as assigned_tickets,
+            COUNT(CASE WHEN t.status = 'resuelto' THEN 1 END) as resolved_tickets,
+            AVG(EXTRACT(EPOCH FROM (COALESCE(t.resolved_at, CURRENT_TIMESTAMP) - t.created_at))/3600) as avg_resolution_hours
+        FROM users u
+        LEFT JOIN tickets t ON u.user_id = t.assigned_to
+            AND t.created_at >= CURRENT_DATE - INTERVAL '30 days'
+        WHERE u.role = 'technician' AND u.is_active = true
+        GROUP BY u.user_id, u.first_name, u.last_name
+        HAVING COUNT(t.ticket_id) > 0
+        ORDER BY resolved_tickets DESC
+        LIMIT 10
+        """
+
+        results = current_app.db_manager.execute_query(query)
+
+        # Format for chart
+        chart_data = []
+        for result in (results or []):
+            chart_data.append({
+                'name': f"{result['first_name']} {result['last_name']}",
+                'asignados': result['assigned_tickets'],
+                'resueltos': result['resolved_tickets'],
+                'tiempo_promedio': round(result['avg_resolution_hours'] or 0, 1)
+            })
+
+        return chart_data
+
+    except Exception as e:
+        logger.error(f"Error getting technician performance chart: {e}")
+        return []

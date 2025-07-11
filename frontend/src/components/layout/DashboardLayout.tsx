@@ -90,6 +90,12 @@ const DashboardLayout: React.FC = () => {
           permission: 'users.read',
         },
         {
+          name: 'Reportes',
+          href: '/reports',
+          icon: BarChart3,
+          permission: 'reports.read',
+        },
+        {
           name: 'Configuración',
           icon: Settings,
           permission: null,
@@ -169,15 +175,15 @@ const DashboardLayout: React.FC = () => {
           permission: null,
         },
         {
-          name: 'Tickets',
-          href: '/tickets',
-          icon: Ticket,
-          permission: null,
-        },
-        {
           name: 'Reportes',
           href: '/reports',
           icon: BarChart3,
+          permission: null,
+        },
+        {
+          name: 'Tickets',
+          href: '/tickets',
+          icon: Ticket,
           permission: null,
         },
         {
