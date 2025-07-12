@@ -1,29 +1,88 @@
 # Docker ignore file for LANET Helpdesk V3
 # Exclude problematic files from Docker build context
 
-# Exclude corrupted or incomplete files
-frontend/src/pages/tickets/TicketCreatePageNew.tsx
-
-# Exclude development files
-node_modules
+# Development files
 .git
 .gitignore
-*.log
-.env.local
-.env.development
-.env.test
+README.md
+*.md
 
-# Exclude build artifacts
-dist
-build
-coverage
+# Node modules
+node_modules
+frontend/node_modules
 
-# Exclude IDE files
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv
+env
+.venv
+.env
+
+# IDE files
 .vscode
 .idea
 *.swp
 *.swo
 
-# Exclude OS files
+# OS files
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+logs/
+backend/logs/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Backup files
+backups/
+*.backup
+*.sql
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Reports and uploads (will be handled by volumes)
+backend/reports_files/
+backend/uploads/
+uploads/
+reports_files/
+
+# Development configs
+.env.local
+.env.development
+
+# Build artifacts
+frontend/dist
+frontend/build
+
+# Package files
+*.tar.gz
+*.zip
+
+# Database files
+*.db
+*.sqlite
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# Deployment files
+deployment/
+docker/
+!docker/Dockerfile.*
+!docker/nginx.conf

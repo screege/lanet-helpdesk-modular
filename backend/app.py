@@ -255,6 +255,29 @@ def setup_logging(app):
         app.logger.setLevel(logging.INFO)
         app.logger.info('LANET Helpdesk V3 startup')
 
+    # Health check endpoint for Docker
+    @app.route('/api/health')
+    def health_check():
+        """Health check endpoint for Docker containers"""
+        try:
+            # Test database connection
+            db_manager = DatabaseManager()
+            db_manager.get_connection()
+
+            return {
+                'status': 'healthy',
+                'service': 'lanet-helpdesk-backend',
+                'version': '3.0.0',
+                'timestamp': datetime.utcnow().isoformat()
+            }, 200
+        except Exception as e:
+            return {
+                'status': 'unhealthy',
+                'service': 'lanet-helpdesk-backend',
+                'error': str(e),
+                'timestamp': datetime.utcnow().isoformat()
+            }, 503
+
 if __name__ == '__main__':
     import sys
     sys.stdout.flush()
