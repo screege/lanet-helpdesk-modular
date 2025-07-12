@@ -440,8 +440,9 @@ class TicketService:
                         self.logger.error(f"Error adding resolution to history: {e}")
                         # Continuar sin fallar el proceso principal
 
-                    # NO actualizar resolution_notes - Solo usar historial
-                    # update_data['resolution_notes'] = resolution_text  # COMENTADO PARA MANTENER HISTORIAL
+                    # CRITICAL FIX: Update resolution_notes in main table for notifications
+                    # We need this for email notifications to work properly
+                    update_data['resolution_notes'] = resolution_text
 
                     # Check if auto-close is enabled
                     auto_close_enabled = self._get_system_config('auto_close_resolved_tickets', 'false').lower() == 'true'
@@ -850,6 +851,27 @@ class TicketService:
             if new_status == 'resuelto':
                 update_data['resolved_at'] = datetime.utcnow()
                 update_data['resolution'] = action_data.get('resolution_notes', '').strip()
+
+                # CRITICAL FIX: Create entry in ticket_resolutions table for bulk resolution
+                # This matches the logic from individual ticket resolution in update_ticket method
+                try:
+                    resolution_data = {
+                        'ticket_id': ticket['ticket_id'],
+                        'resolution_notes': update_data['resolution'],
+                        'resolved_by': current_user_id,
+                        'resolved_at': update_data['resolved_at'],
+                        'created_at': datetime.utcnow()
+                    }
+
+                    resolution_result = self.db.execute_insert('ticket_resolutions', resolution_data)
+                    if resolution_result:
+                        self.logger.info(f"Resolution added to history for ticket {ticket['ticket_id']} (bulk action)")
+                    else:
+                        self.logger.error(f"Failed to insert resolution for ticket {ticket['ticket_id']} (bulk action)")
+                except Exception as e:
+                    self.logger.error(f"Error adding resolution to history (bulk action): {e}")
+                    # Continue without failing the main process
+
             elif new_status == 'cerrado':
                 update_data['closed_at'] = datetime.utcnow()
 
@@ -885,6 +907,15 @@ class TicketService:
                 'status_changed',
                 activity_desc
             )
+
+            # CRITICAL FIX: Send notification for bulk resolution
+            if new_status == 'resuelto':
+                try:
+                    from modules.notifications.service import notifications_service
+                    notifications_service.send_ticket_notification('ticket_resolved', ticket['ticket_id'])
+                    self.logger.info(f"Sent resolution notification for ticket {ticket['ticket_id']} (bulk action)")
+                except Exception as e:
+                    self.logger.warning(f"Failed to send bulk resolution notification: {e}")
 
             return {'success': True}
 

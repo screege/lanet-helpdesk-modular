@@ -184,8 +184,9 @@ class NotificationsService:
         try:
             query = """
             SELECT t.ticket_id, t.ticket_number, t.subject, t.description, t.priority,
-                   t.status, t.created_at, t.updated_at, t.assigned_at, t.resolved_at,
+                   t.status, t.created_at, t.updated_at, t.assigned_at, t.resolved_at, t.closed_at,
                    t.affected_person, t.affected_person_phone, t.notification_email, t.additional_emails,
+                   t.resolution_notes,
                    t.client_id, c.name as client_name, c.email as client_email,
                    s.name as site_name, s.address as site_address,
                    cat.name as category_name,
@@ -199,9 +200,9 @@ class NotificationsService:
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
             WHERE t.ticket_id = %s
             """
-            
+
             return current_app.db_manager.execute_query(query, (ticket_id,), fetch='one')
-            
+
         except Exception as e:
             current_app.logger.error(f"Error getting ticket details: {e}")
             return None
@@ -381,7 +382,11 @@ class NotificationsService:
             'reopened_by': ticket['assigned_to_name'] or ticket['created_by_name'] or 'Sistema',
             'reopened_date': ticket['updated_at'] or ticket['created_at'],
             'reopen_reason': 'Ticket reabierto para atención adicional',
-            'portal_url': 'https://helpdesk.lanet.mx'  # Add portal URL (can be made configurable later)
+            'portal_url': 'https://helpdesk.lanet.mx',  # Add portal URL (can be made configurable later)
+
+            # CRITICAL FIX: Add resolution variables for email templates
+            'resolution': ticket.get('resolution_notes') or '',
+            'resolution_notes': ticket.get('resolution_notes') or ''
         }
 
         # Add comment data if provided

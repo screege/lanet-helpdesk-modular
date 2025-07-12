@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiService } from '@/services/api';
 import { ApiResponse } from '@/types';
 import ReportConfigurationForm from './ReportConfigurationForm';
+
 import {
   FileText,
   Calendar,
@@ -61,65 +62,134 @@ interface ReportExecution {
 
 const ReportsManagement: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'templates' | 'configurations' | 'executions' | 'schedules'>('configurations');
+  const [activeTab, setActiveTab] = useState<'executions' | 'monthly'>('monthly');
   const [currentView, setCurrentView] = useState<'list' | 'form'>('list');
   const [editingConfigId, setEditingConfigId] = useState<string | undefined>();
-  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
-  const [configurations, setConfigurations] = useState<ReportConfiguration[]>([]);
   const [executions, setExecutions] = useState<ReportExecution[]>([]);
   const [loading, setLoading] = useState(true);
+  const [monthlyStatus, setMonthlyStatus] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Estados para el generador de reportes
+  const [selectedClient, setSelectedClient] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('2025-07-01');
+  const [endDate, setEndDate] = useState<string>('2025-07-31');
+  const [clients, setClients] = useState<any[]>([]);
   const [generatingReports, setGeneratingReports] = useState<Set<string>>(new Set());
 
+
+
   useEffect(() => {
+    console.log('🔄 useEffect triggered, activeTab:', activeTab);
     loadData();
   }, [activeTab]);
 
   const loadData = async () => {
+    console.log('📊 loadData called for tab:', activeTab);
     setLoading(true);
     try {
       switch (activeTab) {
-        case 'templates':
-          await loadTemplates();
-          break;
-        case 'configurations':
-          await loadConfigurations();
-          break;
         case 'executions':
+          console.log('📈 Loading executions...');
           await loadExecutions();
           break;
-        case 'schedules':
-          // TODO: Load schedules
+        case 'monthly':
+          console.log('📅 Loading monthly reports data...');
+          await loadMonthlyStatus();
+          await loadClients();
           break;
       }
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('❌ Error loading data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadTemplates = async () => {
+  const loadMonthlyStatus = async () => {
     try {
-      const response = await apiService.get('/reports/templates') as ApiResponse<ReportTemplate[]>;
+      const response = await apiService.get('/reports/monthly/status');
       if (response.success) {
-        setTemplates(response.data);
+        setMonthlyStatus(response.data);
       }
     } catch (error) {
-      console.error('Error loading templates:', error);
+      console.error('Error loading monthly status:', error);
     }
   };
 
-  const loadConfigurations = async () => {
+  const loadClients = async () => {
     try {
-      const response = await apiService.get('/reports/configurations') as ApiResponse<ReportConfiguration[]>;
+      const response = await apiService.get('/clients');
       if (response.success) {
-        setConfigurations(response.data);
+        setClients(response.data || []);
       }
     } catch (error) {
-      console.error('Error loading configurations:', error);
+      console.error('Error loading clients:', error);
     }
   };
+
+  const generateTestReport = async () => {
+    try {
+      setLoading(true);
+
+      // Preparar parámetros del reporte
+      const reportParams = {
+        client_id: selectedClient || null,
+        start_date: startDate,
+        end_date: endDate
+      };
+
+      console.log('📊 Generating report with params:', reportParams);
+
+      const response = await apiService.post('/reports/monthly/generate-test', reportParams);
+
+      if (response.success) {
+        const clientName = selectedClient ?
+          clients.find(c => c.client_id === selectedClient)?.name || 'Cliente específico' :
+          'Todos los clientes';
+
+        console.log(`✅ Reporte generado exitosamente! Cliente: ${clientName}, Período: ${startDate} - ${endDate}`);
+
+        // Refresh executions if on that tab
+        if (activeTab === 'executions') {
+          loadExecutions();
+        }
+      } else {
+        alert(`❌ Error: ${response.error || 'Error desconocido'}`);
+      }
+    } catch (error) {
+      console.error('Error generating custom report:', error);
+      alert(`❌ Error al generar reporte: ${error.message || 'Error de conexión'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setupSchedules = async () => {
+    if (!user || user.role !== 'superadmin') {
+      alert('Solo los superadministradores pueden configurar programaciones');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await apiService.post('/reports/monthly/setup-schedules');
+
+      if (response.success) {
+        alert('✅ Programaciones mensuales configuradas exitosamente!\n\nTodos los clientes recibirán reportes automáticamente el día 1 de cada mes.');
+        await loadMonthlyStatus(); // Refresh status
+      } else {
+        alert(`❌ Error: ${response.error || 'Error desconocido'}`);
+      }
+    } catch (error) {
+      console.error('Error setting up schedules:', error);
+      alert(`❌ Error al configurar programaciones: ${error.message || 'Error de conexión'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   const loadExecutions = async () => {
     try {
@@ -131,6 +201,18 @@ const ReportsManagement: React.FC = () => {
       console.error('Error loading executions:', error);
     }
   };
+
+  // Helper functions for executions table
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes || bytes === 0) return 'N/A';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+
 
   const generateReport = async (configId: string, format: string) => {
     const reportKey = `${configId}-${format}`;
@@ -201,8 +283,8 @@ const ReportsManagement: React.FC = () => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
 
-        // Show success message
-        alert('Reporte descargado exitosamente');
+        // Silent download - no popup
+        console.log('✅ Reporte descargado exitosamente');
       } else {
         const errorText = await response.text();
         alert('Error al descargar el reporte: ' + (errorText || 'Error del servidor'));
@@ -213,12 +295,7 @@ const ReportsManagement: React.FC = () => {
     }
   };
 
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return 'N/A';
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
-  };
+
 
   const formatDuration = (ms?: number) => {
     if (!ms) return 'N/A';
@@ -262,31 +339,16 @@ const ReportsManagement: React.FC = () => {
 
   const filteredData = () => {
     const term = searchTerm.toLowerCase();
-    switch (activeTab) {
-      case 'templates':
-        return templates.filter(t => 
-          t.name.toLowerCase().includes(term) || 
-          t.description?.toLowerCase().includes(term)
-        );
-      case 'configurations':
-        return configurations.filter(c => 
-          c.name.toLowerCase().includes(term) || 
-          c.template_name.toLowerCase().includes(term)
-        );
-      case 'executions':
-        return executions.filter(e => 
-          e.config_name.toLowerCase().includes(term) || 
-          e.status.toLowerCase().includes(term)
-        );
-      default:
-        return [];
+    if (activeTab === 'executions') {
+      return (executions || []).filter(e =>
+        (e.config_name || '').toLowerCase().includes(term) ||
+        (e.status || '').toLowerCase().includes(term)
+      );
     }
+    return [];
   };
 
-  const handleNewConfiguration = () => {
-    setEditingConfigId(undefined);
-    setCurrentView('form');
-  };
+
 
   const handleEditConfiguration = (configId: string) => {
     setEditingConfigId(configId);
@@ -301,7 +363,7 @@ const ReportsManagement: React.FC = () => {
   const handleFormSave = () => {
     setCurrentView('list');
     setEditingConfigId(undefined);
-    loadConfigurations(); // Refresh the list
+    // No longer needed
   };
 
   const generateQuickReport = async (format: 'pdf' | 'excel') => {
@@ -428,7 +490,7 @@ const ReportsManagement: React.FC = () => {
       const response = await apiService.delete(`/reports/configurations/${configId}`);
       if (response.success) {
         alert('Configuración eliminada exitosamente');
-        loadConfigurations();
+        // No longer needed
       } else {
         alert('Error al eliminar la configuración');
       }
@@ -467,7 +529,7 @@ const ReportsManagement: React.FC = () => {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Gestión de Reportes</h1>
                 <p className="mt-1 text-sm text-gray-500">
-                  Administre plantillas, configuraciones y ejecuciones de reportes
+                  Genere y descargue reportes mensuales consolidados
                 </p>
                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
                   <p className="text-sm text-blue-800">
@@ -569,13 +631,7 @@ const ReportsManagement: React.FC = () => {
                       </button>
                     </div>
 
-                    <button
-                      onClick={handleNewConfiguration}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Configuración
-                    </button>
+
                   </>
                 )}
               </div>
@@ -589,10 +645,8 @@ const ReportsManagement: React.FC = () => {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8 px-6">
             {[
-              { key: 'templates', label: 'Plantillas', icon: FileText },
-              { key: 'configurations', label: 'Configuraciones', icon: Settings },
-              { key: 'executions', label: 'Ejecuciones', icon: BarChart3 },
-              { key: 'schedules', label: 'Programación', icon: Calendar }
+              { key: 'monthly', label: 'Reportes Mensuales', icon: Calendar },
+              { key: 'executions', label: 'Ver Reportes Generados', icon: BarChart3 }
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -638,143 +692,15 @@ const ReportsManagement: React.FC = () => {
       {/* Content */}
       <div className="bg-white shadow rounded-lg">
         <div className="p-6">
-          {activeTab === 'templates' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Plantillas de Reportes</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredData().map((template: any) => (
-                  <div key={template.template_id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="text-sm font-medium text-gray-900">{template.name}</h4>
-                        <p className="text-sm text-gray-500 mt-1">{template.description}</p>
-                        <div className="mt-2 flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {template.report_type}
-                          </span>
-                          {template.is_system && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                              Sistema
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'configurations' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Configuraciones de Reportes</h3>
-              <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-                <table className="min-w-full divide-y divide-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Nombre
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Plantilla
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Formatos
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Estado
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData().map((config: any) => (
-                      <tr key={config.config_id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{config.name}</div>
-                            <div className="text-sm text-gray-500">{config.description}</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{config.template_name}</div>
-                          <div className="text-sm text-gray-500">{config.report_type}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex space-x-1">
-                            {config.output_formats.map((format: string) => (
-                              <span key={format} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                {format.toUpperCase()}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            config.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {config.is_active ? 'Activo' : 'Inactivo'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            {config.output_formats.map((format: string) => {
-                              const reportKey = `${config.config_id}-${format}`;
-                              const isGenerating = generatingReports.has(reportKey);
-
-                              return (
-                                <button
-                                  key={format}
-                                  onClick={() => generateReport(config.config_id, format)}
-                                  disabled={isGenerating}
-                                  className="text-blue-600 hover:text-blue-900 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title={`Generar ${format.toUpperCase()}`}
-                                >
-                                  {isGenerating ? (
-                                    <Loader className="h-4 w-4 mr-1 animate-spin" />
-                                  ) : (
-                                    <Play className="h-4 w-4 mr-1" />
-                                  )}
-                                  {format.toUpperCase()}
-                                </button>
-                              );
-                            })}
-                            <button
-                              onClick={() => handleEditConfiguration(config.config_id)}
-                              className="text-gray-600 hover:text-gray-900"
-                              title="Editar"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => deleteConfiguration(config.config_id)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'executions' && (
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Historial de Ejecuciones</h3>
+              <h3 className="text-lg font-medium text-gray-900">Historial de Reportes Generados</h3>
               <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
                 <table className="min-w-full divide-y divide-gray-300">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Configuración
+                        Reporte
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Estado
@@ -786,10 +712,7 @@ const ReportsManagement: React.FC = () => {
                         Tamaño
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Tiempo
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Ejecutado por
+                        Fecha
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Acciones
@@ -801,7 +724,7 @@ const ReportsManagement: React.FC = () => {
                       <tr key={execution.execution_id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
-                            {execution.config_name || 'Reporte Rápido'}
+                            {execution.config_name || 'Reporte Consolidado'}
                           </div>
                           <div className="text-sm text-gray-500">
                             {execution.config_id ? 'Configuración' : 'Generación directa'}
@@ -812,7 +735,7 @@ const ReportsManagement: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {execution.output_format?.toUpperCase() || 'N/A'}
+                            {execution.output_format?.toUpperCase() || 'EXCEL'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -820,13 +743,6 @@ const ReportsManagement: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {execution.started_at ? new Date(execution.started_at).toLocaleString('es-ES') : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {execution.executed_by_name ||
-                           (execution.first_name && execution.last_name
-                            ? `${execution.first_name} ${execution.last_name}`
-                            : 'Sistema')
-                          }
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           {execution.status === 'completed' && (
@@ -847,18 +763,140 @@ const ReportsManagement: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'schedules' && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Reportes Programados</h3>
-              <div className="text-center py-12">
-                <Calendar className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">Próximamente</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  La funcionalidad de programación de reportes estará disponible pronto.
-                </p>
+          {activeTab === 'monthly' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Reportes Consolidados</h3>
+                  <p className="text-sm text-gray-600">
+                    Genere reportes con todos los tickets de todos los clientes o por cliente específico
+                  </p>
+                </div>
               </div>
+
+              {/* Generador de Reportes Bajo Demanda */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="flex items-center space-x-3 mb-6">
+                  <BarChart3 className="w-6 h-6 text-blue-600" />
+                  <h4 className="text-lg font-medium text-gray-900">Generar Reporte Bajo Demanda</h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  {/* Selector de Cliente */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cliente
+                    </label>
+                    <select
+                      value={selectedClient}
+                      onChange={(e) => setSelectedClient(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="">Todos los clientes</option>
+                      {clients.map((client) => (
+                        <option key={client.client_id} value={client.client_id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Fecha Desde */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Fecha Desde
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  {/* Fecha Hasta */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Fecha Hasta
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={generateTestReport}
+                    disabled={loading}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-2 rounded-lg text-sm transition-colors"
+                  >
+                    {loading ? 'Generando...' : 'Generar Reporte Excel'}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('executions')}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg text-sm transition-colors"
+                  >
+                    Ver Reportes Generados
+                  </button>
+                </div>
+              </div>
+
+              {/* Programación Automática */}
+              {user?.role === 'superadmin' && (
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <div className="flex items-center space-x-3 mb-6">
+                    <Calendar className="w-6 h-6 text-green-600" />
+                    <h4 className="text-lg font-medium text-gray-900">Programación Automática</h4>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-yellow-800">
+                          Configuración de Reportes Automáticos
+                        </h3>
+                        <div className="mt-2 text-sm text-yellow-700">
+                          <p>Al configurar las programaciones, cada cliente recibirá automáticamente:</p>
+                          <ul className="list-disc list-inside mt-1">
+                            <li>Un reporte mensual con TODOS sus tickets</li>
+                            <li>Enviado por email el día 1 de cada mes a las 6:00 AM</li>
+                            <li>Formato Excel con columnas: Número, Asunto, Estado, Prioridad, Fechas, Técnico, Sitio</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={setupSchedules}
+                      disabled={loading}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-6 py-2 rounded-lg text-sm transition-colors"
+                    >
+                      {loading ? 'Configurando...' : 'Activar Reportes Automáticos'}
+                    </button>
+                    <div className="text-sm text-gray-600 flex items-center">
+                      Estado: {monthlyStatus?.system_active ?
+                        <span className="text-green-600 ml-1">✓ Activo</span> :
+                        <span className="text-red-600 ml-1">❌ Inactivo</span>
+                      }
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+
         </div>
       </div>
     </div>

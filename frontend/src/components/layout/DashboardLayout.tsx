@@ -22,6 +22,8 @@ import {
   LogOut,
   Bell,
   FolderTree,
+  FileText,
+  Database,
 } from 'lucide-react';
 
 interface NavItem {

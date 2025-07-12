@@ -18,6 +18,7 @@ import TicketEditPage from '@/pages/tickets/TicketEditPage';
 import CategoriesManagement from '@/pages/categories/CategoriesManagement';
 import ReportsManagement from '@/pages/reports/ReportsManagement';
 
+
 import EmailConfigTabs from '@/pages/admin/EmailConfigTabs';
 import EmailTemplates from '@/pages/admin/EmailTemplates';
 import EmailMonitoring from '@/pages/admin/EmailMonitoring';
@@ -61,6 +62,7 @@ const App: React.FC = () => {
 
               {/* Reports */}
               <Route path="reports" element={<ReportsManagement />} />
+
 
               {/* Admin routes */}
               <Route path="admin/categories" element={<div className="p-6">Categorías - En desarrollo</div>} />
