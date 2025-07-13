@@ -1,0 +1,86 @@
+apiVersion: 2021-03-01
+location: centralus
+name: lanet-helpdesk
+properties:
+  containers:
+  - name: frontend
+    properties:
+      image: ${ACR_LOGIN_SERVER}/lanet-helpdesk-frontend:${GITHUB_SHA}
+      resources:
+        requests:
+          cpu: 1
+          memoryInGb: 2
+      ports:
+      - port: 80
+        protocol: TCP
+      - port: 443
+        protocol: TCP
+      environmentVariables:
+      - name: REACT_APP_API_URL
+        value: http://localhost:5001
+      - name: REACT_APP_ENVIRONMENT
+        value: production
+
+  - name: backend
+    properties:
+      image: ${ACR_LOGIN_SERVER}/lanet-helpdesk-backend:${GITHUB_SHA}
+      resources:
+        requests:
+          cpu: 1
+          memoryInGb: 2
+      ports:
+      - port: 5001
+        protocol: TCP
+      environmentVariables:
+      - name: DATABASE_URL
+        value: ${DATABASE_URL}
+      - name: JWT_SECRET_KEY
+        value: ${JWT_SECRET_KEY}
+      - name: FLASK_ENV
+        value: production
+      - name: SMTP_HOST
+        value: ${SMTP_HOST}
+      - name: SMTP_PORT
+        value: ${SMTP_PORT}
+      - name: SMTP_USERNAME
+        value: ${SMTP_USERNAME}
+      - name: SMTP_PASSWORD
+        value: ${SMTP_PASSWORD}
+      - name: SMTP_USE_TLS
+        value: ${SMTP_USE_TLS}
+
+  - name: email-processor
+    properties:
+      image: ${ACR_LOGIN_SERVER}/lanet-helpdesk-email:${GITHUB_SHA}
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 1
+      environmentVariables:
+      - name: DATABASE_URL
+        value: ${DATABASE_URL}
+      - name: IMAP_HOST
+        value: ${IMAP_HOST}
+      - name: IMAP_PORT
+        value: ${IMAP_PORT}
+      - name: IMAP_USERNAME
+        value: ${IMAP_USERNAME}
+      - name: IMAP_PASSWORD
+        value: ${IMAP_PASSWORD}
+      - name: IMAP_USE_SSL
+        value: ${IMAP_USE_SSL}
+
+  osType: Linux
+  restartPolicy: Always
+  ipAddress:
+    type: Public
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 5001
+    dnsNameLabel: lanet-helpdesk
+  imageRegistryCredentials:
+  - server: ${ACR_LOGIN_SERVER}
+    username: ${ACR_USERNAME}
+    password: ${ACR_PASSWORD}

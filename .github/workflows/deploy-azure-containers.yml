@@ -110,7 +110,35 @@ jobs:
           --end-ip-address 0.0.0.0
 
         echo "✅ PostgreSQL Flexible Server created successfully in Central US"
-        
+
+    - name: 📊 Initialize Database Schema and Data
+      run: |
+        # Get database connection string
+        DB_HOST=$(az postgres flexible-server show --name lanet-helpdesk-db --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query fullyQualifiedDomainName --output tsv)
+
+        echo "🔄 Initializing database schema and data in Azure PostgreSQL..."
+
+        # Install PostgreSQL client
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+
+        # Wait for database to be ready
+        echo "⏳ Waiting for database to be ready..."
+        for i in {1..30}; do
+          if PGPASSWORD="Poikl55+*" psql -h "$DB_HOST" -U postgres -d lanet_helpdesk -c "SELECT 1;" > /dev/null 2>&1; then
+            echo "✅ Database is ready!"
+            break
+          fi
+          echo "⏳ Attempt $i/30 - Database not ready yet, waiting 10 seconds..."
+          sleep 10
+        done
+
+        # Initialize database with schema and test data
+        echo "📥 Initializing database with schema and test data..."
+        PGPASSWORD="Poikl55+*" psql -h "$DB_HOST" -U postgres -d lanet_helpdesk -f deployment/azure/init-database.sql
+
+        echo "✅ Database initialization completed successfully"
+
     - name: 🚀 Deploy Container Group
       run: |
         # Get ACR credentials
@@ -121,32 +149,31 @@ jobs:
         # Get database connection string
         DB_HOST=$(az postgres flexible-server show --name lanet-helpdesk-db --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query fullyQualifiedDomainName --output tsv)
         
-        # Deploy container group
+        # Set environment variables for substitution
+        export ACR_LOGIN_SERVER="$ACR_LOGIN_SERVER"
+        export ACR_USERNAME="$ACR_USERNAME"
+        export ACR_PASSWORD="$ACR_PASSWORD"
+        export GITHUB_SHA="${{ github.sha }}"
+        export DATABASE_URL="postgresql://postgres:Poikl55+*@$DB_HOST:5432/lanet_helpdesk"
+        export JWT_SECRET_KEY="lanet-helpdesk-secret-2024"
+        export SMTP_HOST="mail.compushop.com.mx"
+        export SMTP_PORT="587"
+        export SMTP_USERNAME="webmaster@compushop.com.mx"
+        export SMTP_PASSWORD="Iyhnbsfg26"
+        export SMTP_USE_TLS="true"
+        export IMAP_HOST="mail.compushop.com.mx"
+        export IMAP_PORT="993"
+        export IMAP_USERNAME="it@compushop.com.mx"
+        export IMAP_PASSWORD="Iyhnbsfg26+*"
+        export IMAP_USE_SSL="true"
+
+        # Prepare container group YAML with environment variables
+        envsubst < deployment/azure/container-group.yaml > /tmp/container-group-final.yaml
+
+        # Deploy container group with multiple containers
         az container create \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --name ${{ env.CONTAINER_GROUP_NAME }} \
-          --image $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }} \
-          --registry-login-server $ACR_LOGIN_SERVER \
-          --registry-username $ACR_USERNAME \
-          --registry-password $ACR_PASSWORD \
-          --dns-name-label lanet-helpdesk \
-          --ports 80 443 \
-          --cpu 2 \
-          --memory 4 \
-          --environment-variables \
-            DATABASE_URL="postgresql://postgres:Poikl55+*@$DB_HOST:5432/lanet_helpdesk" \
-            JWT_SECRET_KEY="lanet-helpdesk-secret-2024" \
-            FLASK_ENV="production" \
-            SMTP_HOST="mail.compushop.com.mx" \
-            SMTP_PORT="587" \
-            SMTP_USERNAME="webmaster@compushop.com.mx" \
-            SMTP_PASSWORD="Iyhnbsfg26" \
-            SMTP_USE_TLS="true" \
-            IMAP_HOST="mail.compushop.com.mx" \
-            IMAP_PORT="993" \
-            IMAP_USERNAME="it@compushop.com.mx" \
-            IMAP_PASSWORD="Iyhnbsfg26+*" \
-            IMAP_USE_SSL="true"
+          --file /tmp/container-group-final.yaml
             
     - name: 📡 Get Container Group IP
       id: container-ip
