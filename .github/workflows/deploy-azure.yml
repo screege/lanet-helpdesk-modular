@@ -93,6 +93,19 @@ jobs:
           --exclude='.git' \
           --exclude='node_modules' \
           --exclude='*.log' \
+          --exclude='.github' \
+          --exclude='dist' \
+          --exclude='build' \
+          --exclude='.next' \
+          --exclude='coverage' \
+          --exclude='.nyc_output' \
+          --exclude='*.tmp' \
+          --exclude='*.temp' \
+          --exclude='.DS_Store' \
+          --exclude='Thumbs.db' \
+          --exclude='.env.local' \
+          --exclude='.env.*.local' \
+          --exclude='deployment-package.tar.gz' \
           .
           
     - name: 📤 Copy files to VM
