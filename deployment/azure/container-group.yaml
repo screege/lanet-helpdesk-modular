@@ -38,6 +38,8 @@ properties:
         value: ${JWT_SECRET_KEY}
       - name: FLASK_ENV
         value: production
+      - name: REDIS_URL
+        value: redis://localhost:6379/0
       - name: SMTP_HOST
         value: ${SMTP_HOST}
       - name: SMTP_PORT
@@ -48,6 +50,54 @@ properties:
         value: ${SMTP_PASSWORD}
       - name: SMTP_USE_TLS
         value: ${SMTP_USE_TLS}
+      - name: MAX_CONTENT_LENGTH
+        value: "10485760"
+      - name: UPLOAD_FOLDER
+        value: /app/uploads
+      - name: SESSION_TIMEOUT_MINUTES
+        value: "480"
+      - name: LOG_LEVEL
+        value: INFO
+
+  - name: redis
+    properties:
+      image: redis:7-alpine
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 1
+      ports:
+      - port: 6379
+        protocol: TCP
+
+  - name: sla-monitor
+    properties:
+      image: ${ACR_LOGIN_SERVER}/lanet-helpdesk-sla:${GITHUB_SHA}
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 1
+      environmentVariables:
+      - name: DATABASE_URL
+        value: ${DATABASE_URL}
+      - name: REDIS_URL
+        value: redis://localhost:6379/0
+      - name: FLASK_ENV
+        value: production
+      - name: SMTP_HOST
+        value: ${SMTP_HOST}
+      - name: SMTP_PORT
+        value: ${SMTP_PORT}
+      - name: SMTP_USERNAME
+        value: ${SMTP_USERNAME}
+      - name: SMTP_PASSWORD
+        value: ${SMTP_PASSWORD}
+      - name: SMTP_USE_TLS
+        value: ${SMTP_USE_TLS}
+      - name: SLA_MONITOR_INTERVAL
+        value: "15"
+      - name: LOG_LEVEL
+        value: INFO
 
   - name: email-processor
     properties:
@@ -59,6 +109,8 @@ properties:
       environmentVariables:
       - name: DATABASE_URL
         value: ${DATABASE_URL}
+      - name: REDIS_URL
+        value: redis://localhost:6379/0
       - name: IMAP_HOST
         value: ${IMAP_HOST}
       - name: IMAP_PORT
@@ -69,6 +121,8 @@ properties:
         value: ${IMAP_PASSWORD}
       - name: IMAP_USE_SSL
         value: ${IMAP_USE_SSL}
+      - name: LOG_LEVEL
+        value: INFO
 
   osType: Linux
   restartPolicy: Always
@@ -79,6 +133,8 @@ properties:
       port: 80
     - protocol: TCP
       port: 5001
+    - protocol: TCP
+      port: 6379
     dnsNameLabel: lanet-helpdesk
   imageRegistryCredentials:
   - server: ${ACR_LOGIN_SERVER}

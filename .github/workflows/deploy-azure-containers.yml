@@ -75,6 +75,10 @@ jobs:
         docker build -f deployment/docker/Dockerfile.frontend -t $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }} .
         docker push $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }}
 
+        # Build and push SLA monitor (using root context to access database/)
+        docker build -f deployment/docker/Dockerfile.sla-monitor -t $ACR_LOGIN_SERVER/lanet-helpdesk-sla:${{ github.sha }} .
+        docker push $ACR_LOGIN_SERVER/lanet-helpdesk-sla:${{ github.sha }}
+
         # Build and push email processor (using root context to access database/)
         docker build -f deployment/docker/Dockerfile.email-processor -t $ACR_LOGIN_SERVER/lanet-helpdesk-email:${{ github.sha }} .
         docker push $ACR_LOGIN_SERVER/lanet-helpdesk-email:${{ github.sha }}
