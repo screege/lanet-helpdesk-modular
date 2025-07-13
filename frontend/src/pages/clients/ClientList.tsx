@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2,
-  Users,
   MapPin,
   Plus,
   Search,
   Eye,
   Edit,
   Trash2,
-  Filter,
   Ticket
 } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { ApiResponse } from '../../types';
 
 interface Client {
   client_id: string;
@@ -84,10 +83,22 @@ const ClientList: React.FC = () => {
     try {
       setLoading(true);
       // Load all clients for client-side filtering and pagination
-      const response = await apiService.get('/clients?per_page=1000');
+      const response = await apiService.get('/clients?per_page=1000') as ApiResponse<{ clients: Client[] }>;
 
       if (response.success) {
-        setAllClients(response.data.clients || response.data || []);
+        // Type guard crítico para datos de clientes
+        if (response.data && typeof response.data === 'object') {
+          if ('clients' in response.data) {
+            setAllClients((response.data as any).clients || []);
+          } else if (Array.isArray(response.data)) {
+            setAllClients(response.data as any);
+          } else {
+            console.warn('Invalid clients response format');
+            setAllClients([]);
+          }
+        } else {
+          setAllClients([]);
+        }
         console.log('✅ All clients loaded for filtering:', response.data);
       } else {
         console.error('Failed to load clients:', response.error);
@@ -110,7 +121,7 @@ const ClientList: React.FC = () => {
 
     if (confirmed) {
       try {
-        const response = await apiService.delete(`/clients/${client.client_id}`);
+        const response = await apiService.delete(`/clients/${client.client_id}`) as ApiResponse;
         if (response.success) {
           // Reload the clients list
           await loadClients();

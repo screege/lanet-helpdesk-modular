@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/api';
+import { ApiResponse } from '../../types';
 import { 
   Building2, 
   Search, 
@@ -10,8 +11,6 @@ import {
   Trash2, 
   MapPin, 
   Ticket,
-  ChevronLeft,
-  ChevronRight,
   Filter
 } from 'lucide-react';
 import SiteForm from '../../components/sites/SiteForm';
@@ -110,8 +109,8 @@ const SitesManagement: React.FC = () => {
 
       // Load sites and clients in parallel
       const [sitesResponse, clientsResponse] = await Promise.all([
-        apiService.get('/sites?per_page=1000'),
-        apiService.get('/clients?per_page=1000')
+        apiService.get('/sites?per_page=1000') as Promise<ApiResponse<{ sites: Site[] }>>,
+        apiService.get('/clients?per_page=1000') as Promise<ApiResponse<{ clients: Client[] }>>
       ]);
 
       if (sitesResponse.success) {
@@ -150,7 +149,7 @@ const SitesManagement: React.FC = () => {
 
     if (confirmed) {
       try {
-        const response = await apiService.delete(`/sites/${site.site_id}`);
+        const response = await apiService.delete(`/sites/${site.site_id}`) as ApiResponse;
         if (response.success) {
           await loadData(); // Reload data
         }

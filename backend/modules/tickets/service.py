@@ -59,46 +59,68 @@ class TicketService:
                     where_conditions.append("t.assigned_to = %s")
                     params.append(filters['assigned_to'])
                 
-                # Search filter
+                # Search filter - include client name and site name
                 if filters.get('search'):
-                    where_conditions.append("(t.subject ILIKE %s OR t.description ILIKE %s OR t.ticket_number ILIKE %s)")
+                    where_conditions.append("(t.subject ILIKE %s OR t.description ILIKE %s OR t.ticket_number ILIKE %s OR c.name ILIKE %s OR s.name ILIKE %s)")
                     search_term = f"%{filters['search']}%"
-                    params.extend([search_term, search_term, search_term])
+                    params.extend([search_term, search_term, search_term, search_term, search_term])
             
             where_clause = " AND ".join(where_conditions)
-            
+
+            # Handle sorting
+            sort_by = filters.get('sort_by', 'created_at') if filters else 'created_at'
+            sort_order = filters.get('sort_order', 'desc') if filters else 'desc'
+
+            # Validate sort fields to prevent SQL injection
+            valid_sort_fields = {
+                'ticket_number': 'CAST(SUBSTRING(t.ticket_number FROM \'TKT-([0-9]+)\') AS BIGINT)',
+                'client_name': 'c.name',
+                'subject': 't.subject',
+                'status': 't.status',
+                'priority': 't.priority',
+                'created_at': 't.created_at',
+                'updated_at': 't.updated_at'
+            }
+
+            sort_field = valid_sort_fields.get(sort_by, 't.created_at')
+            sort_direction = 'ASC' if sort_order.lower() == 'asc' else 'DESC'
+
             # Get total count
             count_query = f"""
-            SELECT COUNT(*) as total 
-            FROM tickets t 
+            SELECT COUNT(*) as total
+            FROM tickets t
+            LEFT JOIN clients c ON t.client_id = c.client_id
+            LEFT JOIN sites s ON t.site_id = s.site_id
             WHERE {where_clause}
             """
             total_result = self.db.execute_query(count_query, tuple(params), fetch='one')
             total = total_result['total'] if total_result else 0
-            
+
             # Calculate offset
             offset = (page - 1) * per_page
-            
+
             # Get tickets with related data
             query = f"""
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.affected_person_contact, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
                    t.assigned_at, t.resolved_at, t.closed_at, t.resolution_notes,
                    c.name as client_name,
                    s.name as site_name,
+                   cat.name as category_name,
                    creator.name as created_by_name,
                    assignee.name as assigned_to_name
             FROM tickets t
             LEFT JOIN clients c ON t.client_id = c.client_id
             LEFT JOIN sites s ON t.site_id = s.site_id
+            LEFT JOIN categories cat ON t.category_id = cat.category_id
             LEFT JOIN users creator ON t.created_by = creator.user_id
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
             WHERE {where_clause}
-            ORDER BY t.created_at DESC
+            ORDER BY {sort_field} {sort_direction}
             LIMIT %s OFFSET %s
             """
             
@@ -126,18 +148,20 @@ class TicketService:
             query = """
             SELECT t.ticket_id, t.ticket_number, t.client_id, t.site_id, t.asset_id,
                    t.created_by, t.assigned_to, t.subject, t.description, t.affected_person,
-                   t.affected_person_phone, t.notification_email, t.additional_emails, t.priority, t.category_id,
+                   t.affected_person_phone, t.affected_person_contact, t.notification_email, t.additional_emails, t.priority, t.category_id,
                    t.status, t.channel, t.is_email_originated, t.from_email,
                    t.email_message_id, t.email_thread_id, t.approval_status,
                    t.approved_by, t.approved_at, t.created_at, t.updated_at,
                    t.assigned_at, t.resolved_at, t.closed_at, t.resolution_notes,
                    c.name as client_name,
                    s.name as site_name, s.address as site_address,
+                   cat.name as category_name,
                    creator.name as created_by_name, creator.email as created_by_email,
                    assignee.name as assigned_to_name, assignee.email as assigned_to_email
             FROM tickets t
             LEFT JOIN clients c ON t.client_id = c.client_id
             LEFT JOIN sites s ON t.site_id = s.site_id
+            LEFT JOIN categories cat ON t.category_id = cat.category_id
             LEFT JOIN users creator ON t.created_by = creator.user_id
             LEFT JOIN users assignee ON t.assigned_to = assignee.user_id
             WHERE t.ticket_id = %s
@@ -216,15 +240,23 @@ class TicketService:
                 'from_email': ticket_data.get('from_email'),
                 'email_message_id': ticket_data.get('email_message_id'),
                 'email_thread_id': ticket_data.get('email_thread_id'),
-                'approval_status': 'pendiente',
-                'created_at': datetime.utcnow(),
-                'updated_at': datetime.utcnow()
+                'approval_status': 'pendiente'
+                # Note: created_at and updated_at will use DEFAULT CURRENT_TIMESTAMP from PostgreSQL
+                # which respects the database timezone (America/Mexico_City)
             }
+
+            # Auto-assignment logic: assign to available technician if not explicitly assigned
+            if not new_ticket_data['assigned_to']:
+                auto_assigned_technician = self._get_auto_assignment_technician(ticket_data['client_id'], ticket_data['priority'])
+                if auto_assigned_technician:
+                    new_ticket_data['assigned_to'] = auto_assigned_technician
+                    self.logger.info(f"Auto-assigned ticket {ticket_number} to technician {auto_assigned_technician}")
             
             # Auto-assign if assigned_to is provided
             if new_ticket_data['assigned_to']:
-                new_ticket_data['status'] = 'asignado'
-                new_ticket_data['assigned_at'] = datetime.utcnow()
+                new_ticket_data['status'] = 'en_proceso'
+                # Note: assigned_at will be set by database trigger or explicit update later
+                # to maintain timezone consistency
             
             # Insert ticket
             result = self.db.execute_insert(
@@ -288,6 +320,51 @@ class TicketService:
             self.logger.error(f"Error generating ticket number: {e}")
             # Final fallback to UUID-based number
             return f"TKT-{str(uuid.uuid4())[:8].upper()}"
+
+    def _get_auto_assignment_technician(self, client_id: str, priority: str) -> Optional[str]:
+        """Get technician for auto-assignment using round-robin algorithm"""
+        try:
+            # Get available technicians (superadmin, admin, technician roles)
+            technicians_query = """
+            SELECT user_id, name, email, role
+            FROM users
+            WHERE role IN ('superadmin', 'admin', 'technician')
+            AND is_active = true
+            ORDER BY role DESC, name ASC
+            """
+
+            technicians = self.db.execute_query(technicians_query)
+
+            if not technicians:
+                self.logger.warning("No available technicians found for auto-assignment")
+                return None
+
+            # For now, use simple round-robin: get technician with least assigned tickets
+            # This can be enhanced later with more sophisticated algorithms
+            assignment_query = """
+            SELECT u.user_id, u.name, COUNT(t.ticket_id) as ticket_count
+            FROM users u
+            LEFT JOIN tickets t ON u.user_id = t.assigned_to
+                AND t.status NOT IN ('cerrado', 'resuelto')
+            WHERE u.role IN ('superadmin', 'admin', 'technician')
+            AND u.is_active = true
+            GROUP BY u.user_id, u.name
+            ORDER BY ticket_count ASC, u.name ASC
+            LIMIT 1
+            """
+
+            selected_technician = self.db.execute_query(assignment_query, fetch='one')
+
+            if selected_technician:
+                self.logger.info(f"Auto-assignment: Selected {selected_technician['name']} (current tickets: {selected_technician['ticket_count']})")
+                return selected_technician['user_id']
+
+            # Fallback: return first available technician
+            return technicians[0]['user_id']
+
+        except Exception as e:
+            self.logger.error(f"Error in auto-assignment logic: {e}")
+            return None
     
     def _create_activity_log(self, ticket_id: str, user_id: str, action: str, description: str):
         """Create activity log entry"""
@@ -320,7 +397,9 @@ class TicketService:
                 return {'success': False, 'errors': {'ticket_id': 'Ticket not found'}}
 
             # Prepare update data
-            update_data = {'updated_at': datetime.utcnow()}
+            # Note: updated_at will be handled by PostgreSQL trigger (update_updated_at_column)
+            # which uses CURRENT_TIMESTAMP and respects the database timezone
+            update_data = {}
             changes = []
 
             # Handle status changes
@@ -361,8 +440,9 @@ class TicketService:
                         self.logger.error(f"Error adding resolution to history: {e}")
                         # Continuar sin fallar el proceso principal
 
-                    # NO actualizar resolution_notes - Solo usar historial
-                    # update_data['resolution_notes'] = resolution_text  # COMENTADO PARA MANTENER HISTORIAL
+                    # CRITICAL FIX: Update resolution_notes in main table for notifications
+                    # We need this for email notifications to work properly
+                    update_data['resolution_notes'] = resolution_text
 
                     # Check if auto-close is enabled
                     auto_close_enabled = self._get_system_config('auto_close_resolved_tickets', 'false').lower() == 'true'
@@ -398,7 +478,7 @@ class TicketService:
                         update_data['assigned_to'] = ticket_data['assigned_to']
                         update_data['assigned_at'] = datetime.utcnow()
                         if existing_ticket['status'] == 'nuevo':
-                            update_data['status'] = 'asignado'
+                            update_data['status'] = 'en_proceso'
                         changes.append(f"Asignado a {assignee['name']}")
                     else:
                         update_data['assigned_to'] = None
@@ -422,7 +502,7 @@ class TicketService:
                     changes.append(f"{field} actualizado")
 
             # Update ticket
-            if len(update_data) > 1:  # More than just updated_at
+            if len(update_data) > 0:  # Has actual changes to make
                 rows_updated = self.db.execute_update(
                     'tickets',
                     update_data,
@@ -451,6 +531,9 @@ class TicketService:
                         # Check if this is a resolution
                         if 'resolution_notes' in ticket_data and ticket_data['resolution_notes']:
                             notifications_service.send_ticket_notification('ticket_resolved', ticket_id)
+                        elif 'status' in ticket_data and ticket_data['status'] == 'reabierto':
+                            # Send specific notification for ticket reopening
+                            notifications_service.send_ticket_notification('ticket_reopened', ticket_id)
                         elif 'status' in ticket_data:
                             notifications_service.send_ticket_notification('ticket_status_changed', ticket_id)
                         else:
@@ -496,9 +579,9 @@ class TicketService:
                 'updated_at': datetime.utcnow()
             }
 
-            # Update status if currently new
+            # Update status if currently open
             if ticket['status'] == 'nuevo':
-                update_data['status'] = 'asignado'
+                update_data['status'] = 'en_proceso'
 
             rows_updated = self.db.execute_update(
                 'tickets',
@@ -551,9 +634,9 @@ class TicketService:
                 'user_id': created_by,
                 'comment_text': comment_data['content'].strip(),
                 'is_internal': comment_data.get('is_internal', False),
-                'is_email_reply': comment_data.get('is_email_reply', False),
-                'created_at': datetime.utcnow(),
-                'updated_at': datetime.utcnow()
+                'is_email_reply': comment_data.get('is_email_reply', False)
+                # Note: created_at and updated_at will use DEFAULT CURRENT_TIMESTAMP from PostgreSQL
+                # which respects the database timezone (America/Mexico_City)
             }
 
             # Insert comment
@@ -609,12 +692,26 @@ class TicketService:
                     f"Agregó {comment_type}"
                 )
 
-                # Send notification for ticket comment
+                # Send notifications for ticket comment and potential reopening
                 try:
                     from modules.notifications.service import notifications_service
-                    notifications_service.send_ticket_notification('ticket_commented', ticket_id)
+
+                    # Check if ticket was automatically reopened
+                    was_reopened = (ticket['status'] == 'espera_cliente' and
+                                  is_client_user and
+                                  not new_comment_data['is_internal'])
+
+                    if was_reopened:
+                        # Send ticket reopened notification instead of comment notification
+                        # This provides better context about what happened
+                        notifications_service.send_ticket_notification('ticket_reopened', ticket_id)
+                        self.logger.info(f"Sent ticket reopened notification for {ticket['ticket_number']}")
+                    else:
+                        # Send regular comment notification
+                        notifications_service.send_ticket_notification('ticket_commented', ticket_id, comment_id=result['comment_id'])
+
                 except Exception as e:
-                    self.logger.warning(f"Failed to send ticket comment notification: {e}")
+                    self.logger.warning(f"Failed to send ticket notification: {e}")
 
                 self.logger.info(f"Comment added to ticket {ticket['ticket_number']}")
                 return {'success': True, 'comment': result}
@@ -624,3 +721,400 @@ class TicketService:
         except Exception as e:
             self.logger.error(f"Error adding comment to ticket {ticket_id}: {e}")
             return {'success': False, 'errors': {'general': 'Internal server error'}}
+
+    def bulk_actions(self, ticket_ids: list, action: str, action_data: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
+        """Perform bulk actions on multiple tickets"""
+        try:
+            self.logger.info(f"🔧 SERVICE BULK_ACTIONS: Starting with {len(ticket_ids)} tickets, action: {action}")
+
+            # Validate all ticket IDs exist and user has access
+            accessible_tickets = []
+            inaccessible_tickets = []
+
+            for ticket_id in ticket_ids:
+                # Validate UUID format
+                if not self.db.validate_uuid(ticket_id):
+                    inaccessible_tickets.append({'ticket_id': ticket_id, 'reason': 'Invalid UUID format'})
+                    continue
+
+                # Check if ticket exists and user has access (using RLS)
+                ticket = self.db.execute_query(
+                    "SELECT ticket_id, ticket_number, status, client_id FROM tickets WHERE ticket_id = %s",
+                    (ticket_id,),
+                    fetch='one'
+                )
+
+                if ticket:
+                    accessible_tickets.append(ticket)
+                else:
+                    inaccessible_tickets.append({'ticket_id': ticket_id, 'reason': 'Ticket not found or access denied'})
+
+            if not accessible_tickets:
+                return {'success': False, 'errors': {'general': 'No accessible tickets found'}}
+
+            # Perform the bulk action
+            successful_updates = []
+            failed_updates = []
+
+            for ticket in accessible_tickets:
+                try:
+                    if action == 'update_status':
+                        result = self._bulk_update_status(ticket, action_data, current_user_id, user_role)
+                    elif action == 'assign':
+                        result = self._bulk_assign(ticket, action_data, current_user_id)
+                    elif action == 'update_priority':
+                        result = self._bulk_update_priority(ticket, action_data, current_user_id)
+                    elif action == 'delete':
+                        result = self._bulk_delete(ticket, current_user_id, user_role)
+                    else:
+                        result = {'success': False, 'error': 'Invalid action'}
+
+                    if result['success']:
+                        successful_updates.append({
+                            'ticket_id': ticket['ticket_id'],
+                            'ticket_number': ticket['ticket_number'],
+                            'action': action
+                        })
+                    else:
+                        failed_updates.append({
+                            'ticket_id': ticket['ticket_id'],
+                            'ticket_number': ticket['ticket_number'],
+                            'error': result.get('error', 'Unknown error')
+                        })
+
+                except Exception as e:
+                    failed_updates.append({
+                        'ticket_id': ticket['ticket_id'],
+                        'ticket_number': ticket['ticket_number'],
+                        'error': str(e)
+                    })
+
+            # Prepare response
+            response = {
+                'success': len(successful_updates) > 0,
+                'total_requested': len(ticket_ids),
+                'successful_updates': len(successful_updates),
+                'failed_updates': len(failed_updates),
+                'inaccessible_tickets': len(inaccessible_tickets),
+                'details': {
+                    'successful': successful_updates,
+                    'failed': failed_updates,
+                    'inaccessible': inaccessible_tickets
+                }
+            }
+
+            self.logger.info(f"Bulk action {action} completed: {len(successful_updates)} successful, {len(failed_updates)} failed")
+            return response
+
+        except Exception as e:
+            self.logger.error(f"🔧 SERVICE BULK_ACTIONS: Exception occurred: {e}")
+            self.logger.error(f"🔧 SERVICE BULK_ACTIONS: Exception type: {type(e)}")
+            import traceback
+            self.logger.error(f"🔧 SERVICE BULK_ACTIONS: Traceback: {traceback.format_exc()}")
+            return {'success': False, 'errors': {'general': f'Internal server error: {str(e)}'}}
+
+    def _bulk_update_status(self, ticket: dict, action_data: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
+        """Update ticket status in bulk operation"""
+        try:
+            new_status = action_data.get('status')
+            if not new_status:
+                return {'success': False, 'error': 'Status is required'}
+
+            # Validate status
+            valid_statuses = ['nuevo', 'asignado', 'en_proceso', 'espera_cliente', 'resuelto', 'cerrado', 'cancelado', 'pendiente_aprobacion', 'reabierto']
+            if new_status not in valid_statuses:
+                return {'success': False, 'error': 'Invalid status'}
+
+            # Check permissions for client users
+            if user_role in ['client_admin', 'solicitante']:
+                if new_status not in ['cerrado', 'reabierto']:
+                    return {'success': False, 'error': 'Clients can only close or reopen tickets'}
+
+            # For resolution, require resolution notes
+            if new_status == 'resuelto':
+                resolution_notes = action_data.get('resolution_notes')
+                if not resolution_notes or not resolution_notes.strip():
+                    return {'success': False, 'error': 'Resolution notes are required when resolving tickets'}
+
+            # For closing, check if ticket is resolved first
+            if new_status == 'cerrado':
+                if ticket['status'] not in ['resuelto']:
+                    return {'success': False, 'error': 'Tickets must be resolved before closing'}
+
+            # Update ticket
+            update_data = {
+                'status': new_status,
+                'updated_at': datetime.utcnow()
+            }
+
+            # Set resolution data if resolving
+            if new_status == 'resuelto':
+                update_data['resolved_at'] = datetime.utcnow()
+                update_data['resolution'] = action_data.get('resolution_notes', '').strip()
+
+                # CRITICAL FIX: Create entry in ticket_resolutions table for bulk resolution
+                # This matches the logic from individual ticket resolution in update_ticket method
+                try:
+                    resolution_data = {
+                        'ticket_id': ticket['ticket_id'],
+                        'resolution_notes': update_data['resolution'],
+                        'resolved_by': current_user_id,
+                        'resolved_at': update_data['resolved_at'],
+                        'created_at': datetime.utcnow()
+                    }
+
+                    resolution_result = self.db.execute_insert('ticket_resolutions', resolution_data)
+                    if resolution_result:
+                        self.logger.info(f"Resolution added to history for ticket {ticket['ticket_id']} (bulk action)")
+                    else:
+                        self.logger.error(f"Failed to insert resolution for ticket {ticket['ticket_id']} (bulk action)")
+                except Exception as e:
+                    self.logger.error(f"Error adding resolution to history (bulk action): {e}")
+                    # Continue without failing the main process
+
+            elif new_status == 'cerrado':
+                update_data['closed_at'] = datetime.utcnow()
+
+            # Build dynamic query based on what fields we're updating
+            set_clauses = ['status = %s', 'updated_at = %s']
+            params = [update_data['status'], update_data['updated_at']]
+
+            if 'resolved_at' in update_data:
+                set_clauses.append('resolved_at = %s')
+                params.append(update_data['resolved_at'])
+
+            if 'resolution' in update_data:
+                set_clauses.append('resolution_notes = %s')
+                params.append(update_data['resolution'])
+
+            if 'closed_at' in update_data:
+                set_clauses.append('closed_at = %s')
+                params.append(update_data['closed_at'])
+
+            params.append(ticket['ticket_id'])
+
+            query = f"UPDATE tickets SET {', '.join(set_clauses)} WHERE ticket_id = %s"
+            result = self.db.execute_query(query, params, fetch='none')
+
+            # Log activity
+            activity_desc = f"Estado cambiado a '{new_status}' (acción masiva)"
+            if new_status == 'resuelto' and 'resolution' in update_data:
+                activity_desc += f" - Resolución: {update_data['resolution'][:100]}..."
+
+            self._create_activity_log(
+                ticket['ticket_id'],
+                current_user_id,
+                'status_changed',
+                activity_desc
+            )
+
+            # CRITICAL FIX: Send notification for bulk resolution
+            if new_status == 'resuelto':
+                try:
+                    from modules.notifications.service import notifications_service
+                    notifications_service.send_ticket_notification('ticket_resolved', ticket['ticket_id'])
+                    self.logger.info(f"Sent resolution notification for ticket {ticket['ticket_id']} (bulk action)")
+                except Exception as e:
+                    self.logger.warning(f"Failed to send bulk resolution notification: {e}")
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _bulk_assign(self, ticket: dict, action_data: dict, current_user_id: str) -> Dict[str, Any]:
+        """Assign ticket in bulk operation"""
+        try:
+            assigned_to = action_data.get('assigned_to')
+            if not assigned_to:
+                return {'success': False, 'error': 'assigned_to is required'}
+
+            # Validate assignee exists and can handle tickets
+            assignee = self.db.execute_query(
+                "SELECT user_id, name, role FROM users WHERE user_id = %s AND is_active = true",
+                (assigned_to,),
+                fetch='one'
+            )
+
+            if not assignee:
+                return {'success': False, 'error': 'Invalid assignee'}
+
+            if assignee['role'] not in ['superadmin', 'admin', 'technician']:
+                return {'success': False, 'error': 'User cannot be assigned tickets'}
+
+            # Update ticket
+            update_data = {
+                'assigned_to': assigned_to,
+                'status': 'en_proceso',  # Change to valid status
+                'updated_at': datetime.utcnow()
+            }
+
+            result = self.db.execute_query(
+                "UPDATE tickets SET assigned_to = %s, status = %s, updated_at = %s WHERE ticket_id = %s",
+                (update_data['assigned_to'], update_data['status'],
+                 update_data['updated_at'], ticket['ticket_id']),
+                fetch='none'
+            )
+
+            # Log activity
+            self._create_activity_log(
+                ticket['ticket_id'],
+                current_user_id,
+                'assigned',
+                f"Asignado a {assignee['name']} (acción masiva)"
+            )
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _bulk_update_priority(self, ticket: dict, action_data: dict, current_user_id: str) -> Dict[str, Any]:
+        """Update ticket priority in bulk operation"""
+        try:
+            new_priority = action_data.get('priority')
+            if not new_priority:
+                return {'success': False, 'error': 'Priority is required'}
+
+            # Validate priority
+            valid_priorities = ['baja', 'media', 'alta', 'critica']
+            if new_priority not in valid_priorities:
+                return {'success': False, 'error': 'Invalid priority'}
+
+            # Update ticket
+            result = self.db.execute_query(
+                "UPDATE tickets SET priority = %s, updated_at = %s WHERE ticket_id = %s",
+                (new_priority, datetime.utcnow(), ticket['ticket_id']),
+                fetch='none'
+            )
+
+            # Log activity
+            self._create_activity_log(
+                ticket['ticket_id'],
+                current_user_id,
+                'priority_changed',
+                f"Prioridad cambiada a '{new_priority}' (acción masiva)"
+            )
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _bulk_delete(self, ticket: dict, current_user_id: str, user_role: str) -> Dict[str, Any]:
+        """Delete ticket in bulk operation (only superadmin/admin)"""
+        try:
+            # Double-check permissions
+            if user_role not in ['superadmin', 'admin']:
+                return {'success': False, 'error': 'Insufficient permissions to delete tickets'}
+
+            # Cannot delete closed tickets (following Zendesk pattern)
+            if ticket['status'] == 'cerrado':
+                return {'success': False, 'error': 'Cannot delete closed tickets'}
+
+            # Log activity before deletion
+            self._create_activity_log(
+                ticket['ticket_id'],
+                current_user_id,
+                'deleted',
+                f"Ticket eliminado (acción masiva)"
+            )
+
+            # Delete related records first to avoid foreign key constraint violations
+            # Delete in order to respect dependencies
+
+            # Delete from notification_tracking
+            self.db.execute_query(
+                "DELETE FROM notification_tracking WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from notification_queue
+            self.db.execute_query(
+                "DELETE FROM notification_queue WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from email_routing_log
+            self.db.execute_query(
+                "DELETE FROM email_routing_log WHERE created_ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from email_processing_log
+            self.db.execute_query(
+                "DELETE FROM email_processing_log WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from email_queue
+            self.db.execute_query(
+                "DELETE FROM email_queue WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from sla_tracking
+            self.db.execute_query(
+                "DELETE FROM sla_tracking WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from sla_compliance
+            self.db.execute_query(
+                "DELETE FROM sla_compliance WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_resolutions
+            self.db.execute_query(
+                "DELETE FROM ticket_resolutions WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_attachments
+            self.db.execute_query(
+                "DELETE FROM ticket_attachments WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from file_attachments
+            self.db.execute_query(
+                "DELETE FROM file_attachments WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_activities
+            self.db.execute_query(
+                "DELETE FROM ticket_activities WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Delete from ticket_comments
+            self.db.execute_query(
+                "DELETE FROM ticket_comments WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            # Finally, delete the ticket itself
+            result = self.db.execute_query(
+                "DELETE FROM tickets WHERE ticket_id = %s",
+                (ticket['ticket_id'],),
+                fetch='none'
+            )
+
+            return {'success': True}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}

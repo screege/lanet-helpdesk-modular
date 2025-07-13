@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Phone, Save, MapPin, Building2, AlertCircle } from 'lucide-react';
 import { usersService, CreateSolicitanteData } from '../../services/usersService';
 import { apiService } from '../../services/api';
-import { sitesService } from '../../services/sitesService';
+import { sitesService, Site } from '../../services/sitesService';
+import { ApiResponse } from '../../types';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 
@@ -73,9 +74,21 @@ const SolicitanteForm: React.FC<SolicitanteFormProps> = ({
   const loadClients = async () => {
     setLoadingClients(true);
     try {
-      const response = await apiService.get('/clients?per_page=1000');
+      const response = await apiService.get('/clients?per_page=1000') as ApiResponse<{ clients: Client[] }>;
       if (response.success) {
-        setClients(response.data.clients || response.data || []);
+        // Type guard crítico para datos de clientes
+        if (response.data && typeof response.data === 'object') {
+          if ('clients' in response.data) {
+            setClients((response.data as any).clients || []);
+          } else if (Array.isArray(response.data)) {
+            setClients(response.data as any);
+          } else {
+            console.warn('Invalid clients response format');
+            setClients([]);
+          }
+        } else {
+          setClients([]);
+        }
       }
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -87,9 +100,15 @@ const SolicitanteForm: React.FC<SolicitanteFormProps> = ({
   const loadClientSites = async (selectedClientId: string) => {
     try {
       setLoadingSites(true);
-      const response = await sitesService.getSites({ client_id: selectedClientId, per_page: 1000 });
+      const response = await sitesService.getSites({ client_id: selectedClientId, per_page: 1000 }) as ApiResponse<{ sites: Site[] }>;
       if (response.success) {
-        setSites(response.data.sites || []);
+        // Type guard crítico para datos de sitios
+        if (response.data && typeof response.data === 'object' && 'sites' in response.data) {
+          setSites((response.data as any).sites || []);
+        } else {
+          console.warn('Invalid sites response format');
+          setSites([]);
+        }
       }
     } catch (error) {
       console.error('Error loading client sites:', error);
@@ -206,9 +225,9 @@ const SolicitanteForm: React.FC<SolicitanteFormProps> = ({
         console.log('Failed response:', response);
         setError(response.message || 'Error al crear solicitante');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating solicitante:', error);
-      setError(error.message || 'Error al crear solicitante');
+      setError(error instanceof Error ? error.message : 'Error al crear solicitante');
     } finally {
       setLoading(false);
     }

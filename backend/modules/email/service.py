@@ -241,17 +241,120 @@ LANET Helpdesk V3
             error_msg = str(e)
             current_app.logger.error(f"Error sending email to {to_email}: {error_msg}")
             return False, error_msg
-    
+
+    def send_email_with_attachment(self, to_email: str, subject: str, body: str,
+                                 cc_emails: List[str] = None, bcc_emails: List[str] = None,
+                                 is_html: bool = True, config_id: str = None,
+                                 attachment_data: Dict = None) -> bool:
+        """Send email with optional attachment support"""
+        try:
+            config = self.get_config_by_id(config_id) if config_id else self.get_default_config()
+            if not config:
+                current_app.logger.error("No email configuration found")
+                return False
+
+            if not self.connect_smtp(config):
+                current_app.logger.error("Failed to connect to SMTP server")
+                return False
+
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = config['smtp_username']
+            msg['To'] = to_email
+            msg['Subject'] = subject
+
+            # Add Reply-To header if configured
+            if config.get('smtp_reply_to'):
+                msg['Reply-To'] = config['smtp_reply_to']
+
+            if cc_emails:
+                msg['Cc'] = ', '.join(cc_emails)
+
+            # Add body
+            if is_html:
+                msg.attach(MIMEText(body, 'html', 'utf-8'))
+            else:
+                msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+            # Add attachment if provided
+            if attachment_data:
+                try:
+                    import base64
+
+                    # Decode attachment content
+                    attachment_content = base64.b64decode(attachment_data['content'])
+
+                    # Create attachment
+                    attachment = MIMEBase('application', 'octet-stream')
+                    attachment.set_payload(attachment_content)
+                    encoders.encode_base64(attachment)
+
+                    # Add header
+                    attachment.add_header(
+                        'Content-Disposition',
+                        f'attachment; filename= {attachment_data["filename"]}'
+                    )
+
+                    # Set content type if available
+                    if attachment_data.get('content_type'):
+                        attachment.set_type(attachment_data['content_type'])
+
+                    msg.attach(attachment)
+                    current_app.logger.info(f"Attached file: {attachment_data['filename']}")
+
+                except Exception as e:
+                    current_app.logger.error(f"Error adding attachment: {e}")
+                    # Continue without attachment rather than failing
+
+            # Send email
+            recipients = [to_email]
+            if cc_emails:
+                recipients.extend(cc_emails)
+            if bcc_emails:
+                recipients.extend(bcc_emails)
+
+            self.smtp_connection.send_message(msg, to_addrs=recipients)
+            self.smtp_connection.quit()
+
+            current_app.logger.info(f"Email with attachment sent successfully to {to_email}")
+            return True
+
+        except Exception as e:
+            current_app.logger.error(f"Error sending email with attachment to {to_email}: {e}")
+            return False
+
     def queue_email(self, to_email: str, subject: str, body: str,
                     cc_emails: List[str] = None, bcc_emails: List[str] = None,
                     ticket_id: str = None, user_id: str = None,
-                    priority: int = 5, config_id: str = None) -> bool:
-        """Queue email for background processing"""
+                    priority: int = 5, config_id: str = None,
+                    attachment_path: str = None) -> bool:
+        """Queue email for background processing with optional attachment"""
         try:
             config = self.get_config_by_id(config_id) if config_id else self.get_default_config()
             if not config:
                 return False
-            
+
+            # Prepare attachment data if provided
+            attachment_data = None
+            if attachment_path:
+                import os
+                import base64
+
+                if os.path.exists(attachment_path):
+                    try:
+                        with open(attachment_path, 'rb') as f:
+                            attachment_content = f.read()
+
+                        attachment_data = {
+                            'filename': os.path.basename(attachment_path),
+                            'content': base64.b64encode(attachment_content).decode('utf-8'),
+                            'content_type': self._get_content_type(attachment_path)
+                        }
+                    except Exception as e:
+                        current_app.logger.error(f"Error reading attachment {attachment_path}: {e}")
+                        # Continue without attachment rather than failing
+                        attachment_data = None
+
             queue_data = {
                 'config_id': config['config_id'],
                 'to_email': to_email,
@@ -262,15 +365,34 @@ LANET Helpdesk V3
                 'ticket_id': ticket_id,
                 'user_id': user_id,
                 'priority': priority,
-                'status': 'pending'
+                'status': 'pending',
+                'attachment_data': json.dumps(attachment_data) if attachment_data else None
             }
-            
+
             current_app.db_manager.execute_insert('email_queue', queue_data)
             return True
-            
+
         except Exception as e:
             current_app.logger.error(f"Error queueing email: {e}")
             return False
+
+    def _get_content_type(self, file_path: str) -> str:
+        """Get MIME content type for file"""
+        import mimetypes
+        content_type, _ = mimetypes.guess_type(file_path)
+        if content_type:
+            return content_type
+
+        # Fallback based on extension
+        ext = file_path.lower().split('.')[-1]
+        content_types = {
+            'pdf': 'application/pdf',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xls': 'application/vnd.ms-excel',
+            'csv': 'text/csv',
+            'txt': 'text/plain'
+        }
+        return content_types.get(ext, 'application/octet-stream')
     
     def process_email_queue(self, limit: int = 10) -> int:
         """Process pending emails in queue"""
@@ -307,15 +429,24 @@ LANET Helpdesk V3
                 (email_item['queue_id'],)
             )
             
-            # Send email
-            success = self.send_email(
+            # Prepare attachment if present
+            attachment_data = None
+            if email_item.get('attachment_data'):
+                try:
+                    attachment_data = json.loads(email_item['attachment_data'])
+                except Exception as e:
+                    current_app.logger.error(f"Error parsing attachment data: {e}")
+
+            # Send email with attachment support
+            success = self.send_email_with_attachment(
                 to_email=email_item['to_email'],
                 subject=email_item['subject'],
                 body=email_item['body_html'] or email_item['body_text'],
                 cc_emails=email_item['cc_emails'],
                 bcc_emails=email_item['bcc_emails'],
                 is_html=bool(email_item['body_html']),
-                config_id=email_item['config_id']
+                config_id=email_item['config_id'],
+                attachment_data=attachment_data
             )
             
             if success:

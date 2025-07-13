@@ -542,6 +542,7 @@ def create_email_template():
             'ticket_updated': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{status}}', '{{updated_by}}', '{{update_date}}'],
             'ticket_resolved': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{resolution}}', '{{resolved_by}}', '{{resolved_date}}'],
             'ticket_closed': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{closed_by}}', '{{closed_date}}'],
+            'ticket_reopened': ['{{ticket_number}}', '{{client_name}}', '{{site_name}}', '{{subject}}', '{{priority}}', '{{reopened_by}}', '{{reopened_date}}', '{{reopen_reason}}'],
             'sla_breach': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{priority}}', '{{breach_type}}', '{{time_elapsed}}'],
             'auto_response': ['{{sender_name}}', '{{ticket_number}}', '{{subject}}', '{{original_subject}}', '{{client_name}}']
         }
@@ -626,6 +627,7 @@ def update_email_template(template_id):
                 'ticket_updated': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{status}}', '{{updated_by}}', '{{update_date}}'],
                 'ticket_resolved': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{resolution}}', '{{resolved_by}}', '{{resolved_date}}'],
                 'ticket_closed': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{closed_by}}', '{{closed_date}}'],
+                'ticket_reopened': ['{{ticket_number}}', '{{client_name}}', '{{site_name}}', '{{subject}}', '{{priority}}', '{{reopened_by}}', '{{reopened_date}}', '{{reopen_reason}}'],
                 'sla_breach': ['{{ticket_number}}', '{{client_name}}', '{{subject}}', '{{priority}}', '{{breach_type}}', '{{time_elapsed}}'],
                 'auto_response': ['{{sender_name}}', '{{ticket_number}}', '{{subject}}', '{{original_subject}}', '{{client_name}}']
             }

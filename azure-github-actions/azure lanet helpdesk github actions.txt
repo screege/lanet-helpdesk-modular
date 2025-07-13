@@ -1,0 +1,27 @@
+Nombre para mostrar
+:
+lanet-helpdesk-github-actions
+Id. de aplicación (cliente)
+:
+58f7a8b2-74d9-4cf8-a68b-4ba3c2ddae12
+Identificador de objeto
+:
+4e6a3bd4-9402-4a0f-b925-091d88cdcb87
+Id. de directorio (inquilino)
+:
+da6c76b2-f170-412f-b942-a25bf0c9c903
+Tipos de cuenta compatibles
+:
+Solo mi organización
+Credenciales de cliente
+:
+Agregar un certificado o secreto
+URI de redirección
+:
+Agregar un URI de redirección
+URI de id. de aplicación
+:
+Agregar un URI de id. de aplicación
+Aplicación administrada en directorio local
+:
+lanet-helpdesk-github-actions

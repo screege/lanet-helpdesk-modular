@@ -20,7 +20,7 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
   site
 }) => {
   const { user } = useAuth();
-  const [siteDetails, setSiteDetails] = useState<any>(null);
+  const [siteDetails, setSiteDetails] = useState<Site | null>(null);
   const [assignedUsers, setAssignedUsers] = useState<SiteUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,13 +60,18 @@ const SiteDetail: React.FC<SiteDetailProps> = ({
       const response = await sitesService.getSiteById(site.site_id);
       
       if (response.success) {
-        setSiteDetails(response.data.site);
-        setAssignedUsers(response.data.assigned_users || []);
+        // Type guard para validar response.data
+        if (response.data && typeof response.data === 'object' && 'site' in response.data) {
+          setSiteDetails((response.data as any).site);
+          setAssignedUsers((response.data as any).assigned_users || []);
+        } else {
+          throw new Error('Invalid response format');
+        }
       } else {
         setError(response.message || 'Failed to load site details');
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load site details');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load site details');
     } finally {
       setLoading(false);
     }

@@ -1,20 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Eye, Edit, Trash2, UserPlus, Clock, AlertCircle, Ticket as TicketIcon } from 'lucide-react';
-import { ticketsService, Ticket, TicketFilters } from '../../services/ticketsService';
+import { Plus, Search, Filter, Eye, Edit, UserPlus, AlertCircle, Ticket as TicketIcon, Trash2, Users, Flag, CheckSquare, X } from 'lucide-react';
+import { ticketsService, Ticket, TicketFilters, BulkActionResponse } from '../../services/ticketsService';
+import { usersService, User } from '../../services/usersService';
+import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const TicketsManagement: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms delay
   const [filters, setFilters] = useState<TicketFilters>({
     page: 1,
-    per_page: 20
+    per_page: 20,
+    sort_by: 'ticket_number',
+    sort_order: 'desc'
   });
   const [pagination, setPagination] = useState({
     page: 1,
@@ -22,24 +29,37 @@ const TicketsManagement: React.FC = () => {
     total: 0,
     total_pages: 0
   });
+  const [sortConfig, setSortConfig] = useState({
+    key: 'ticket_number',
+    direction: 'desc'
+  });
+
+  // Bulk actions state
+  const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+
+  // Modal states
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showPriorityModal, setShowPriorityModal] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [technicians, setTechnicians] = useState<User[]>([]);
+  const [selectedTechnician, setSelectedTechnician] = useState('');
+  const [selectedPriority, setSelectedPriority] = useState('');
+  const [resolutionNotes, setResolutionNotes] = useState('');
 
   // Load tickets
   const loadTickets = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const searchFilters = {
-        ...filters,
-        search: searchTerm || undefined
-      };
-      
-      const response = await ticketsService.getAllTickets(searchFilters);
+
+      const response = await ticketsService.getAllTickets(filters);
       setTickets(response.tickets);
       setPagination(response.pagination);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading tickets:', err);
-      setError(err.response?.data?.message || 'Error al cargar tickets');
+      setError(err instanceof Error ? err.message : 'Error al cargar tickets');
     } finally {
       setLoading(false);
     }
@@ -49,14 +69,82 @@ const TicketsManagement: React.FC = () => {
     loadTickets();
   }, [filters]);
 
+  // Auto-search when debounced search term changes
+  useEffect(() => {
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      search: debouncedSearchTerm || undefined
+    }));
+  }, [debouncedSearchTerm]);
+
+  // Load technicians for assignment
+  const loadTechnicians = async () => {
+    try {
+      const technicianUsers = await usersService.getUsersByRole('technician');
+      const adminUsers = await usersService.getUsersByRole('admin');
+      const superadminUsers = await usersService.getUsersByRole('superadmin');
+
+      // Combine all users who can be assigned tickets
+      const allAssignableUsers = [...technicianUsers, ...adminUsers, ...superadminUsers];
+      setTechnicians(allAssignableUsers);
+    } catch (error) {
+      console.error('Error loading technicians:', error);
+    }
+  };
+
   // Handle search
   const handleSearch = () => {
-    setFilters(prev => ({ ...prev, page: 1 }));
-    loadTickets();
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      search: searchTerm || undefined
+    }));
+  };
+
+  // Handle search on Enter key
+  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  // Clear search
+  const clearSearch = () => {
+    setSearchTerm('');
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      search: undefined
+    }));
+  };
+
+  // Handle column sorting
+  const handleSort = (key: string) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+
+    setSortConfig({ key, direction });
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      sort_by: key,
+      sort_order: direction
+    }));
+  };
+
+  // Get sort icon for column headers
+  const getSortIcon = (columnKey: string) => {
+    if (sortConfig.key !== columnKey) {
+      return null;
+    }
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
   };
 
   // Handle filter change
-  const handleFilterChange = (key: keyof TicketFilters, value: any) => {
+  const handleFilterChange = (key: keyof TicketFilters, value: string | undefined) => {
     setFilters(prev => ({
       ...prev,
       [key]: value,
@@ -67,6 +155,197 @@ const TicketsManagement: React.FC = () => {
   // Handle page change
   const handlePageChange = (newPage: number) => {
     setFilters(prev => ({ ...prev, page: newPage }));
+  };
+
+  // Handle ticket selection
+  const handleTicketSelect = (ticketId: string, checked: boolean) => {
+    const newSelected = new Set(selectedTickets);
+    if (checked) {
+      newSelected.add(ticketId);
+    } else {
+      newSelected.delete(ticketId);
+    }
+    setSelectedTickets(newSelected);
+    setShowBulkActions(newSelected.size > 0);
+  };
+
+  // Handle select all tickets
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allTicketIds = new Set(tickets.map(ticket => ticket.ticket_id));
+      setSelectedTickets(allTicketIds);
+      setShowBulkActions(true);
+    } else {
+      setSelectedTickets(new Set());
+      setShowBulkActions(false);
+    }
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedTickets(new Set());
+    setShowBulkActions(false);
+  };
+
+  // Handle bulk actions
+  const handleBulkAction = async (action: string, actionData?: any) => {
+    if (selectedTickets.size === 0) return;
+
+    try {
+      setBulkActionLoading(true);
+      setError(null);
+
+      const ticketIds = Array.from(selectedTickets);
+      let result: BulkActionResponse;
+
+      console.log('🔧 DEBUG: Bulk action request:', { action, actionData, ticketIds });
+
+      switch (action) {
+        case 'reopen':
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'update_status',
+            action_data: { status: 'abierto' }
+          });
+          break;
+        case 'resolve':
+          // For resolve, we need resolution notes - this should be handled by modal
+          if (!actionData?.resolutionNotes) {
+            setError('Se requieren notas de resolución');
+            return;
+          }
+          // Use the bulk actions endpoint with resolution notes
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'update_status',
+            action_data: {
+              status: 'resuelto',
+              resolution_notes: actionData.resolutionNotes
+            }
+          });
+          break;
+        case 'assign':
+          if (!actionData?.assignedTo) {
+            setError('Debe seleccionar un técnico para asignar');
+            return;
+          }
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'assign',
+            action_data: { assigned_to: actionData.assignedTo }
+          });
+          break;
+        case 'priority':
+          if (!actionData?.priority) {
+            setError('Debe seleccionar una prioridad');
+            return;
+          }
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'update_priority',
+            action_data: { priority: actionData.priority }
+          });
+          break;
+        case 'delete':
+          const confirmed = window.confirm(
+            `⚠️ ¿Estás seguro de que quieres ELIMINAR ${selectedTickets.size} ticket(s)? Esta acción no se puede deshacer.`
+          );
+          if (!confirmed) return;
+
+          result = await ticketsService.bulkActions({
+            ticket_ids: ticketIds,
+            action: 'delete',
+            action_data: {}
+          });
+          break;
+        default:
+          setError('Acción no válida');
+          return;
+      }
+
+      // Show results
+      if (result.successful_updates > 0) {
+        alert(`✅ ${result.successful_updates} ticket(s) actualizados exitosamente`);
+      }
+
+      if (result.failed_updates > 0) {
+        alert(`⚠️ ${result.failed_updates} ticket(s) fallaron al actualizar`);
+      }
+
+      // Reload tickets and clear selection
+      await loadTickets();
+      clearSelection();
+
+    } catch (err: unknown) {
+      console.error('Error in bulk action:', err);
+      setError(err instanceof Error ? err.message : 'Error en acción masiva');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  // Modal handlers
+  const handleAssignModal = () => {
+    if (selectedTickets.size === 0) return;
+    loadTechnicians();
+    setShowAssignModal(true);
+  };
+
+  const handlePriorityModal = () => {
+    if (selectedTickets.size === 0) return;
+    setShowPriorityModal(true);
+  };
+
+  const handleResolveModal = () => {
+    if (selectedTickets.size === 0) return;
+    setShowResolveModal(true);
+  };
+
+  const confirmAssign = () => {
+    if (!selectedTechnician) {
+      setError('Debe seleccionar un técnico');
+      return;
+    }
+    handleBulkAction('assign', { assignedTo: selectedTechnician });
+    setShowAssignModal(false);
+    setSelectedTechnician('');
+  };
+
+  const confirmPriority = () => {
+    if (!selectedPriority) {
+      setError('Debe seleccionar una prioridad');
+      return;
+    }
+    handleBulkAction('priority', { priority: selectedPriority });
+    setShowPriorityModal(false);
+    setSelectedPriority('');
+  };
+
+  const confirmResolve = () => {
+    if (!resolutionNotes.trim()) {
+      setError('Debe proporcionar notas de resolución');
+      return;
+    }
+    handleBulkAction('resolve', { resolutionNotes: resolutionNotes.trim() });
+    setShowResolveModal(false);
+    setResolutionNotes('');
+  };
+
+  // Permission checks
+  const canPerformBulkActions = () => {
+    return user?.role && ['superadmin', 'admin', 'technician'].includes(user.role);
+  };
+
+  const canDeleteTickets = () => {
+    return user?.role && ['superadmin', 'admin'].includes(user.role);
+  };
+
+  const canAssignTickets = () => {
+    return user?.role && ['superadmin', 'admin', 'technician'].includes(user.role);
+  };
+
+  const canResolveTickets = () => {
+    return user?.role && ['superadmin', 'admin', 'technician'].includes(user.role);
   };
 
 
@@ -171,8 +450,18 @@ const TicketsManagement: React.FC = () => {
               placeholder="Buscar tickets..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onKeyPress={handleSearchKeyPress}
+              className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+            {searchTerm && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                title="Limpiar búsqueda"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Status Filter */}
@@ -227,32 +516,144 @@ const TicketsManagement: React.FC = () => {
       {/* Error Message */}
       {error && <ErrorMessage message={error} />}
 
+      {/* Bulk Actions Bar */}
+      {showBulkActions && canPerformBulkActions() && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-blue-900">
+                {selectedTickets.size} ticket(s) seleccionados
+              </span>
+              <button
+                onClick={clearSelection}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Limpiar selección
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {canResolveTickets() && (
+                <button
+                  onClick={handleResolveModal}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                >
+                  <CheckSquare className="w-3 h-3 mr-1" />
+                  Resolver
+                </button>
+              )}
+
+              <button
+                onClick={() => handleBulkAction('reopen')}
+                disabled={bulkActionLoading}
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              >
+                <AlertCircle className="w-3 h-3 mr-1" />
+                Reabrir
+              </button>
+
+              {canAssignTickets() && (
+                <button
+                  onClick={handleAssignModal}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                >
+                  <Users className="w-3 h-3 mr-1" />
+                  Asignar
+                </button>
+              )}
+
+              {canPerformBulkActions() && (
+                <button
+                  onClick={handlePriorityModal}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  <Flag className="w-3 h-3 mr-1" />
+                  Prioridad
+                </button>
+              )}
+
+              {canDeleteTickets() && (
+                <button
+                  onClick={() => handleBulkAction('delete')}
+                  disabled={bulkActionLoading}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Eliminar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tickets Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                  Ticket
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedTickets.size === tickets.length && tickets.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0">
-                  Cliente/Sitio
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('ticket_number')}
+                >
+                  <div className="flex items-center gap-1">
+                    Ticket {getSortIcon('ticket_number')}
+                  </div>
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0">
-                  Asunto
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('client_name')}
+                >
+                  <div className="flex items-center gap-1">
+                    Cliente/Sitio {getSortIcon('client_name')}
+                  </div>
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                  Estado
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-0 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('subject')}
+                >
+                  <div className="flex items-center gap-1">
+                    Asunto {getSortIcon('subject')}
+                  </div>
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                  Prioridad
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center gap-1">
+                    Estado {getSortIcon('status')}
+                  </div>
+                </th>
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('priority')}
+                >
+                  <div className="flex items-center gap-1">
+                    Prioridad {getSortIcon('priority')}
+                  </div>
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 hidden sm:table-cell">
                   Asignado
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 hidden md:table-cell">
-                  Creado
+                <th
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 hidden md:table-cell cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('created_at')}
+                >
+                  <div className="flex items-center gap-1">
+                    Creado {getSortIcon('created_at')}
+                  </div>
                 </th>
                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                   Acciones
@@ -262,6 +663,14 @@ const TicketsManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {tickets.map((ticket) => (
                 <tr key={ticket.ticket_id} className="hover:bg-gray-50">
+                  <td className="px-3 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedTickets.has(ticket.ticket_id)}
+                      onChange={(e) => handleTicketSelect(ticket.ticket_id, e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </td>
                   <td className="px-3 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div>
@@ -306,7 +715,12 @@ const TicketsManagement: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 hidden md:table-cell">
-                    {new Date(ticket.created_at).toLocaleDateString('es-ES')}
+                    {new Date(ticket.created_at).toLocaleDateString('es-MX', {
+                      timeZone: 'America/Mexico_City',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })}
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-1">
@@ -434,6 +848,164 @@ const TicketsManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Assignment Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Asignar {selectedTickets.size} ticket(s)
+                </h3>
+                <button
+                  onClick={() => setShowAssignModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Seleccionar técnico:
+                </label>
+                <select
+                  value={selectedTechnician}
+                  onChange={(e) => setSelectedTechnician(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar técnico...</option>
+                  {technicians.map((tech) => (
+                    <option key={tech.user_id} value={tech.user_id}>
+                      {tech.name} ({tech.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowAssignModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmAssign}
+                  disabled={!selectedTechnician || bulkActionLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-md"
+                >
+                  {bulkActionLoading ? 'Asignando...' : 'Asignar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Priority Modal */}
+      {showPriorityModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Cambiar prioridad de {selectedTickets.size} ticket(s)
+                </h3>
+                <button
+                  onClick={() => setShowPriorityModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nueva prioridad:
+                </label>
+                <select
+                  value={selectedPriority}
+                  onChange={(e) => setSelectedPriority(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar prioridad...</option>
+                  <option value="baja">🟢 Baja</option>
+                  <option value="media">🟡 Media</option>
+                  <option value="alta">🟠 Alta</option>
+                  <option value="critica">🔴 Crítica</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowPriorityModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmPriority}
+                  disabled={!selectedPriority || bulkActionLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 rounded-md"
+                >
+                  {bulkActionLoading ? 'Actualizando...' : 'Actualizar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolve Modal */}
+      {showResolveModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Resolver {selectedTickets.size} ticket(s)
+                </h3>
+                <button
+                  onClick={() => setShowResolveModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notas de resolución: <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={resolutionNotes}
+                  onChange={(e) => setResolutionNotes(e.target.value)}
+                  placeholder="Describe cómo se resolvieron los tickets..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowResolveModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmResolve}
+                  disabled={!resolutionNotes.trim() || bulkActionLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-md"
+                >
+                  {bulkActionLoading ? 'Resolviendo...' : 'Resolver'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

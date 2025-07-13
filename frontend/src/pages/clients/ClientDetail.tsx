@@ -105,7 +105,12 @@ const ClientDetail: React.FC = () => {
       // Load client details
       const clientResponse = await apiService.get(`/clients/${clientId}`);
       if (clientResponse.success) {
-        setClient(clientResponse.data);
+        // Type guard crítico para datos de cliente
+        if (clientResponse.data && typeof clientResponse.data === 'object') {
+          setClient(clientResponse.data as Client);
+        } else {
+          throw new Error('Invalid client data received');
+        }
       } else {
         setError('Error al cargar los datos del cliente');
         return;
@@ -114,19 +119,36 @@ const ClientDetail: React.FC = () => {
       // Load client statistics
       const statsResponse = await apiService.get(`/clients/${clientId}/stats`);
       if (statsResponse.success) {
-        setStats(statsResponse.data);
+        // Type guard para estadísticas del cliente
+        if (statsResponse.data && typeof statsResponse.data === 'object') {
+          setStats(statsResponse.data as ClientStats);
+        } else {
+          console.warn('Invalid client stats format');
+        }
       }
 
       // Load client sites
       const sitesResponse = await apiService.get(`/clients/${clientId}/sites`);
       if (sitesResponse.success) {
-        setSites(sitesResponse.data);
+        // Type guard para sitios del cliente
+        if (sitesResponse.data && Array.isArray(sitesResponse.data)) {
+          setSites(sitesResponse.data as Site[]);
+        } else {
+          console.warn('Invalid sites data format');
+          setSites([]);
+        }
       }
 
       // Load client users
       const usersResponse = await apiService.get(`/clients/${clientId}/users`);
       if (usersResponse.success) {
-        setUsers(usersResponse.data);
+        // Type guard para usuarios del cliente
+        if (usersResponse.data && Array.isArray(usersResponse.data)) {
+          setUsers(usersResponse.data as User[]);
+        } else {
+          console.warn('Invalid users data format');
+          setUsers([]);
+        }
       }
 
     } catch (error) {

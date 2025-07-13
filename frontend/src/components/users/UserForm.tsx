@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, Save, Building2, Shield } from 'lucide-react';
-import { usersService, CreateUserData, UpdateUserData } from '../../services/usersService';
+import { X, User as UserIcon, Mail, Phone, Save, Building2, Shield } from 'lucide-react';
+import { usersService, CreateUserData, UpdateUserData, User } from '../../services/usersService';
 import { apiService } from '../../services/api';
+import { ApiResponse } from '../../types';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 
@@ -9,7 +10,7 @@ interface UserFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  user?: any;
+  user?: User;
   mode?: 'create' | 'edit';
 }
 
@@ -62,9 +63,21 @@ const UserForm: React.FC<UserFormProps> = ({
   const loadClients = async () => {
     try {
       setLoadingClients(true);
-      const response = await apiService.get('/clients?per_page=1000');
+      const response = await apiService.get('/clients?per_page=1000') as ApiResponse<{ clients: Client[] }>;
       if (response.success) {
-        setClients(response.data.clients || response.data || []);
+        // Type guard para validar datos de clientes
+        if (response.data && typeof response.data === 'object') {
+          if ('clients' in response.data) {
+            setClients((response.data as any).clients || []);
+          } else if (Array.isArray(response.data)) {
+            setClients(response.data as any);
+          } else {
+            console.warn('Invalid clients response format');
+            setClients([]);
+          }
+        } else {
+          setClients([]);
+        }
       }
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -196,9 +209,9 @@ const UserForm: React.FC<UserFormProps> = ({
           setError(response.message || 'Error al crear usuario');
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving user:', error);
-      setError(error.message || 'Error al guardar usuario');
+      setError(error instanceof Error ? error.message : 'Error al guardar usuario');
     } finally {
       setLoading(false);
     }
@@ -212,7 +225,7 @@ const UserForm: React.FC<UserFormProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
-            <User className="h-6 w-6 text-blue-600" />
+            <UserIcon className="h-6 w-6 text-blue-600" />
             <h3 className="text-lg font-medium text-gray-900">
               {isEditing ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
             </h3>
@@ -236,7 +249,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 Nombre Completo *
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
                   id="name"

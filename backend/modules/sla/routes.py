@@ -47,6 +47,86 @@ def get_sla_policies():
         current_app.logger.error(f"Get SLA policies error: {e}")
         return current_app.response_manager.server_error('Failed to get SLA policies')
 
+@sla_bp.route('/policies', methods=['POST'])
+@jwt_required()
+@require_role(['superadmin', 'admin'])
+def create_sla_policy():
+    """Create a new SLA policy"""
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        required_fields = ['name', 'priority', 'response_time_hours', 'resolution_time_hours']
+        for field in required_fields:
+            if field not in data:
+                return current_app.response_manager.bad_request(f'Missing required field: {field}')
+
+        # Create policy
+        policy_id = sla_service.create_sla_policy(data)
+
+        if policy_id:
+            return current_app.response_manager.success({'policy_id': policy_id}, 'SLA policy created successfully')
+        else:
+            return current_app.response_manager.server_error('Failed to create SLA policy')
+
+    except Exception as e:
+        current_app.logger.error(f"Create SLA policy error: {e}")
+        return current_app.response_manager.server_error('Failed to create SLA policy')
+
+@sla_bp.route('/policies/<policy_id>', methods=['PUT'])
+@jwt_required()
+@require_role(['superadmin', 'admin'])
+def update_sla_policy(policy_id):
+    """Update an existing SLA policy"""
+    try:
+        data = request.get_json()
+
+        # Update policy
+        success = sla_service.update_sla_policy(policy_id, data)
+
+        if success:
+            return current_app.response_manager.success(None, 'SLA policy updated successfully')
+        else:
+            return current_app.response_manager.server_error('Failed to update SLA policy')
+
+    except Exception as e:
+        current_app.logger.error(f"Update SLA policy error: {e}")
+        return current_app.response_manager.server_error('Failed to update SLA policy')
+
+@sla_bp.route('/policies/<policy_id>', methods=['DELETE'])
+@jwt_required()
+@require_role(['superadmin', 'admin'])
+def delete_sla_policy(policy_id):
+    """Delete an SLA policy"""
+    try:
+        success = sla_service.delete_sla_policy(policy_id)
+
+        if success:
+            return current_app.response_manager.success(None, 'SLA policy deleted successfully')
+        else:
+            return current_app.response_manager.server_error('Failed to delete SLA policy')
+
+    except Exception as e:
+        current_app.logger.error(f"Delete SLA policy error: {e}")
+        return current_app.response_manager.server_error('Failed to delete SLA policy')
+
+@sla_bp.route('/policies/<policy_id>/set-default', methods=['POST'])
+@jwt_required()
+@require_role(['superadmin', 'admin'])
+def set_default_sla_policy(policy_id):
+    """Set an SLA policy as default"""
+    try:
+        success = sla_service.set_default_policy(policy_id)
+
+        if success:
+            return current_app.response_manager.success(None, 'Default SLA policy set successfully')
+        else:
+            return current_app.response_manager.server_error('Failed to set default SLA policy')
+
+    except Exception as e:
+        current_app.logger.error(f"Set default SLA policy error: {e}")
+        return current_app.response_manager.server_error('Failed to set default SLA policy')
+
 @sla_bp.route('/breaches', methods=['GET'])
 @jwt_required()
 @require_role(['superadmin', 'admin', 'technician'])

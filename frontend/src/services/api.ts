@@ -94,10 +94,10 @@ class ApiService {
       }
       
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.error || 'Login failed',
+        error: (error as any)?.response?.data?.error || 'Login failed',
       };
     }
   }
@@ -107,11 +107,11 @@ class ApiService {
       const response: AxiosResponse<ApiResponse> = await this.api.post('/auth/logout');
       this.clearTokens();
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.clearTokens();
       return {
         success: false,
-        error: error.response?.data?.error || 'Logout failed',
+        error: (error as any)?.response?.data?.error || 'Logout failed',
       };
     }
   }
@@ -129,10 +129,10 @@ class ApiService {
         }
       );
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.error || 'Token refresh failed',
+        error: (error as any)?.response?.data?.error || 'Token refresh failed',
       };
     }
   }
@@ -212,9 +212,10 @@ class ApiService {
     }
   }
 
-  async post<T>(endpoint: string, data: any, config?: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data: unknown, config?: unknown): Promise<ApiResponse<T>> {
     try {
-      console.log('🚀 API POST:', endpoint, 'Data type:', data ? data.constructor.name : 'undefined');
+      console.log('🚀🚀🚀 API POST:', endpoint, 'Data type:', data ? data.constructor.name : 'undefined');
+      console.log('🚀🚀🚀 API POST DATA:', JSON.stringify(data, null, 2));
 
       // Handle FormData specially - don't set Content-Type, let axios handle it
       if (data instanceof FormData) {
@@ -224,10 +225,12 @@ class ApiService {
         }
 
         // Create config without Content-Type for FormData
+        // Type guard para config de seguridad
+        const safeConfig = config && typeof config === 'object' ? config as any : {};
         const formDataConfig = {
-          ...config,
+          ...safeConfig,
           headers: {
-            ...config?.headers,
+            ...(safeConfig.headers || {}),
             // Don't set Content-Type - let axios set multipart/form-data with boundary
           }
         };
@@ -271,7 +274,7 @@ class ApiService {
     }
   }
 
-  async put<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, data: unknown): Promise<ApiResponse<T>> {
     try {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.put(endpoint, data);
       return response.data;
@@ -281,7 +284,7 @@ class ApiService {
     }
   }
 
-  async patch<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
+  async patch<T>(endpoint: string, data: unknown): Promise<ApiResponse<T>> {
     try {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.patch(endpoint, data);
       return response.data;

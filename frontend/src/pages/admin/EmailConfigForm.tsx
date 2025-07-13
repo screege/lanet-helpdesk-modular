@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { emailService, EmailConfiguration } from '../../services/emailService';
+import { emailService } from '../../services/emailService';
 import { 
   ArrowLeft, 
   Save, 
@@ -81,8 +81,8 @@ const EmailConfigForm: React.FC = () => {
         ticket_number_regex: config.ticket_number_regex || '',
         is_active: config.is_active
       });
-    } catch (err: any) {
-      setError(err.message || 'Error loading email configuration');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error loading email configuration');
     } finally {
       setLoading(false);
     }
@@ -111,9 +111,9 @@ const EmailConfigForm: React.FC = () => {
         navigate('/admin/email-config');
       }, 1500);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Form submission error:', err);
-      setError(err.message || 'Error saving email configuration');
+      setError(err instanceof Error ? err.message : 'Error saving email configuration');
     } finally {
       setSaving(false);
     }
@@ -134,8 +134,8 @@ const EmailConfigForm: React.FC = () => {
       } else {
         setError('Error de conexión: ' + result.message);
       }
-    } catch (err: any) {
-      setError('Error probando conexión: ' + err.message);
+    } catch (err: unknown) {
+      setError('Error probando conexión: ' + (err instanceof Error ? err.message : 'Error desconocido'));
     } finally {
       setTesting(false);
     }

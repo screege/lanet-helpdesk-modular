@@ -1,0 +1,150 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: lanet-helpdesk-postgres
+    environment:
+      POSTGRES_DB: lanet_helpdesk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Poikl55+*
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/clean_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/rls_policies.sql:/docker-entrypoint-initdb.d/02-rls.sql
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/03-seed.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - lanet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lanet_helpdesk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: lanet-helpdesk-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lanet-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: lanet-helpdesk-backend
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: false
+      JWT_SECRET_KEY: production-secret-key-change-in-production-2024-docker
+      DATABASE_URL: postgresql://postgres:Poikl55+*@postgres:5432/lanet_helpdesk
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mail.compushop.com.mx
+      SMTP_PORT: 587
+      SMTP_USERNAME: webmaster@compushop.com.mx
+      SMTP_PASSWORD: Iyhnbsfg26
+      SMTP_USE_TLS: true
+      IMAP_HOST: mail.compushop.com.mx
+      IMAP_PORT: 993
+      IMAP_USERNAME: it@compushop.com.mx
+      IMAP_PASSWORD: Iyhnbsfg26+*
+      IMAP_USE_SSL: true
+      MAX_CONTENT_LENGTH: 10485760
+      UPLOAD_FOLDER: /app/uploads
+      SESSION_TIMEOUT_MINUTES: 480
+      PASSWORD_RESET_TIMEOUT_MINUTES: 15
+      LOG_LEVEL: INFO
+      LOG_FILE: /app/logs/app.log
+    ports:
+      - "5001:5001"
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_reports:/app/reports_files
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lanet-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # SLA Monitor Service
+  sla-monitor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.sla-monitor
+    container_name: lanet-helpdesk-sla-monitor
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: postgresql://postgres:Poikl55+*@postgres:5432/lanet_helpdesk
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mail.compushop.com.mx
+      SMTP_PORT: 587
+      SMTP_USERNAME: webmaster@compushop.com.mx
+      SMTP_PASSWORD: Iyhnbsfg26
+      SMTP_USE_TLS: true
+      LOG_LEVEL: INFO
+      SLA_MONITOR_INTERVAL: 15
+    volumes:
+      - sla_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: lanet-helpdesk-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  backend_reports:
+    driver: local
+  backend_logs:
+    driver: local
+  sla_logs:
+    driver: local
+
+networks:
+  lanet-network:
+    driver: bridge

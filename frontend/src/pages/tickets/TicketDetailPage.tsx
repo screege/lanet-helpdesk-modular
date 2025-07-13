@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, UserPlus, MessageSquare, Clock, User, MapPin, AlertCircle, Send, CheckCircle, Paperclip, Download } from 'lucide-react';
-import { Ticket, TicketComment, TicketAttachment, ticketsService } from '../../services/ticketsService';
+import { ArrowLeft, Edit, User, AlertCircle, Send, CheckCircle, Paperclip, Download } from 'lucide-react';
+import { Ticket, TicketComment, TicketAttachment, TicketResolution, ticketsService } from '../../services/ticketsService';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import ResolveTicketModal from '../../components/tickets/ResolveTicketModal';
 import ReopenTicketModal from '../../components/tickets/ReopenTicketModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { formatDateTime } from '../../utils/dateUtils';
 
 const TicketDetailPage: React.FC = () => {
   const { ticketId } = useParams<{ ticketId: string }>();
@@ -16,7 +17,7 @@ const TicketDetailPage: React.FC = () => {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [attachments, setAttachments] = useState<TicketAttachment[]>([]);
-  const [resolutions, setResolutions] = useState<any[]>([]);
+  const [resolutions, setResolutions] = useState<TicketResolution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -53,9 +54,9 @@ const TicketDetailPage: React.FC = () => {
 
       // Cargar historial de resoluciones
       await loadResolutions();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading ticket data:', err);
-      setError(err.response?.data?.message || 'Error al cargar el ticket');
+      setError(err instanceof Error ? err.message : 'Error al cargar el ticket');
     } finally {
       setLoading(false);
     }
@@ -85,9 +86,9 @@ const TicketDetailPage: React.FC = () => {
       await ticketsService.addTicketComment(ticketId, newComment.trim(), isInternal);
       // RELOAD THE ENTIRE PAGE - no more reactive bullshit
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding comment:', err);
-      setError(err.response?.data?.message || 'Error al agregar comentario');
+      setError(err instanceof Error ? err.message : 'Error al agregar comentario');
       setSubmittingComment(false);
     }
   };
@@ -113,9 +114,9 @@ const TicketDetailPage: React.FC = () => {
 
       // RELOAD THE ENTIRE PAGE
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating ticket status:', err);
-      setError(err.response?.data?.message || 'Error al cambiar estado del ticket');
+      setError(err instanceof Error ? err.message : 'Error al cambiar estado del ticket');
       setLoading(false);
     }
   };
@@ -128,9 +129,9 @@ const TicketDetailPage: React.FC = () => {
       setLoading(true);
       await ticketsService.updateTicketStatus(ticketId, 'resuelto', resolutionNotes);
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resolving ticket:', err);
-      throw new Error(err.message || 'Error al resolver el ticket');
+      throw new Error(err instanceof Error ? err.message : 'Error al resolver el ticket');
     }
   };
 
@@ -145,9 +146,9 @@ const TicketDetailPage: React.FC = () => {
       // Then change status
       await ticketsService.updateTicketStatus(ticketId, 'reabierto');
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening ticket:', err);
-      throw new Error(err.message || 'Error al reabrir el ticket');
+      throw new Error(err instanceof Error ? err.message : 'Error al reabrir el ticket');
     }
   };
 
@@ -199,9 +200,9 @@ const TicketDetailPage: React.FC = () => {
       window.URL.revokeObjectURL(url);
 
       console.log('✅ Download completed successfully');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Download error:', err);
-      setError(`Error al descargar archivo: ${err.message}`);
+      setError(`Error al descargar archivo: ${err instanceof Error ? err.message : 'Error desconocido'}`);
     } finally {
       // Remove attachment from downloading set
       setDownloadingAttachments(prev => {
@@ -223,9 +224,9 @@ const TicketDetailPage: React.FC = () => {
       // Then change status
       await ticketsService.updateTicketStatus(ticketId, 'reabierto');
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening ticket:', err);
-      setError(err.response?.data?.message || 'Error al reabrir el ticket');
+      setError(err instanceof Error ? err.message : 'Error al reabrir el ticket');
       setLoading(false);
     }
   };
@@ -368,8 +369,8 @@ const TicketDetailPage: React.FC = () => {
               </button>
               
               {/* Status Change Buttons */}
-              {/* Iniciar Trabajo - Solo técnicos/admins pueden iniciar trabajo en tickets */}
-              {ticket.status === 'nuevo' && user?.role && ['superadmin', 'technician'].includes(user.role) && (
+              {/* Iniciar Trabajo - Solo técnicos/admins pueden iniciar trabajo en tickets nuevos o asignados */}
+              {(ticket.status === 'nuevo' || ticket.status === 'asignado') && user?.role && ['superadmin', 'technician'].includes(user.role) && (
                 <button
                   onClick={() => handleStatusChange('en_proceso')}
                   className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
@@ -492,18 +493,24 @@ const TicketDetailPage: React.FC = () => {
             {/* Ticket Information */}
             <div className="bg-white shadow rounded-lg p-6">
               <h2 className="text-lg font-medium text-gray-900 mb-4">Información del Ticket</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Descripción</label>
-                  <p className="mt-1 text-gray-900">{ticket.description}</p>
-                </div>
+
+              {/* Description - Full Width */}
+              <div className="mb-6">
+                <label className="text-sm font-medium text-gray-500">Descripción</label>
+                <p className="mt-1 text-gray-900">{ticket.description}</p>
+              </div>
+
+              {/* Contact Information - Horizontal Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Persona Afectada</label>
                   <p className="mt-1 text-gray-900">{ticket.affected_person}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Contacto</label>
-                  <p className="mt-1 text-gray-900">{ticket.affected_person_contact}</p>
+                  <label className="text-sm font-medium text-gray-500">Teléfono de Contacto</label>
+                  <p className="mt-1 text-gray-900">
+                    {ticket.affected_person_phone || ticket.affected_person_contact || 'No especificado'}
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Canal</label>
@@ -514,6 +521,14 @@ const TicketDetailPage: React.FC = () => {
                   </p>
                 </div>
               </div>
+
+              {/* Email de Notificación - Full Width if exists */}
+              {ticket.notification_email && (
+                <div className="mt-4">
+                  <label className="text-sm font-medium text-gray-500">Email de Notificación</label>
+                  <p className="mt-1 text-gray-900">{ticket.notification_email}</p>
+                </div>
+              )}
             </div>
 
             {/* Attachments Section */}
@@ -533,7 +548,7 @@ const TicketDetailPage: React.FC = () => {
                         <div>
                           <p className="text-sm font-medium text-gray-900">{attachment.original_filename}</p>
                           <p className="text-xs text-gray-500">
-                            {attachment.file_size_display} • Subido por {attachment.uploaded_by_name} • {new Date(attachment.created_at).toLocaleDateString()}
+                            {attachment.file_size_display} • Subido por {attachment.uploaded_by_name} • {formatDateTime(attachment.created_at)}
                           </p>
                         </div>
                       </div>
@@ -597,7 +612,7 @@ const TicketDetailPage: React.FC = () => {
                           </div>
                           <span className="text-xs text-gray-500">•</span>
                           <span className="text-xs text-gray-500">
-                            {new Date(comment.created_at).toLocaleString('es-ES')}
+                            {formatDateTime(comment.created_at)}
                           </span>
                           {comment.is_internal && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -717,11 +732,11 @@ const TicketDetailPage: React.FC = () => {
               <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Creado</label>
-                  <p className="text-gray-900">{new Date(ticket.created_at).toLocaleString()}</p>
+                  <p className="text-gray-900">{formatDateTime(ticket.created_at)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Actualizado</label>
-                  <p className="text-gray-900">{new Date(ticket.updated_at).toLocaleString()}</p>
+                  <p className="text-gray-900">{formatDateTime(ticket.updated_at)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Asignado a</label>
@@ -735,6 +750,12 @@ const TicketDetailPage: React.FC = () => {
                   <label className="text-sm font-medium text-gray-500">Sitio</label>
                   <p className="text-gray-900">{ticket.site_name}</p>
                 </div>
+                {ticket.category_name && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Categoría</label>
+                    <p className="text-gray-900">{ticket.category_name}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

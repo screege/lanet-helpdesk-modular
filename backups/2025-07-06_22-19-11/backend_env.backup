@@ -1,0 +1,39 @@
+# LANET Helpdesk V3 Environment Configuration
+
+# Flask Configuration
+FLASK_ENV=development
+FLASK_DEBUG=True
+
+# JWT Configuration
+JWT_SECRET_KEY=dev-secret-key-change-in-production-2024
+
+# Database Configuration
+DATABASE_URL=postgresql://postgres:Poikl55+*@localhost:5432/lanet_helpdesk
+
+# Redis Configuration
+REDIS_URL=redis://localhost:6379/0
+
+# Email Configuration (stored in database, these are fallbacks)
+SMTP_HOST=mail.compushop.com.mx
+SMTP_PORT=587
+SMTP_USERNAME=webmaster@compushop.com.mx
+SMTP_PASSWORD=Iyhnbsfg26
+SMTP_USE_TLS=true
+
+IMAP_HOST=mail.compushop.com.mx
+IMAP_PORT=993
+IMAP_USERNAME=it@compushop.com.mx
+IMAP_PASSWORD=Iyhnbsfg26+*
+IMAP_USE_SSL=true
+
+# File Upload Configuration
+MAX_CONTENT_LENGTH=10485760
+UPLOAD_FOLDER=../uploads
+
+# Security Configuration
+SESSION_TIMEOUT_MINUTES=480
+PASSWORD_RESET_TIMEOUT_MINUTES=15
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FILE=logs/app.log

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit, UserPlus, MessageSquare, Clock, User, MapPin, AlertCircle, Send } from 'lucide-react';
+import { X, Edit, UserPlus, MessageSquare, Clock, User, Send } from 'lucide-react';
 import { Ticket, TicketComment, ticketsService } from '../../services/ticketsService';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
@@ -52,9 +52,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       
       setTicket(ticketData);
       setComments(commentsData);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading ticket data:', err);
-      setError(err.response?.data?.message || 'Error al cargar el ticket');
+      setError(err instanceof Error ? err.message : 'Error al cargar el ticket');
     } finally {
       setLoading(false);
     }
@@ -90,9 +90,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.error || 'Error al agregar comentario');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding comment:', err);
-      setError(err.response?.data?.error || err.message || 'Error al agregar comentario');
+      setError(err instanceof Error ? err.message : 'Error al agregar comentario');
     } finally {
       setSubmittingComment(false);
     }
@@ -125,9 +125,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.message || 'Error al cambiar estado del ticket');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating ticket status:', err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.details?.status || err.message || 'Error al cambiar estado del ticket';
+      const errorMessage = err instanceof Error ? err.message : 'Error al cambiar estado del ticket';
       setError(errorMessage);
       setLoading(false);
     }
@@ -149,9 +149,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.message || 'Error al resolver el ticket');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resolving ticket:', err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.details?.resolution_notes || err.message || 'Error al resolver el ticket';
+      const errorMessage = err instanceof Error ? err.message : 'Error al resolver el ticket';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
@@ -178,9 +178,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
       } else {
         throw new Error(response.message || 'Error al reabrir el ticket');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error reopening ticket:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Error al reabrir el ticket';
+      const errorMessage = err instanceof Error ? err.message : 'Error al reabrir el ticket';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
@@ -492,7 +492,15 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
                         <div>
                           <label className="text-sm font-medium text-gray-500">Creado</label>
                           <p className="text-gray-900">
-                            {new Date(ticket.created_at).toLocaleString('es-ES')}
+                            {new Date(ticket.created_at).toLocaleString('es-MX', {
+                              timeZone: 'America/Mexico_City',
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false
+                            })}
                           </p>
                         </div>
                       </div>
@@ -502,7 +510,15 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
                           <div>
                             <label className="text-sm font-medium text-gray-500">Asignado</label>
                             <p className="text-gray-900">
-                              {new Date(ticket.assigned_at).toLocaleString('es-ES')}
+                              {new Date(ticket.assigned_at).toLocaleString('es-MX', {
+                                timeZone: 'America/Mexico_City',
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false
+                              })}
                             </p>
                           </div>
                         </div>

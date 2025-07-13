@@ -37,6 +37,8 @@ from modules.categories.routes import categories_bp
 from modules.dashboard.routes import dashboard_bp
 from modules.sla.routes import sla_bp
 from modules.email.routes import email_bp
+from modules.reports.routes import reports_bp
+from modules.reports.monthly_scheduler import monthly_scheduler
 
 def create_app(config_name='development'):
     """Application factory pattern"""
@@ -49,7 +51,7 @@ def create_app(config_name='development'):
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire for development
     app.config['DATABASE_URL'] = os.getenv('DATABASE_URL', 'postgresql://postgres:Poikl55+*@localhost:5432/lanet_helpdesk')
     app.config['REDIS_URL'] = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-    app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), '..', 'uploads')
+    app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', os.path.join(os.path.dirname(__file__), 'uploads'))
     app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max file size
     
     # Ensure upload directory exists
@@ -169,8 +171,9 @@ def create_app(config_name='development'):
         
         return response
     
-    # Health check endpoint
+    # Health check endpoints
     @app.route('/health')
+    @app.route('/api/health')
     def health_check():
         """Health check endpoint"""
         try:
@@ -178,10 +181,10 @@ def create_app(config_name='development'):
             with app.db_manager.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute('SELECT 1')
-            
+
             # Test Redis connection
             redis_status = 'connected' if app.redis_client and app.redis_client.ping() else 'disconnected'
-            
+
             return app.response_manager.success({
                 'status': 'healthy',
                 'timestamp': datetime.utcnow().isoformat(),
@@ -202,7 +205,12 @@ def create_app(config_name='development'):
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(sla_bp, url_prefix='/api/sla')
     app.register_blueprint(email_bp, url_prefix='/api/email')
-    
+    app.register_blueprint(reports_bp, url_prefix='/api/reports')
+
+    # Initialize monthly reports scheduler (but don't start it automatically)
+    monthly_scheduler.init_app(app)
+    app.logger.info("Monthly Reports Scheduler initialized")
+
     # Global error handlers
     @app.errorhandler(400)
     def bad_request(error):
@@ -247,6 +255,8 @@ def setup_logging(app):
         app.logger.addHandler(file_handler)
         app.logger.setLevel(logging.INFO)
         app.logger.info('LANET Helpdesk V3 startup')
+
+
 
 if __name__ == '__main__':
     import sys

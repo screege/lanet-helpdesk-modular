@@ -1,0 +1,48 @@
+# LANET Helpdesk V3 - Backend Dockerfile
+# Using EXACT same Python version as development
+FROM python:3.10.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    curl \
+    dnsutils \
+    iputils-ping \
+    telnet \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Copy database migrations
+COPY ../database /app/database
+
+# Create necessary directories
+RUN mkdir -p logs uploads
+
+# Create non-root user
+RUN useradd -m -u 1000 lanet && \
+    chown -R lanet:lanet /app
+
+# Switch to non-root user
+USER lanet
+
+# Expose port
+EXPOSE 5001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5001/api/health || exit 1
+
+# Start command - Use SAME app as development
+CMD ["python", "app.py"]

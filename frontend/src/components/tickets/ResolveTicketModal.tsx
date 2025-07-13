@@ -37,9 +37,9 @@ const ResolveTicketModal: React.FC<ResolveTicketModalProps> = ({
       setResolutionNotes('');
       onClose();
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resolving ticket:', err);
-      setError(err.message || 'Error al resolver el ticket');
+      setError(err instanceof Error ? err.message : 'Error al resolver el ticket');
     } finally {
       setSubmitting(false);
     }

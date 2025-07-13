@@ -8,6 +8,7 @@ Hierarchical category management for ticket classification
 from flask import Blueprint, request, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from utils.security import require_role
+from datetime import datetime, timezone
 
 categories_bp = Blueprint('categories', __name__)
 
@@ -217,8 +218,10 @@ def update_category(category_id):
                 update_data[field] = data[field]
 
         if update_data:
-            update_data['updated_at'] = 'CURRENT_TIMESTAMP'
-            
+            # Don't set updated_at manually - let the database trigger handle it
+            # or use datetime.now(timezone.utc) if needed
+            update_data['updated_at'] = datetime.now(timezone.utc)
+
             current_app.db_manager.execute_update(
                 'categories',
                 update_data,
@@ -252,7 +255,7 @@ def update_category(category_id):
 @jwt_required()
 @require_role(['superadmin', 'admin'])
 def delete_category(category_id):
-    """Soft delete a category (mark as inactive)"""
+    """Delete a category with safe ticket reassignment to General category"""
     try:
         if not current_app.db_manager.validate_uuid(category_id):
             return current_app.response_manager.bad_request('Invalid category ID format')
@@ -266,6 +269,19 @@ def delete_category(category_id):
         if not category:
             return current_app.response_manager.not_found('Category')
 
+        # Prevent deletion of "General" category
+        if category['name'].lower() == 'general':
+            return current_app.response_manager.bad_request('Cannot delete the General category - it is required for system operation')
+
+        # Get or create "General" category for ticket reassignment
+        general_category = current_app.db_manager.execute_query(
+            "SELECT category_id FROM categories WHERE LOWER(name) = 'general' AND is_active = true",
+            (),
+            fetch='one'
+        )
+        if not general_category:
+            return current_app.response_manager.server_error('General category not found - cannot safely delete category')
+
         # Check if category has active children
         children = current_app.db_manager.execute_query(
             "SELECT COUNT(*) as count FROM categories WHERE parent_id = %s AND is_active = true",
@@ -273,37 +289,46 @@ def delete_category(category_id):
             fetch='one'
         )
         if children and children['count'] > 0:
-            return current_app.response_manager.bad_request('Cannot delete category with active subcategories')
+            return current_app.response_manager.bad_request('Cannot delete category with active subcategories. Please delete or move subcategories first.')
 
-        # Check if category is used in tickets
+        # Check if category is used in tickets and reassign them to General
         tickets = current_app.db_manager.execute_query(
             "SELECT COUNT(*) as count FROM tickets WHERE category_id = %s",
             (category_id,),
             fetch='one'
         )
+
         if tickets and tickets['count'] > 0:
-            # Soft delete - mark as inactive
+            # Reassign all tickets to General category
             current_app.db_manager.execute_update(
-                'categories',
-                {'is_active': False, 'updated_at': 'CURRENT_TIMESTAMP'},
+                'tickets',
+                {
+                    'category_id': general_category['category_id'],
+                    'updated_at': datetime.now(timezone.utc)
+                },
                 'category_id = %s',
                 (category_id,)
             )
-            message = f"Category '{category['name']}' marked as inactive (has associated tickets)"
-        else:
-            # Hard delete if no tickets
-            current_app.db_manager.execute_query(
-                "DELETE FROM categories WHERE category_id = %s",
-                (category_id,),
-                fetch='none'
-            )
-            message = f"Category '{category['name']}' deleted successfully"
+            current_app.logger.info(f"Reassigned {tickets['count']} tickets from category '{category['name']}' to General category")
+
+        # Delete the category (hard delete since tickets are reassigned)
+        current_app.db_manager.execute_query(
+            "DELETE FROM categories WHERE category_id = %s",
+            (category_id,),
+            fetch='none'
+        )
+
+        message = f"Category '{category['name']}' deleted successfully"
+        if tickets and tickets['count'] > 0:
+            message += f" and {tickets['count']} tickets reassigned to General category"
 
         current_app.logger.info(f"Category deleted: {category['name']}")
         return current_app.response_manager.success({'message': message})
 
     except Exception as e:
+        import traceback
         current_app.logger.error(f"Delete category error: {e}")
+        current_app.logger.error(f"Traceback: {traceback.format_exc()}")
         return current_app.response_manager.server_error('Failed to delete category')
 
 @categories_bp.route('/flat', methods=['GET'])

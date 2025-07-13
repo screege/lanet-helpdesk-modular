@@ -12,10 +12,16 @@ from datetime import datetime
 import uuid
 import logging
 import os
+from .service import TicketService
 
 # Configure detailed logging for debugging
+import os
+log_dir = os.environ.get('LOG_FOLDER', '/app/logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'backend_tickets.log')
+
 logging.basicConfig(
-    filename='C:/temp/backend_tickets.log',
+    filename=log_file,
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     filemode='w'  # Overwrite on each restart
@@ -26,17 +32,47 @@ tickets_bp = Blueprint('tickets', __name__)
 @tickets_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_tickets():
-    """Get all tickets"""
+    """Get all tickets with sorting support"""
     try:
-        tickets = current_app.db_manager.execute_query(
-            "SELECT * FROM tickets ORDER BY created_at DESC LIMIT 50"
-        )
-        
-        # Format tickets data
-        formatted_tickets = [current_app.response_manager.format_ticket_data(ticket) for ticket in tickets]
-        
-        return current_app.response_manager.success(formatted_tickets)
-        
+        from .service import TicketService
+
+        # Get query parameters for sorting
+        sort_by = request.args.get('sort_by', 'created_at')
+        sort_order = request.args.get('sort_order', 'desc')
+        page = int(request.args.get('page', 1))
+        per_page = min(int(request.args.get('per_page', 50)), 100)
+
+        # Apply RLS for client users
+        claims = get_jwt()
+        current_user_role = claims.get('role')
+        current_user_client_id = claims.get('client_id')
+
+        filters = {
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
+
+        if current_user_role in ['client_admin', 'solicitante']:
+            filters['client_id'] = current_user_client_id
+
+        ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
+        result = ticket_service.get_all_tickets(page, per_page, filters)
+
+        # Format tickets
+        formatted_tickets = [current_app.response_manager.format_ticket_data(ticket) for ticket in result['tickets']]
+
+        response_data = {
+            'tickets': formatted_tickets,
+            'pagination': {
+                'page': result['page'],
+                'per_page': result['per_page'],
+                'total': result['total'],
+                'total_pages': result['total_pages']
+            }
+        }
+
+        return current_app.response_manager.success(response_data)
+
     except Exception as e:
         current_app.logger.error(f"Get tickets error: {e}")
         return current_app.response_manager.server_error('Failed to get tickets')
@@ -690,11 +726,16 @@ def search_tickets():
         priority = request.args.get('priority')
         client_id = request.args.get('client_id')
         assigned_to = request.args.get('assigned_to')
+        sort_by = request.args.get('sort_by', 'created_at')
+        sort_order = request.args.get('sort_order', 'desc')
         page = int(request.args.get('page', 1))
         per_page = min(int(request.args.get('per_page', 20)), 100)
 
         # Build filters
-        filters = {}
+        filters = {
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
         if search:
             filters['search'] = search
         if status:
@@ -780,6 +821,97 @@ def update_ticket_status(ticket_id):
     except Exception as e:
         current_app.logger.error(f"Update ticket status error: {e}")
         return current_app.response_manager.server_error('Failed to update ticket status')
+
+@tickets_bp.route('/test-bulk', methods=['POST'])
+def test_bulk():
+    """Test endpoint for bulk actions"""
+    print("🚨🚨🚨 TEST BULK ENDPOINT CALLED! 🚨🚨🚨", flush=True)
+    return {'success': True, 'message': 'Test endpoint working'}
+
+@tickets_bp.route('/bulk-actions', methods=['POST'])
+@jwt_required()
+def bulk_actions():
+    """Perform bulk actions on multiple tickets"""
+    try:
+        data = request.get_json()
+        current_app.logger.info(f"🔧 BULK ACTIONS: Received data: {data}")
+        print(f"🚨 BULK ACTIONS: Received data: {data}", flush=True)
+
+        print(f"🚨 BULK ACTIONS: Checking if data exists", flush=True)
+        if not data:
+            print(f"🚨 BULK ACTIONS: No data provided", flush=True)
+            return current_app.response_manager.bad_request('No data provided')
+
+        print(f"🚨 BULK ACTIONS: Validating required fields", flush=True)
+        # Validate required fields
+        if 'ticket_ids' not in data or not data['ticket_ids']:
+            print(f"🚨 BULK ACTIONS: Missing ticket_ids", flush=True)
+            current_app.logger.error("🔧 BULK ACTIONS: Missing ticket_ids")
+            return current_app.response_manager.bad_request('ticket_ids is required')
+
+        if 'action' not in data or not data['action']:
+            print(f"🚨 BULK ACTIONS: Missing action", flush=True)
+            current_app.logger.error("🔧 BULK ACTIONS: Missing action")
+            return current_app.response_manager.bad_request('action is required')
+
+        print(f"🚨 BULK ACTIONS: Extracting data fields", flush=True)
+        ticket_ids = data['ticket_ids']
+        action = data['action']
+        action_data = data.get('action_data', {})
+        print(f"🚨 BULK ACTIONS: ticket_ids={ticket_ids}, action={action}", flush=True)
+
+        # Validate ticket_ids is a list
+        print(f"🚨 BULK ACTIONS: Validating ticket_ids is list", flush=True)
+        if not isinstance(ticket_ids, list):
+            print(f"🚨 BULK ACTIONS: ticket_ids is not a list", flush=True)
+            return current_app.response_manager.bad_request('ticket_ids must be an array')
+
+        # Limit bulk operations to 100 tickets max (like Zendesk)
+        print(f"🚨 BULK ACTIONS: Checking ticket count limit", flush=True)
+        if len(ticket_ids) > 100:
+            print(f"🚨 BULK ACTIONS: Too many tickets", flush=True)
+            return current_app.response_manager.bad_request('Maximum 100 tickets allowed per bulk operation')
+
+        # Validate action
+        print(f"🚨 BULK ACTIONS: Validating action", flush=True)
+        valid_actions = ['update_status', 'assign', 'update_priority', 'delete']
+        if action not in valid_actions:
+            print(f"🚨 BULK ACTIONS: Invalid action", flush=True)
+            return {'success': False, 'error': f'Invalid action. Valid actions: {", ".join(valid_actions)}'}, 400
+
+        print(f"🚨 BULK ACTIONS: All validations passed, calling real service implementation", flush=True)
+
+        current_user_id = get_jwt_identity()
+        claims = get_jwt()
+        user_role = claims.get('role')
+
+        print(f"🚨 BULK ACTIONS: User {current_user_id}, Role: {user_role}", flush=True)
+
+        # Additional permission checks for delete action
+        if action == 'delete' and user_role not in ['superadmin', 'admin']:
+            print(f"🚨 BULK ACTIONS: User {user_role} tried to delete tickets", flush=True)
+            return current_app.response_manager.forbidden('Only superadmin and admin can delete tickets')
+
+        # Create ticket service and execute bulk action
+        ticket_service = TicketService(current_app.db_manager, current_app.auth_manager)
+        print(f"🚨 BULK ACTIONS: About to call service.bulk_actions", flush=True)
+
+        result = ticket_service.bulk_actions(ticket_ids, action, action_data, current_user_id, user_role)
+
+        print(f"🚨 BULK ACTIONS: Service returned: {result}", flush=True)
+
+        if result['success']:
+            return current_app.response_manager.success(
+                data=result,
+                message=f'Bulk action {action} completed successfully'
+            )
+        else:
+            print(f"🚨 BULK ACTIONS: Service failed with: {result}", flush=True)
+            return current_app.response_manager.error('Bulk action failed', 400, details=result.get('errors'))
+
+    except Exception as e:
+        current_app.logger.error(f"Bulk actions error: {e}")
+        return current_app.response_manager.server_error('Failed to perform bulk actions')
 
 @tickets_bp.route('/<ticket_id>/resolutions', methods=['GET'])
 @jwt_required()

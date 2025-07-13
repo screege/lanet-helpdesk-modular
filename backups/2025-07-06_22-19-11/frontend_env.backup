@@ -1,0 +1,47 @@
+# =============================================================================
+# LANET Helpdesk V3 - Frontend Environment Configuration
+# =============================================================================
+
+# API Configuration
+VITE_API_BASE_URL=http://localhost:5001/api
+VITE_API_TIMEOUT=60000
+
+# Application Configuration
+VITE_APP_NAME=LANET Helpdesk
+VITE_APP_VERSION=3.0.0
+VITE_APP_DESCRIPTION=Sistema Profesional de Mesa de Ayuda MSP
+
+# Authentication Configuration
+VITE_TOKEN_STORAGE_KEY=access_token
+VITE_REFRESH_TOKEN_STORAGE_KEY=refresh_token
+VITE_USER_STORAGE_KEY=user
+
+# UI Configuration
+VITE_DEFAULT_LANGUAGE=es
+VITE_DEFAULT_TIMEZONE=America/Mexico_City
+VITE_DATE_FORMAT=DD/MM/YYYY
+VITE_TIME_FORMAT=HH:mm
+
+# Feature Flags
+VITE_ENABLE_DARK_MODE=true
+VITE_ENABLE_NOTIFICATIONS=true
+VITE_ENABLE_REAL_TIME=true
+VITE_ENABLE_FILE_UPLOADS=true
+
+# File Upload Configuration
+VITE_MAX_FILE_SIZE=16777216
+VITE_ALLOWED_FILE_TYPES=pdf,doc,docx,txt,png,jpg,jpeg,gif,zip,log
+
+# Development Configuration
+VITE_DEV_MODE=true
+VITE_SHOW_DEBUG_INFO=true
+
+# Branding Configuration
+VITE_COMPANY_NAME=LANET SYSTEMS
+VITE_COMPANY_LOGO=/logo.png
+VITE_FAVICON=/favicon.ico
+
+# Contact Information
+VITE_SUPPORT_EMAIL=info@lanet.com
+VITE_SUPPORT_PHONE=+52-55-1234-5678
+VITE_COMPANY_WEBSITE=https://lanet.mx

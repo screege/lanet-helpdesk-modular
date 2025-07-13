@@ -17,6 +17,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
+    console.error('useAuth called outside AuthProvider');
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -42,9 +43,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (storedUser && accessToken) {
         try {
-          // Parse stored user data safely
-          const parsedUser = JSON.parse(storedUser);
-
           // Verify token is still valid by getting current user
           const response = await apiService.getCurrentUser();
           if (response.success && response.data) {
@@ -55,7 +53,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
           }
-        } catch (parseError) {
+        } catch (parseError: unknown) {
           console.error('Error parsing stored user data:', parseError);
           // Clear corrupted data
           localStorage.removeItem('user');
@@ -63,7 +61,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           localStorage.removeItem('refresh_token');
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Auth initialization error:', error);
       // Clear invalid tokens
       localStorage.removeItem('user');
@@ -85,7 +83,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         return { success: false, error: response.error || 'Login failed' };
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
       return { success: false, error: 'Login failed' };
     } finally {

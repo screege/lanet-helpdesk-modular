@@ -1,0 +1,29 @@
+# Docker ignore file for LANET Helpdesk V3
+# Exclude problematic files from Docker build context
+
+# Exclude corrupted or incomplete files
+frontend/src/pages/tickets/TicketCreatePageNew.tsx
+
+# Exclude development files
+node_modules
+.git
+.gitignore
+*.log
+.env.local
+.env.development
+.env.test
+
+# Exclude build artifacts
+dist
+build
+coverage
+
+# Exclude IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Exclude OS files
+.DS_Store
+Thumbs.db
