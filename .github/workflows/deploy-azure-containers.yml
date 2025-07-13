@@ -34,6 +34,13 @@ jobs:
           --name ${{ env.AZURE_RESOURCE_GROUP }} \
           --location ${{ env.AZURE_LOCATION }}
           
+    - name: 🔧 Register Azure providers
+      run: |
+        echo "🔧 Registering required Azure providers..."
+        az provider register --namespace Microsoft.ContainerRegistry --wait
+        az provider register --namespace Microsoft.ContainerInstance --wait
+        echo "✅ Providers registered successfully"
+
     - name: 📦 Create Azure Container Registry
       run: |
         if ! az acr show --name ${{ env.REGISTRY_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} &> /dev/null; then
