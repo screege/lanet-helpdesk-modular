@@ -1,24 +1,13 @@
 # Docker ignore file for LANET Helpdesk V3
-# Only exclude what's absolutely necessary
+# Minimal exclusions to avoid build context issues
 
-# Exclude development files that are not needed
+# Exclude git and logs
 .git
-.gitignore
 *.log
-.env.local
-.env.development
-.env.test
-
-# Exclude build artifacts (but keep source files)
-dist
-build
-coverage
 
 # Exclude IDE files
 .vscode
 .idea
-*.swp
-*.swo
 
 # Exclude OS files
 .DS_Store
@@ -28,25 +17,3 @@ Thumbs.db
 backups/
 reports_files/
 uploads/
-
-# Exclude test files
-test_*.py
-debug_*.py
-*_test.py
-
-# Exclude documentation that's not needed for build
-docs/
-*.md
-!README.md
-
-# Keep all package.json and package-lock.json files
-!package.json
-!package-lock.json
-!frontend/package.json
-!frontend/package-lock.json
-!backend/requirements.txt
-
-# Keep all source code
-!frontend/src/
-!backend/
-!database/
