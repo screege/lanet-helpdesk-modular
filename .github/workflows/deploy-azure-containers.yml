@@ -32,7 +32,9 @@ jobs:
       run: |
         echo "🗑️ Cleaning up existing resources..."
         az group delete --name ${{ env.AZURE_RESOURCE_GROUP }} --yes --no-wait || true
-        echo "✅ Cleanup initiated"
+        echo "⏳ Waiting for cleanup to complete..."
+        sleep 60
+        echo "✅ Cleanup completed"
 
     - name: 🏗️ Create Resource Group
       run: |
