@@ -171,8 +171,9 @@ def create_app(config_name='development'):
         
         return response
     
-    # Health check endpoint
+    # Health check endpoints
     @app.route('/health')
+    @app.route('/api/health')
     def health_check():
         """Health check endpoint"""
         try:
@@ -180,10 +181,10 @@ def create_app(config_name='development'):
             with app.db_manager.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute('SELECT 1')
-            
+
             # Test Redis connection
             redis_status = 'connected' if app.redis_client and app.redis_client.ping() else 'disconnected'
-            
+
             return app.response_manager.success({
                 'status': 'healthy',
                 'timestamp': datetime.utcnow().isoformat(),
@@ -255,28 +256,7 @@ def setup_logging(app):
         app.logger.setLevel(logging.INFO)
         app.logger.info('LANET Helpdesk V3 startup')
 
-    # Health check endpoint for Docker
-    @app.route('/api/health')
-    def health_check():
-        """Health check endpoint for Docker containers"""
-        try:
-            # Test database connection
-            db_manager = DatabaseManager()
-            db_manager.get_connection()
 
-            return {
-                'status': 'healthy',
-                'service': 'lanet-helpdesk-backend',
-                'version': '3.0.0',
-                'timestamp': datetime.utcnow().isoformat()
-            }, 200
-        except Exception as e:
-            return {
-                'status': 'unhealthy',
-                'service': 'lanet-helpdesk-backend',
-                'error': str(e),
-                'timestamp': datetime.utcnow().isoformat()
-            }, 503
 
 if __name__ == '__main__':
     import sys

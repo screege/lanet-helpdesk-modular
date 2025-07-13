@@ -1,0 +1,162 @@
+name: 🐳 Deploy LANET Helpdesk to Azure Container Instances
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+env:
+  AZURE_RESOURCE_GROUP: lanet-helpdesk-containers-rg
+  AZURE_LOCATION: eastus
+  CONTAINER_GROUP_NAME: lanet-helpdesk
+  REGISTRY_NAME: lanethelpdesk
+  DOMAIN_NAME: helpdesk.lanet.mx
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: 🏗️ Create Resource Group
+      run: |
+        az group create \
+          --name ${{ env.AZURE_RESOURCE_GROUP }} \
+          --location ${{ env.AZURE_LOCATION }}
+          
+    - name: 📦 Create Azure Container Registry
+      run: |
+        if ! az acr show --name ${{ env.REGISTRY_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} &> /dev/null; then
+          az acr create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.REGISTRY_NAME }} \
+            --sku Basic \
+            --admin-enabled true
+        fi
+        
+    - name: 🔐 Login to ACR
+      run: |
+        az acr login --name ${{ env.REGISTRY_NAME }}
+        
+    - name: 🐳 Build and push Docker images
+      run: |
+        # Get ACR login server
+        ACR_LOGIN_SERVER=$(az acr show --name ${{ env.REGISTRY_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query loginServer --output tsv)
+        
+        # Build and push backend
+        docker build -f deployment/docker/Dockerfile.backend -t $ACR_LOGIN_SERVER/lanet-helpdesk-backend:${{ github.sha }} backend/
+        docker push $ACR_LOGIN_SERVER/lanet-helpdesk-backend:${{ github.sha }}
+        
+        # Build and push frontend
+        docker build -f deployment/docker/Dockerfile.frontend -t $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }} .
+        docker push $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }}
+        
+        # Build and push email processor
+        docker build -f deployment/docker/Dockerfile.email-processor -t $ACR_LOGIN_SERVER/lanet-helpdesk-email:${{ github.sha }} backend/
+        docker push $ACR_LOGIN_SERVER/lanet-helpdesk-email:${{ github.sha }}
+        
+    - name: 🗄️ Create PostgreSQL Database
+      run: |
+        # Create PostgreSQL server
+        if ! az postgres flexible-server show --name lanet-helpdesk-db --resource-group ${{ env.AZURE_RESOURCE_GROUP }} &> /dev/null; then
+          az postgres flexible-server create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name lanet-helpdesk-db \
+            --location ${{ env.AZURE_LOCATION }} \
+            --admin-user postgres \
+            --admin-password "Poikl55+*" \
+            --sku-name Standard_B1ms \
+            --tier Burstable \
+            --storage-size 32 \
+            --version 14 \
+            --public-access 0.0.0.0
+            
+          # Create database
+          az postgres flexible-server db create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --server-name lanet-helpdesk-db \
+            --database-name lanet_helpdesk
+        fi
+        
+    - name: 🚀 Deploy Container Group
+      run: |
+        # Get ACR credentials
+        ACR_LOGIN_SERVER=$(az acr show --name ${{ env.REGISTRY_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query loginServer --output tsv)
+        ACR_USERNAME=$(az acr credential show --name ${{ env.REGISTRY_NAME }} --query username --output tsv)
+        ACR_PASSWORD=$(az acr credential show --name ${{ env.REGISTRY_NAME }} --query passwords[0].value --output tsv)
+        
+        # Get database connection string
+        DB_HOST=$(az postgres flexible-server show --name lanet-helpdesk-db --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query fullyQualifiedDomainName --output tsv)
+        
+        # Deploy container group
+        az container create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.CONTAINER_GROUP_NAME }} \
+          --image $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }} \
+          --registry-login-server $ACR_LOGIN_SERVER \
+          --registry-username $ACR_USERNAME \
+          --registry-password $ACR_PASSWORD \
+          --dns-name-label lanet-helpdesk \
+          --ports 80 443 \
+          --cpu 2 \
+          --memory 4 \
+          --environment-variables \
+            DATABASE_URL="postgresql://postgres:Poikl55+*@$DB_HOST:5432/lanet_helpdesk" \
+            JWT_SECRET_KEY="lanet-helpdesk-secret-2024" \
+            FLASK_ENV="production" \
+            SMTP_HOST="mail.compushop.com.mx" \
+            SMTP_PORT="587" \
+            SMTP_USERNAME="webmaster@compushop.com.mx" \
+            SMTP_PASSWORD="Iyhnbsfg26" \
+            SMTP_USE_TLS="true" \
+            IMAP_HOST="mail.compushop.com.mx" \
+            IMAP_PORT="993" \
+            IMAP_USERNAME="it@compushop.com.mx" \
+            IMAP_PASSWORD="Iyhnbsfg26+*" \
+            IMAP_USE_SSL="true"
+            
+    - name: 📡 Get Container Group IP
+      id: container-ip
+      run: |
+        CONTAINER_IP=$(az container show --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.CONTAINER_GROUP_NAME }} --query ipAddress.ip --output tsv)
+        CONTAINER_FQDN=$(az container show --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.CONTAINER_GROUP_NAME }} --query ipAddress.fqdn --output tsv)
+        echo "CONTAINER_IP=$CONTAINER_IP" >> $GITHUB_OUTPUT
+        echo "CONTAINER_FQDN=$CONTAINER_FQDN" >> $GITHUB_OUTPUT
+        
+    - name: 🔍 Verify deployment
+      run: |
+        # Wait for container to be ready
+        sleep 60
+        
+        # Check health
+        curl -f http://${{ steps.container-ip.outputs.CONTAINER_FQDN }}/health || echo "Service not ready yet"
+        
+    - name: 📊 Deployment Summary
+      run: |
+        echo "🎉 Container deployment completed successfully!"
+        echo ""
+        echo "📋 Deployment Details:"
+        echo "   Resource Group: ${{ env.AZURE_RESOURCE_GROUP }}"
+        echo "   Container Group: ${{ env.CONTAINER_GROUP_NAME }}"
+        echo "   Container IP: ${{ steps.container-ip.outputs.CONTAINER_IP }}"
+        echo "   Container FQDN: ${{ steps.container-ip.outputs.CONTAINER_FQDN }}"
+        echo ""
+        echo "🌐 Access URLs:"
+        echo "   HTTP: http://${{ steps.container-ip.outputs.CONTAINER_FQDN }}"
+        echo "   Direct IP: http://${{ steps.container-ip.outputs.CONTAINER_IP }}"
+        echo "   Domain: https://${{ env.DOMAIN_NAME }} (after DNS setup)"
+        echo ""
+        echo "📝 Next Steps:"
+        echo "1. Update DNS: ${{ env.DOMAIN_NAME }} → ${{ steps.container-ip.outputs.CONTAINER_IP }}"
+        echo "2. Configure SSL with Azure Application Gateway or CloudFlare"
+        echo "3. Migrate database if needed"

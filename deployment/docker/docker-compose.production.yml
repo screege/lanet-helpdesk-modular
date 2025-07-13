@@ -1,0 +1,16 @@
+version: '3.8'
+
+# Production override for Ubuntu servers
+services:
+  backend:
+    environment:
+      SMTP_HOST: mail.compushop.com.mx
+      SMTP_PORT: 587
+      SMTP_USERNAME: webmaster@compushop.com.mx
+      SMTP_PASSWORD: Iyhnbsfg26
+      SMTP_USE_TLS: true
+      IMAP_HOST: mail.compushop.com.mx
+      IMAP_PORT: 993
+      IMAP_USERNAME: it@compushop.com.mx
+      IMAP_PASSWORD: Iyhnbsfg26+*
+      IMAP_USE_SSL: true

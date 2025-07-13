@@ -31,15 +31,37 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET:-lanet-helpdesk-secret-2024}
       FLASK_ENV: production
       UPLOAD_FOLDER: /app/uploads
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: host.docker.internal
+      SMTP_PORT: 1025
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      SMTP_USE_TLS: false
+      IMAP_HOST: host.docker.internal
+      IMAP_PORT: 1143
+      IMAP_USERNAME: ""
+      IMAP_PASSWORD: ""
+      IMAP_USE_SSL: false
+      MAX_CONTENT_LENGTH: 10485760
+      SESSION_TIMEOUT_MINUTES: 480
+      PASSWORD_RESET_TIMEOUT_MINUTES: 15
+      LOG_LEVEL: INFO
+      LOG_FILE: /app/logs/app.log
     volumes:
       - backend_logs:/app/logs
       - backend_uploads:/app/uploads
+      - backend_reports:/app/reports_files
+    ports:
+      - "5001:5001"
     ports:
       - "5001:5001"
     depends_on:
       - postgres
+      - redis
     networks:
       - lanet-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   # Frontend
@@ -123,6 +145,7 @@ volumes:
   postgres_data:
   backend_logs:
   backend_uploads:
+  backend_reports:
   redis_data:
   nginx_logs:
   sla_logs:

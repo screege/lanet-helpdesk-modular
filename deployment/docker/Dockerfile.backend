@@ -9,6 +9,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     curl \
+    dnsutils \
+    iputils-ping \
+    telnet \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -19,6 +23,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# Copy database migrations
+COPY ../database /app/database
 
 # Create necessary directories
 RUN mkdir -p logs uploads
