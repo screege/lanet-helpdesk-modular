@@ -39,6 +39,7 @@ jobs:
         echo "🔧 Registering required Azure providers..."
         az provider register --namespace Microsoft.ContainerRegistry --wait
         az provider register --namespace Microsoft.ContainerInstance --wait
+        az provider register --namespace Microsoft.DBforPostgreSQL --wait
         echo "✅ Providers registered successfully"
 
     - name: 📦 Create Azure Container Registry
