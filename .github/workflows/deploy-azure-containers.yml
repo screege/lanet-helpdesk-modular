@@ -28,6 +28,12 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
         
+    - name: 🗑️ Clean up existing resources
+      run: |
+        echo "🗑️ Cleaning up existing resources..."
+        az group delete --name ${{ env.AZURE_RESOURCE_GROUP }} --yes --no-wait || true
+        echo "✅ Cleanup initiated"
+
     - name: 🏗️ Create Resource Group
       run: |
         az group create \
