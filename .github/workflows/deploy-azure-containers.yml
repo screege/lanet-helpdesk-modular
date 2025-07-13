@@ -81,26 +81,33 @@ jobs:
         
     - name: 🗄️ Create PostgreSQL Database
       run: |
-        # Create PostgreSQL server
-        if ! az postgres flexible-server show --name lanet-helpdesk-db --resource-group ${{ env.AZURE_RESOURCE_GROUP }} &> /dev/null; then
-          az postgres flexible-server create \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name lanet-helpdesk-db \
-            --location ${{ env.AZURE_LOCATION }} \
-            --admin-user postgres \
-            --admin-password "Poikl55+*" \
-            --sku-name Standard_B1ms \
-            --tier Burstable \
-            --storage-size 32 \
-            --version 14 \
-            --public-access 0.0.0.0
-            
-          # Create database
-          az postgres flexible-server db create \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --server-name lanet-helpdesk-db \
-            --database-name lanet_helpdesk
-        fi
+        echo "🗄️ Creating PostgreSQL Single Server (better availability)..."
+        az postgres server create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name lanet-helpdesk-db \
+          --location ${{ env.AZURE_LOCATION }} \
+          --admin-user postgres \
+          --admin-password "Poikl55+*" \
+          --sku-name B_Gen5_1 \
+          --storage-size 51200 \
+          --version 11 \
+          --ssl-enforcement Disabled
+
+        echo "🗄️ Creating database..."
+        az postgres db create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --server-name lanet-helpdesk-db \
+          --name lanet_helpdesk
+
+        echo "🔧 Configuring firewall rules..."
+        az postgres server firewall-rule create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --server lanet-helpdesk-db \
+          --name AllowAzureServices \
+          --start-ip-address 0.0.0.0 \
+          --end-ip-address 0.0.0.0
+
+        echo "✅ PostgreSQL Single Server created successfully"
         
     - name: 🚀 Deploy Container Group
       run: |
