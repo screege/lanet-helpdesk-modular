@@ -55,16 +55,6 @@ jobs:
       run: |
         az acr login --name ${{ env.REGISTRY_NAME }}
         
-    - name: 🔍 Debug - List files in build context
-      run: |
-        echo "=== Root directory contents ==="
-        ls -la
-        echo "=== Frontend directory contents ==="
-        ls -la frontend/ || echo "Frontend directory not found!"
-        echo "=== Check if package.json exists ==="
-        test -f frontend/package.json && echo "✅ frontend/package.json exists" || echo "❌ frontend/package.json NOT found"
-        test -f frontend/package-lock.json && echo "✅ frontend/package-lock.json exists" || echo "❌ frontend/package-lock.json NOT found"
-
     - name: 🐳 Build and push Docker images
       run: |
         # Get ACR login server
