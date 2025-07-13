@@ -60,16 +60,16 @@ jobs:
         # Get ACR login server
         ACR_LOGIN_SERVER=$(az acr show --name ${{ env.REGISTRY_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query loginServer --output tsv)
         
-        # Build and push backend
-        docker build -f deployment/docker/Dockerfile.backend -t $ACR_LOGIN_SERVER/lanet-helpdesk-backend:${{ github.sha }} backend/
+        # Build and push backend (using root context to access database/)
+        docker build -f deployment/docker/Dockerfile.backend -t $ACR_LOGIN_SERVER/lanet-helpdesk-backend:${{ github.sha }} .
         docker push $ACR_LOGIN_SERVER/lanet-helpdesk-backend:${{ github.sha }}
-        
+
         # Build and push frontend
         docker build -f deployment/docker/Dockerfile.frontend -t $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }} .
         docker push $ACR_LOGIN_SERVER/lanet-helpdesk-frontend:${{ github.sha }}
-        
-        # Build and push email processor
-        docker build -f deployment/docker/Dockerfile.email-processor -t $ACR_LOGIN_SERVER/lanet-helpdesk-email:${{ github.sha }} backend/
+
+        # Build and push email processor (using root context to access database/)
+        docker build -f deployment/docker/Dockerfile.email-processor -t $ACR_LOGIN_SERVER/lanet-helpdesk-email:${{ github.sha }} .
         docker push $ACR_LOGIN_SERVER/lanet-helpdesk-email:${{ github.sha }}
         
     - name: 🗄️ Create PostgreSQL Database
