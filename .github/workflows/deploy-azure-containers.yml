@@ -10,7 +10,7 @@ on:
 
 env:
   AZURE_RESOURCE_GROUP: lanet-helpdesk-containers-rg
-  AZURE_LOCATION: eastus
+  AZURE_LOCATION: westus2
   CONTAINER_GROUP_NAME: lanet-helpdesk
   REGISTRY_NAME: lanethelpdesk
   DOMAIN_NAME: helpdesk.lanet.mx
