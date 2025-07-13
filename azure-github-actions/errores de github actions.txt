@@ -1,0 +1,638 @@
+3s
+56s
+Run # Get ACR login server
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.backend
+#1 transferring dockerfile: 1.11kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.10.9-slim
+#2 ...
+
+#3 [auth] library/python:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.10.9-slim
+#2 DONE 1.9s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [1/9] FROM docker.io/library/python:3.10.9-slim@sha256:76dd18d90a3d8710e091734bf2c9dd686d68747a51908db1e1f41e9a5ed4e2c5
+#5 resolve docker.io/library/python:3.10.9-slim@sha256:76dd18d90a3d8710e091734bf2c9dd686d68747a51908db1e1f41e9a5ed4e2c5 done
+#5 sha256:e15bb169d3a85f7e9c0f2d105ce628f13d71aed44b5d3d230b88f9653a9b19d5 1.37kB / 1.37kB done
+#5 sha256:343cc23871cfcec31fcf0681d5107e22d4fa214fad76deec63868835ad06849e 7.79kB / 7.79kB done
+#5 sha256:01b5b2efb836d74b8b49da819514eca52e25290d1688db59420ffb9c6b65a03c 0B / 31.40MB 0.1s
+#5 sha256:5dda314a937ad03f8beac81c714da74e459b6174301368e0903ef586a68ae150 0B / 1.08MB 0.1s
+#5 sha256:11d639c994a82f2fc3c071bc85b7fa8fb341d4186e1b1c535f8d4147b07f78cd 0B / 11.74MB 0.1s
+#5 sha256:76dd18d90a3d8710e091734bf2c9dd686d68747a51908db1e1f41e9a5ed4e2c5 1.86kB / 1.86kB done
+#5 ...
+
+#6 [internal] load build context
+#6 transferring context: 16.03MB 0.1s done
+#6 DONE 0.1s
+
+#5 [1/9] FROM docker.io/library/python:3.10.9-slim@sha256:76dd18d90a3d8710e091734bf2c9dd686d68747a51908db1e1f41e9a5ed4e2c5
+#5 sha256:01b5b2efb836d74b8b49da819514eca52e25290d1688db59420ffb9c6b65a03c 19.92MB / 31.40MB 0.3s
+#5 sha256:01b5b2efb836d74b8b49da819514eca52e25290d1688db59420ffb9c6b65a03c 31.40MB / 31.40MB 0.4s done
+#5 sha256:5dda314a937ad03f8beac81c714da74e459b6174301368e0903ef586a68ae150 1.08MB / 1.08MB 0.3s done
+#5 sha256:11d639c994a82f2fc3c071bc85b7fa8fb341d4186e1b1c535f8d4147b07f78cd 11.74MB / 11.74MB 0.4s done
+#5 extracting sha256:01b5b2efb836d74b8b49da819514eca52e25290d1688db59420ffb9c6b65a03c
+#5 sha256:d1465593fd9b15a8d99135d267721127f140c979a8831c320e1f326b830d2721 233B / 233B 0.4s done
+#5 sha256:4a6d0cbbdb413b71a251597fa3b79f3c0ec3ed7b7c1ee8ae3d4fe4fe053a04a4 1.05MB / 3.35MB 0.5s
+#5 sha256:4a6d0cbbdb413b71a251597fa3b79f3c0ec3ed7b7c1ee8ae3d4fe4fe053a04a4 3.35MB / 3.35MB 0.5s done
+#5 extracting sha256:01b5b2efb836d74b8b49da819514eca52e25290d1688db59420ffb9c6b65a03c 1.4s done
+#5 extracting sha256:5dda314a937ad03f8beac81c714da74e459b6174301368e0903ef586a68ae150 0.1s
+#5 extracting sha256:5dda314a937ad03f8beac81c714da74e459b6174301368e0903ef586a68ae150 0.1s done
+#5 extracting sha256:11d639c994a82f2fc3c071bc85b7fa8fb341d4186e1b1c535f8d4147b07f78cd
+#5 extracting sha256:11d639c994a82f2fc3c071bc85b7fa8fb341d4186e1b1c535f8d4147b07f78cd 0.5s done
+#5 extracting sha256:d1465593fd9b15a8d99135d267721127f140c979a8831c320e1f326b830d2721
+#5 extracting sha256:d1465593fd9b15a8d99135d267721127f140c979a8831c320e1f326b830d2721 done
+#5 extracting sha256:4a6d0cbbdb413b71a251597fa3b79f3c0ec3ed7b7c1ee8ae3d4fe4fe053a04a4 0.1s
+#5 extracting sha256:4a6d0cbbdb413b71a251597fa3b79f3c0ec3ed7b7c1ee8ae3d4fe4fe053a04a4 0.3s done
+#5 DONE 3.1s
+
+#7 [2/9] WORKDIR /app
+#7 DONE 0.0s
+
+#8 [3/9] RUN apt-get update && apt-get install -y     postgresql-client     curl     dnsutils     iputils-ping     telnet     netcat-openbsd     && rm -rf /var/lib/apt/lists/*
+#8 0.221 Get:1 http://deb.debian.org/debian bullseye InRelease [116 kB]
+#8 0.244 Get:2 http://deb.debian.org/debian-security bullseye-security InRelease [27.2 kB]
+#8 0.255 Get:3 http://deb.debian.org/debian bullseye-updates InRelease [44.0 kB]
+#8 0.339 Get:4 http://deb.debian.org/debian bullseye/main amd64 Packages [8066 kB]
+#8 0.451 Get:5 http://deb.debian.org/debian-security bullseye-security/main amd64 Packages [384 kB]
+#8 0.559 Get:6 http://deb.debian.org/debian bullseye-updates/main amd64 Packages [18.8 kB]
+#8 1.301 Fetched 8656 kB in 1s (7769 kB/s)
+#8 1.301 Reading package lists...
+#8 1.673 Reading package lists...
+#8 2.036 Building dependency tree...
+#8 2.113 Reading state information...
+#8 2.194 The following additional packages will be installed:
+#8 2.194   bind9-dnsutils bind9-host bind9-libs libbrotli1 libbsd0 libcap2 libcap2-bin
+#8 2.194   libcurl4 libedit2 libfstrm0 libicu67 libjson-c5 libldap-2.4-2 libldap-common
+#8 2.194   liblmdb0 libmaxminddb0 libmd0 libnghttp2-14 libpam-cap libpq5 libprotobuf-c1
+#8 2.195   libpsl5 librtmp1 libsasl2-2 libsasl2-modules libsasl2-modules-db libssh2-1
+#8 2.195   libuv1 libxml2 postgresql-client-13 postgresql-client-common publicsuffix
+#8 2.195   sensible-utils
+#8 2.195 Suggested packages:
+#8 2.195   mmdb-bin libsasl2-modules-gssapi-mit | libsasl2-modules-gssapi-heimdal
+#8 2.195   libsasl2-modules-ldap libsasl2-modules-otp libsasl2-modules-sql
+#8 2.195   postgresql-13 postgresql-doc-13
+#8 2.338 The following NEW packages will be installed:
+#8 2.338   bind9-dnsutils bind9-host bind9-libs curl dnsutils iputils-ping libbrotli1
+#8 2.339   libbsd0 libcap2 libcap2-bin libcurl4 libedit2 libfstrm0 libicu67 libjson-c5
+#8 2.339   libldap-2.4-2 libldap-common liblmdb0 libmaxminddb0 libmd0 libnghttp2-14
+#8 2.339   libpam-cap libpq5 libprotobuf-c1 libpsl5 librtmp1 libsasl2-2
+#8 2.339   libsasl2-modules libsasl2-modules-db libssh2-1 libuv1 libxml2 netcat-openbsd
+#8 2.339   postgresql-client postgresql-client-13 postgresql-client-common publicsuffix
+#8 2.339   sensible-utils telnet
+#8 2.424 0 upgraded, 39 newly installed, 0 to remove and 41 not upgraded.
+#8 2.424 Need to get 16.4 MB of archives.
+#8 2.424 After this operation, 55.4 MB of additional disk space will be used.
+#8 2.424 Get:1 http://deb.debian.org/debian-security bullseye-security/main amd64 libcap2 amd64 1:2.44-1+deb11u1 [24.2 kB]
+#8 2.434 Get:2 http://deb.debian.org/debian-security bullseye-security/main amd64 libcap2-bin amd64 1:2.44-1+deb11u1 [33.2 kB]
+#8 2.436 Get:3 http://deb.debian.org/debian bullseye/main amd64 iputils-ping amd64 3:20210202-1 [49.8 kB]
+#8 2.443 Get:4 http://deb.debian.org/debian bullseye/main amd64 sensible-utils all 0.0.14 [14.8 kB]
+#8 2.444 Get:5 http://deb.debian.org/debian bullseye/main amd64 libuv1 amd64 1.40.0-2+deb11u1 [132 kB]
+#8 2.451 Get:6 http://deb.debian.org/debian bullseye/main amd64 libfstrm0 amd64 0.6.0-1+b1 [21.5 kB]
+#8 2.452 Get:7 http://deb.debian.org/debian bullseye/main amd64 libjson-c5 amd64 0.15-2+deb11u1 [42.9 kB]
+#8 2.453 Get:8 http://deb.debian.org/debian bullseye/main amd64 liblmdb0 amd64 0.9.24-1 [45.0 kB]
+#8 2.454 Get:9 http://deb.debian.org/debian bullseye/main amd64 libmaxminddb0 amd64 1.5.2-1 [29.8 kB]
+#8 2.455 Get:10 http://deb.debian.org/debian bullseye/main amd64 libprotobuf-c1 amd64 1.3.3-1+b2 [27.0 kB]
+#8 2.459 Get:11 http://deb.debian.org/debian-security bullseye-security/main amd64 libicu67 amd64 67.1-7+deb11u1 [8624 kB]
+#8 2.507 Get:12 http://deb.debian.org/debian-security bullseye-security/main amd64 libxml2 amd64 2.9.10+dfsg-6.7+deb11u7 [693 kB]
+#8 2.510 Get:13 http://deb.debian.org/debian-security bullseye-security/main amd64 bind9-libs amd64 1:9.16.50-1~deb11u3 [1434 kB]
+#8 2.516 Get:14 http://deb.debian.org/debian-security bullseye-security/main amd64 bind9-host amd64 1:9.16.50-1~deb11u3 [313 kB]
+#8 2.517 Get:15 http://deb.debian.org/debian bullseye/main amd64 libmd0 amd64 1.0.3-3 [28.0 kB]
+#8 2.520 Get:16 http://deb.debian.org/debian bullseye/main amd64 libbsd0 amd64 0.11.3-1+deb11u1 [108 kB]
+#8 2.520 Get:17 http://deb.debian.org/debian bullseye/main amd64 libedit2 amd64 3.1-20191231-2+b1 [96.7 kB]
+#8 2.520 Get:18 http://deb.debian.org/debian-security bullseye-security/main amd64 bind9-dnsutils amd64 1:9.16.50-1~deb11u3 [409 kB]
+#8 2.522 Get:19 http://deb.debian.org/debian bullseye/main amd64 telnet amd64 0.17-42 [71.1 kB]
+#8 2.522 Get:20 http://deb.debian.org/debian bullseye/main amd64 libbrotli1 amd64 1.0.9-2+b2 [279 kB]
+#8 2.525 Get:21 http://deb.debian.org/debian bullseye/main amd64 libsasl2-modules-db amd64 2.1.27+dfsg-2.1+deb11u1 [69.1 kB]
+#8 2.526 Get:22 http://deb.debian.org/debian bullseye/main amd64 libsasl2-2 amd64 2.1.27+dfsg-2.1+deb11u1 [106 kB]
+#8 2.533 Get:23 http://deb.debian.org/debian bullseye/main amd64 libldap-2.4-2 amd64 2.4.57+dfsg-3+deb11u1 [232 kB]
+#8 2.535 Get:24 http://deb.debian.org/debian-security bullseye-security/main amd64 libnghttp2-14 amd64 1.43.0-1+deb11u2 [77.0 kB]
+#8 2.537 Get:25 http://deb.debian.org/debian bullseye/main amd64 libpsl5 amd64 0.21.0-1.2 [57.3 kB]
+#8 2.537 Get:26 http://deb.debian.org/debian bullseye/main amd64 librtmp1 amd64 2.4+20151223.gitfa8646d.1-2+b2 [60.8 kB]
+#8 2.538 Get:27 http://deb.debian.org/debian bullseye/main amd64 libssh2-1 amd64 1.9.0-2+deb11u1 [156 kB]
+#8 2.538 Get:28 http://deb.debian.org/debian-security bullseye-security/main amd64 libcurl4 amd64 7.74.0-1.3+deb11u15 [347 kB]
+#8 2.540 Get:29 http://deb.debian.org/debian-security bullseye-security/main amd64 curl amd64 7.74.0-1.3+deb11u15 [272 kB]
+#8 2.542 Get:30 http://deb.debian.org/debian-security bullseye-security/main amd64 dnsutils all 1:9.16.50-1~deb11u3 [271 kB]
+#8 2.543 Get:31 http://deb.debian.org/debian bullseye/main amd64 libldap-common all 2.4.57+dfsg-3+deb11u1 [95.8 kB]
+#8 2.544 Get:32 http://deb.debian.org/debian-security bullseye-security/main amd64 libpam-cap amd64 1:2.44-1+deb11u1 [16.0 kB]
+#8 2.549 Get:33 http://deb.debian.org/debian-security bullseye-security/main amd64 libpq5 amd64 13.21-0+deb11u1 [185 kB]
+#8 2.550 Get:34 http://deb.debian.org/debian bullseye/main amd64 libsasl2-modules amd64 2.1.27+dfsg-2.1+deb11u1 [104 kB]
+#8 2.551 Get:35 http://deb.debian.org/debian bullseye/main amd64 netcat-openbsd amd64 1.217-3 [41.1 kB]
+#8 2.553 Get:36 http://deb.debian.org/debian bullseye/main amd64 postgresql-client-common all 225+deb11u1 [89.4 kB]
+#8 2.553 Get:37 http://deb.debian.org/debian-security bullseye-security/main amd64 postgresql-client-13 amd64 13.21-0+deb11u1 [1535 kB]
+#8 2.559 Get:38 http://deb.debian.org/debian bullseye/main amd64 postgresql-client all 13+225+deb11u1 [64.9 kB]
+#8 2.561 Get:39 http://deb.debian.org/debian bullseye/main amd64 publicsuffix all 20220811.1734-0+deb11u1 [127 kB]
+#8 2.648 debconf: delaying package configuration, since apt-utils is not installed
+#8 2.669 Fetched 16.4 MB in 0s (75.8 MB/s)
+#8 2.686 Selecting previously unselected package libcap2:amd64.
+#8 2.686 (Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 7031 files and directories currently installed.)
+#8 2.694 Preparing to unpack .../00-libcap2_1%3a2.44-1+deb11u1_amd64.deb ...
+#8 2.697 Unpacking libcap2:amd64 (1:2.44-1+deb11u1) ...
+#8 2.718 Selecting previously unselected package libcap2-bin.
+#8 2.718 Preparing to unpack .../01-libcap2-bin_1%3a2.44-1+deb11u1_amd64.deb ...
+#8 2.720 Unpacking libcap2-bin (1:2.44-1+deb11u1) ...
+#8 2.739 Selecting previously unselected package iputils-ping.
+#8 2.740 Preparing to unpack .../02-iputils-ping_3%3a20210202-1_amd64.deb ...
+#8 2.741 Unpacking iputils-ping (3:20210202-1) ...
+#8 2.760 Selecting previously unselected package sensible-utils.
+#8 2.762 Preparing to unpack .../03-sensible-utils_0.0.14_all.deb ...
+#8 2.764 Unpacking sensible-utils (0.0.14) ...
+#8 2.786 Selecting previously unselected package libuv1:amd64.
+#8 2.787 Preparing to unpack .../04-libuv1_1.40.0-2+deb11u1_amd64.deb ...
+#8 2.788 Unpacking libuv1:amd64 (1.40.0-2+deb11u1) ...
+#8 2.818 Selecting previously unselected package libfstrm0:amd64.
+#8 2.819 Preparing to unpack .../05-libfstrm0_0.6.0-1+b1_amd64.deb ...
+#8 2.821 Unpacking libfstrm0:amd64 (0.6.0-1+b1) ...
+#8 2.841 Selecting previously unselected package libjson-c5:amd64.
+#8 2.842 Preparing to unpack .../06-libjson-c5_0.15-2+deb11u1_amd64.deb ...
+#8 2.843 Unpacking libjson-c5:amd64 (0.15-2+deb11u1) ...
+#8 2.864 Selecting previously unselected package liblmdb0:amd64.
+#8 2.865 Preparing to unpack .../07-liblmdb0_0.9.24-1_amd64.deb ...
+#8 2.867 Unpacking liblmdb0:amd64 (0.9.24-1) ...
+#8 2.890 Selecting previously unselected package libmaxminddb0:amd64.
+#8 2.890 Preparing to unpack .../08-libmaxminddb0_1.5.2-1_amd64.deb ...
+#8 2.892 Unpacking libmaxminddb0:amd64 (1.5.2-1) ...
+#8 2.913 Selecting previously unselected package libprotobuf-c1:amd64.
+#8 2.914 Preparing to unpack .../09-libprotobuf-c1_1.3.3-1+b2_amd64.deb ...
+#8 2.915 Unpacking libprotobuf-c1:amd64 (1.3.3-1+b2) ...
+#8 2.937 Selecting previously unselected package libicu67:amd64.
+#8 2.937 Preparing to unpack .../10-libicu67_67.1-7+deb11u1_amd64.deb ...
+#8 2.939 Unpacking libicu67:amd64 (67.1-7+deb11u1) ...
+#8 3.590 Selecting previously unselected package libxml2:amd64.
+#8 3.591 Preparing to unpack .../11-libxml2_2.9.10+dfsg-6.7+deb11u7_amd64.deb ...
+#8 3.593 Unpacking libxml2:amd64 (2.9.10+dfsg-6.7+deb11u7) ...
+#8 3.656 Selecting previously unselected package bind9-libs:amd64.
+#8 3.657 Preparing to unpack .../12-bind9-libs_1%3a9.16.50-1~deb11u3_amd64.deb ...
+#8 3.659 Unpacking bind9-libs:amd64 (1:9.16.50-1~deb11u3) ...
+#8 3.760 Selecting previously unselected package bind9-host.
+#8 3.762 Preparing to unpack .../13-bind9-host_1%3a9.16.50-1~deb11u3_amd64.deb ...
+#8 3.764 Unpacking bind9-host (1:9.16.50-1~deb11u3) ...
+#8 3.791 Selecting previously unselected package libmd0:amd64.
+#8 3.793 Preparing to unpack .../14-libmd0_1.0.3-3_amd64.deb ...
+#8 3.794 Unpacking libmd0:amd64 (1.0.3-3) ...
+#8 3.819 Selecting previously unselected package libbsd0:amd64.
+#8 3.819 Preparing to unpack .../15-libbsd0_0.11.3-1+deb11u1_amd64.deb ...
+#8 3.823 Unpacking libbsd0:amd64 (0.11.3-1+deb11u1) ...
+#8 3.848 Selecting previously unselected package libedit2:amd64.
+#8 3.849 Preparing to unpack .../16-libedit2_3.1-20191231-2+b1_amd64.deb ...
+#8 3.851 Unpacking libedit2:amd64 (3.1-20191231-2+b1) ...
+#8 3.873 Selecting previously unselected package bind9-dnsutils.
+#8 3.875 Preparing to unpack .../17-bind9-dnsutils_1%3a9.16.50-1~deb11u3_amd64.deb ...
+#8 3.877 Unpacking bind9-dnsutils (1:9.16.50-1~deb11u3) ...
+#8 3.911 Selecting previously unselected package telnet.
+#8 3.911 Preparing to unpack .../18-telnet_0.17-42_amd64.deb ...
+#8 3.915 Unpacking telnet (0.17-42) ...
+#8 3.939 Selecting previously unselected package libbrotli1:amd64.
+#8 3.939 Preparing to unpack .../19-libbrotli1_1.0.9-2+b2_amd64.deb ...
+#8 3.942 Unpacking libbrotli1:amd64 (1.0.9-2+b2) ...
+#8 3.978 Selecting previously unselected package libsasl2-modules-db:amd64.
+#8 3.980 Preparing to unpack .../20-libsasl2-modules-db_2.1.27+dfsg-2.1+deb11u1_amd64.deb ...
+#8 3.982 Unpacking libsasl2-modules-db:amd64 (2.1.27+dfsg-2.1+deb11u1) ...
+#8 4.003 Selecting previously unselected package libsasl2-2:amd64.
+#8 4.004 Preparing to unpack .../21-libsasl2-2_2.1.27+dfsg-2.1+deb11u1_amd64.deb ...
+#8 4.005 Unpacking libsasl2-2:amd64 (2.1.27+dfsg-2.1+deb11u1) ...
+#8 4.030 Selecting previously unselected package libldap-2.4-2:amd64.
+#8 4.030 Preparing to unpack .../22-libldap-2.4-2_2.4.57+dfsg-3+deb11u1_amd64.deb ...
+#8 4.031 Unpacking libldap-2.4-2:amd64 (2.4.57+dfsg-3+deb11u1) ...
+#8 4.068 Selecting previously unselected package libnghttp2-14:amd64.
+#8 4.068 Preparing to unpack .../23-libnghttp2-14_1.43.0-1+deb11u2_amd64.deb ...
+#8 4.069 Unpacking libnghttp2-14:amd64 (1.43.0-1+deb11u2) ...
+#8 4.093 Selecting previously unselected package libpsl5:amd64.
+#8 4.094 Preparing to unpack .../24-libpsl5_0.21.0-1.2_amd64.deb ...
+#8 4.097 Unpacking libpsl5:amd64 (0.21.0-1.2) ...
+#8 4.119 Selecting previously unselected package librtmp1:amd64.
+#8 4.120 Preparing to unpack .../25-librtmp1_2.4+20151223.gitfa8646d.1-2+b2_amd64.deb ...
+#8 4.122 Unpacking librtmp1:amd64 (2.4+20151223.gitfa8646d.1-2+b2) ...
+#8 4.145 Selecting previously unselected package libssh2-1:amd64.
+#8 4.146 Preparing to unpack .../26-libssh2-1_1.9.0-2+deb11u1_amd64.deb ...
+#8 4.147 Unpacking libssh2-1:amd64 (1.9.0-2+deb11u1) ...
+#8 4.177 Selecting previously unselected package libcurl4:amd64.
+#8 4.178 Preparing to unpack .../27-libcurl4_7.74.0-1.3+deb11u15_amd64.deb ...
+#8 4.180 Unpacking libcurl4:amd64 (7.74.0-1.3+deb11u15) ...
+#8 4.219 Selecting previously unselected package curl.
+#8 4.221 Preparing to unpack .../28-curl_7.74.0-1.3+deb11u15_amd64.deb ...
+#8 4.223 Unpacking curl (7.74.0-1.3+deb11u15) ...
+#8 4.255 Selecting previously unselected package dnsutils.
+#8 4.256 Preparing to unpack .../29-dnsutils_1%3a9.16.50-1~deb11u3_all.deb ...
+#8 4.259 Unpacking dnsutils (1:9.16.50-1~deb11u3) ...
+#8 4.281 Selecting previously unselected package libldap-common.
+#8 4.282 Preparing to unpack .../30-libldap-common_2.4.57+dfsg-3+deb11u1_all.deb ...
+#8 4.284 Unpacking libldap-common (2.4.57+dfsg-3+deb11u1) ...
+#8 4.310 Selecting previously unselected package libpam-cap:amd64.
+#8 4.310 Preparing to unpack .../31-libpam-cap_1%3a2.44-1+deb11u1_amd64.deb ...
+#8 4.312 Unpacking libpam-cap:amd64 (1:2.44-1+deb11u1) ...
+#8 4.331 Selecting previously unselected package libpq5:amd64.
+#8 4.332 Preparing to unpack .../32-libpq5_13.21-0+deb11u1_amd64.deb ...
+#8 4.334 Unpacking libpq5:amd64 (13.21-0+deb11u1) ...
+#8 4.367 Selecting previously unselected package libsasl2-modules:amd64.
+#8 4.367 Preparing to unpack .../33-libsasl2-modules_2.1.27+dfsg-2.1+deb11u1_amd64.deb ...
+#8 4.370 Unpacking libsasl2-modules:amd64 (2.1.27+dfsg-2.1+deb11u1) ...
+#8 4.395 Selecting previously unselected package netcat-openbsd.
+#8 4.396 Preparing to unpack .../34-netcat-openbsd_1.217-3_amd64.deb ...
+#8 4.397 Unpacking netcat-openbsd (1.217-3) ...
+#8 4.417 Selecting previously unselected package postgresql-client-common.
+#8 4.417 Preparing to unpack .../35-postgresql-client-common_225+deb11u1_all.deb ...
+#8 4.419 Unpacking postgresql-client-common (225+deb11u1) ...
+#8 4.445 Selecting previously unselected package postgresql-client-13.
+#8 4.445 Preparing to unpack .../36-postgresql-client-13_13.21-0+deb11u1_amd64.deb ...
+#8 4.447 Unpacking postgresql-client-13 (13.21-0+deb11u1) ...
+#8 4.589 Selecting previously unselected package postgresql-client.
+#8 4.591 Preparing to unpack .../37-postgresql-client_13+225+deb11u1_all.deb ...
+#8 4.593 Unpacking postgresql-client (13+225+deb11u1) ...
+#8 4.612 Selecting previously unselected package publicsuffix.
+#8 4.613 Preparing to unpack .../38-publicsuffix_20220811.1734-0+deb11u1_all.deb ...
+#8 4.614 Unpacking publicsuffix (20220811.1734-0+deb11u1) ...
+#8 4.645 Setting up postgresql-client-common (225+deb11u1) ...
+#8 4.651 Setting up liblmdb0:amd64 (0.9.24-1) ...
+#8 4.655 Setting up libpsl5:amd64 (0.21.0-1.2) ...
+#8 4.659 Setting up telnet (0.17-42) ...
+#8 4.664 update-alternatives: using /usr/bin/telnet.netkit to provide /usr/bin/telnet (telnet) in auto mode
+#8 4.664 update-alternatives: warning: skip creation of /usr/share/man/man1/telnet.1.gz because associated file /usr/share/man/man1/telnet.netkit.1.gz (of link group telnet) doesn't exist
+#8 4.667 Setting up libicu67:amd64 (67.1-7+deb11u1) ...
+#8 4.672 Setting up libmaxminddb0:amd64 (1.5.2-1) ...
+#8 4.675 Setting up libbrotli1:amd64 (1.0.9-2+b2) ...
+#8 4.678 Setting up libfstrm0:amd64 (0.6.0-1+b1) ...
+#8 4.682 Setting up libsasl2-modules:amd64 (2.1.27+dfsg-2.1+deb11u1) ...
+#8 4.689 Setting up libnghttp2-14:amd64 (1.43.0-1+deb11u2) ...
+#8 4.693 Setting up libldap-common (2.4.57+dfsg-3+deb11u1) ...
+#8 4.701 Setting up libprotobuf-c1:amd64 (1.3.3-1+b2) ...
+#8 4.705 Setting up libcap2:amd64 (1:2.44-1+deb11u1) ...
+#8 4.708 Setting up libsasl2-modules-db:amd64 (2.1.27+dfsg-2.1+deb11u1) ...
+#8 4.711 Setting up libcap2-bin (1:2.44-1+deb11u1) ...
+#8 4.714 Setting up libuv1:amd64 (1.40.0-2+deb11u1) ...
+#8 4.718 Setting up librtmp1:amd64 (2.4+20151223.gitfa8646d.1-2+b2) ...
+#8 4.721 Setting up libsasl2-2:amd64 (2.1.27+dfsg-2.1+deb11u1) ...
+#8 4.725 Setting up libmd0:amd64 (1.0.3-3) ...
+#8 4.728 Setting up sensible-utils (0.0.14) ...
+#8 4.731 Setting up libssh2-1:amd64 (1.9.0-2+deb11u1) ...
+#8 4.735 Setting up libbsd0:amd64 (0.11.3-1+deb11u1) ...
+#8 4.737 Setting up libpam-cap:amd64 (1:2.44-1+deb11u1) ...
+#8 4.803 debconf: unable to initialize frontend: Dialog
+#8 4.803 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#8 4.803 debconf: falling back to frontend: Readline
+#8 4.803 debconf: unable to initialize frontend: Readline
+#8 4.803 debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC contains: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.32.1 /usr/local/share/perl/5.32.1 /usr/lib/x86_64-linux-gnu/perl5/5.32 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.32 /usr/share/perl/5.32 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 7.)
+#8 4.803 debconf: falling back to frontend: Teletype
+#8 4.854 Setting up iputils-ping (3:20210202-1) ...
+#8 4.864 Setting up libjson-c5:amd64 (0.15-2+deb11u1) ...
+#8 4.869 Setting up publicsuffix (20220811.1734-0+deb11u1) ...
+#8 4.873 Setting up libxml2:amd64 (2.9.10+dfsg-6.7+deb11u7) ...
+#8 4.876 Setting up bind9-libs:amd64 (1:9.16.50-1~deb11u3) ...
+#8 4.881 Setting up libedit2:amd64 (3.1-20191231-2+b1) ...
+#8 4.884 Setting up netcat-openbsd (1.217-3) ...
+#8 4.889 update-alternatives: using /bin/nc.openbsd to provide /bin/nc (nc) in auto mode
+#8 4.889 update-alternatives: warning: skip creation of /usr/share/man/man1/nc.1.gz because associated file /usr/share/man/man1/nc_openbsd.1.gz (of link group nc) doesn't exist
+#8 4.889 update-alternatives: warning: skip creation of /usr/share/man/man1/netcat.1.gz because associated file /usr/share/man/man1/nc_openbsd.1.gz (of link group nc) doesn't exist
+#8 4.892 Setting up libldap-2.4-2:amd64 (2.4.57+dfsg-3+deb11u1) ...
+#8 4.896 Setting up libcurl4:amd64 (7.74.0-1.3+deb11u15) ...
+#8 4.899 Setting up curl (7.74.0-1.3+deb11u15) ...
+#8 4.903 Setting up bind9-host (1:9.16.50-1~deb11u3) ...
+#8 4.908 Setting up libpq5:amd64 (13.21-0+deb11u1) ...
+#8 4.913 Setting up postgresql-client-13 (13.21-0+deb11u1) ...
+#8 5.436 update-alternatives: using /usr/share/postgresql/13/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+#8 5.470 Setting up bind9-dnsutils (1:9.16.50-1~deb11u3) ...
+#8 5.475 Setting up postgresql-client (13+225+deb11u1) ...
+#8 5.478 Setting up dnsutils (1:9.16.50-1~deb11u3) ...
+#8 5.482 Processing triggers for libc-bin (2.31-13+deb11u5) ...
+#8 DONE 5.6s
+
+#9 [4/9] COPY backend/requirements.txt .
+#9 DONE 0.0s
+
+#10 [5/9] RUN pip install --no-cache-dir -r requirements.txt
+#10 1.407 Collecting Flask==2.3.3
+#10 1.452   Downloading flask-2.3.3-py3-none-any.whl (96 kB)
+#10 1.465      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 96.1/96.1 kB 8.1 MB/s eta 0:00:00
+#10 1.496 Collecting Flask-CORS==4.0.0
+#10 1.506   Downloading Flask_Cors-4.0.0-py2.py3-none-any.whl (14 kB)
+#10 1.538 Collecting Flask-JWT-Extended==4.5.3
+#10 1.551   Downloading Flask_JWT_Extended-4.5.3-py2.py3-none-any.whl (22 kB)
+#10 1.685 Collecting psycopg2-binary==2.9.7
+#10 1.696   Downloading psycopg2_binary-2.9.7-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.0 MB)
+#10 1.734      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.0/3.0 MB 83.0 MB/s eta 0:00:00
+#10 1.795 Collecting redis==5.0.1
+#10 1.806   Downloading redis-5.0.1-py3-none-any.whl (250 kB)
+#10 1.809      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 250.3/250.3 kB 318.4 MB/s eta 0:00:00
+#10 1.885 Collecting bcrypt==4.0.1
+#10 1.897   Downloading bcrypt-4.0.1-cp36-abi3-manylinux_2_28_x86_64.whl (593 kB)
+#10 1.901      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 593.7/593.7 kB 309.6 MB/s eta 0:00:00
+#10 1.930 Collecting python-dotenv==1.0.0
+#10 1.940   Downloading python_dotenv-1.0.0-py3-none-any.whl (19 kB)
+#10 1.982 Collecting Werkzeug==2.3.7
+#10 1.992   Downloading werkzeug-2.3.7-py3-none-any.whl (242 kB)
+#10 1.995      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 242.2/242.2 kB 295.1 MB/s eta 0:00:00
+#10 2.023 Collecting Jinja2==3.1.2
+#10 2.033   Downloading Jinja2-3.1.2-py3-none-any.whl (133 kB)
+#10 2.036      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 133.1/133.1 kB 313.8 MB/s eta 0:00:00
+#10 2.057 Collecting itsdangerous==2.1.2
+#10 2.067   Downloading itsdangerous-2.1.2-py3-none-any.whl (15 kB)
+#10 2.097 Collecting click==8.1.7
+#10 2.107   Downloading click-8.1.7-py3-none-any.whl (97 kB)
+#10 2.112      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 97.9/97.9 kB 250.1 MB/s eta 0:00:00
+#10 2.210 Collecting MarkupSafe==2.1.3
+#10 2.221   Downloading MarkupSafe-2.1.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (25 kB)
+#10 2.249 Collecting PyJWT==2.8.0
+#10 2.259   Downloading PyJWT-2.8.0-py3-none-any.whl (22 kB)
+#10 2.282 Collecting six==1.16.0
+#10 2.292   Downloading six-1.16.0-py2.py3-none-any.whl (11 kB)
+#10 2.492 Collecting cffi==1.16.0
+#10 2.503   Downloading cffi-1.16.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (443 kB)
+#10 2.507      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 443.9/443.9 kB 329.7 MB/s eta 0:00:00
+#10 2.526 Collecting pycparser==2.21
+#10 2.536   Downloading pycparser-2.21-py2.py3-none-any.whl (118 kB)
+#10 2.538      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 118.7/118.7 kB 255.5 MB/s eta 0:00:00
+#10 2.896 Collecting cryptography==41.0.7
+#10 2.907   Downloading cryptography-41.0.7-cp37-abi3-manylinux_2_28_x86_64.whl (4.4 MB)
+#10 2.927      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.4/4.4 MB 257.8 MB/s eta 0:00:00
+#10 2.988 Collecting pytz==2023.3
+#10 2.998   Downloading pytz-2023.3-py2.py3-none-any.whl (502 kB)
+#10 3.007      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 502.3/502.3 kB 78.8 MB/s eta 0:00:00
+#10 3.252 Collecting reportlab==4.0.4
+#10 3.265   Downloading reportlab-4.0.4-py3-none-any.whl (1.9 MB)
+#10 3.273      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.9/1.9 MB 299.5 MB/s eta 0:00:00
+#10 3.307 Collecting openpyxl==3.1.2
+#10 3.318   Downloading openpyxl-3.1.2-py2.py3-none-any.whl (249 kB)
+#10 3.321      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 250.0/250.0 kB 340.7 MB/s eta 0:00:00
+#10 3.579 Collecting matplotlib==3.7.2
+#10 3.590   Downloading matplotlib-3.7.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (11.6 MB)
+#10 3.633      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.6/11.6 MB 292.5 MB/s eta 0:00:00
+#10 3.861 Collecting pandas==2.3.1
+#10 3.873   Downloading pandas-2.3.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (12.3 MB)
+#10 3.927      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.3/12.3 MB 262.0 MB/s eta 0:00:00
+#10 3.970 Collecting blinker>=1.6.2
+#10 3.981   Downloading blinker-1.9.0-py3-none-any.whl (8.5 kB)
+#10 4.066 Collecting async-timeout>=4.0.2
+#10 4.077   Downloading async_timeout-5.0.1-py3-none-any.whl (6.2 kB)
+#10 4.454 Collecting pillow>=9.0.0
+#10 4.467   Downloading pillow-11.3.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.6 MB)
+#10 4.495      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.6/6.6 MB 256.9 MB/s eta 0:00:00
+#10 4.522 Collecting et-xmlfile
+#10 4.532   Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+#10 4.559 Collecting cycler>=0.10
+#10 4.569   Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+#10 4.602 Collecting packaging>=20.0
+#10 4.612   Downloading packaging-25.0-py3-none-any.whl (66 kB)
+#10 4.614      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 66.5/66.5 kB 273.9 MB/s eta 0:00:00
+#10 4.724 Collecting kiwisolver>=1.0.1
+#10 4.735   Downloading kiwisolver-1.4.8-cp310-cp310-manylinux_2_12_x86_64.manylinux2010_x86_64.whl (1.6 MB)
+#10 4.743      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 257.6 MB/s eta 0:00:00
+#10 5.105 Collecting numpy>=1.20
+#10 5.116   Downloading numpy-2.2.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (16.8 MB)
+#10 5.182      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.8/16.8 MB 283.7 MB/s eta 0:00:00
+#10 5.505 Collecting fonttools>=4.22.0
+#10 5.516   Downloading fonttools-4.58.5-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.8 MB)
+#10 5.536      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 281.4 MB/s eta 0:00:00
+#10 5.588 Collecting pyparsing<3.1,>=2.3.1
+#10 5.598   Downloading pyparsing-3.0.9-py3-none-any.whl (98 kB)
+#10 5.601      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.3/98.3 kB 260.9 MB/s eta 0:00:00
+#10 5.627 Collecting python-dateutil>=2.7
+#10 5.637   Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+#10 5.640      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 229.9/229.9 kB 340.1 MB/s eta 0:00:00
+#10 5.770 Collecting contourpy>=1.0.1
+#10 5.780   Downloading contourpy-1.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (325 kB)
+#10 5.784      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 325.0/325.0 kB 228.1 MB/s eta 0:00:00
+#10 5.897 Collecting tzdata>=2022.7
+#10 5.908   Downloading tzdata-2025.2-py2.py3-none-any.whl (347 kB)
+#10 5.911      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 347.8/347.8 kB 335.4 MB/s eta 0:00:00
+#10 6.284 Installing collected packages: pytz, tzdata, six, python-dotenv, pyparsing, PyJWT, pycparser, psycopg2-binary, pillow, packaging, numpy, MarkupSafe, kiwisolver, itsdangerous, fonttools, et-xmlfile, cycler, click, blinker, bcrypt, async-timeout, Werkzeug, reportlab, redis, python-dateutil, openpyxl, Jinja2, contourpy, cffi, pandas, matplotlib, Flask, cryptography, Flask-JWT-Extended, Flask-CORS
+#10 14.81 Successfully installed Flask-2.3.3 Flask-CORS-4.0.0 Flask-JWT-Extended-4.5.3 Jinja2-3.1.2 MarkupSafe-2.1.3 PyJWT-2.8.0 Werkzeug-2.3.7 async-timeout-5.0.1 bcrypt-4.0.1 blinker-1.9.0 cffi-1.16.0 click-8.1.7 contourpy-1.3.2 cryptography-41.0.7 cycler-0.12.1 et-xmlfile-2.0.0 fonttools-4.58.5 itsdangerous-2.1.2 kiwisolver-1.4.8 matplotlib-3.7.2 numpy-2.2.6 openpyxl-3.1.2 packaging-25.0 pandas-2.3.1 pillow-11.3.0 psycopg2-binary-2.9.7 pycparser-2.21 pyparsing-3.0.9 python-dateutil-2.9.0.post0 python-dotenv-1.0.0 pytz-2023.3 redis-5.0.1 reportlab-4.0.4 six-1.16.0 tzdata-2025.2
+#10 14.81 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+#10 14.90 
+#10 14.90 [notice] A new release of pip available: 22.3.1 -> 25.1.1
+#10 14.90 [notice] To update, run: pip install --upgrade pip
+#10 DONE 16.3s
+
+#11 [6/9] COPY backend/ .
+#11 DONE 0.1s
+
+#12 [7/9] COPY database/ /app/database
+#12 DONE 0.0s
+
+#13 [8/9] RUN mkdir -p logs uploads
+#13 DONE 0.1s
+
+#14 [9/9] RUN useradd -m -u 1000 lanet &&     chown -R lanet:lanet /app
+#14 DONE 0.4s
+
+#15 exporting to image
+#15 exporting layers
+#15 exporting layers 4.3s done
+#15 writing image sha256:1106a9b297b5e2c3248269aeb899c236bd143a3ac9f16589a8b165223f1f5bc7 done
+#15 naming to lanethelpdesk.azurecr.io/lanet-helpdesk-backend:056afbc38245943eb629bac3a3be89deebe60dac done
+#15 DONE 4.3s
+The push refers to repository [lanethelpdesk.azurecr.io/lanet-helpdesk-backend]
+3ea0a0cbe5ce: Preparing
+2f68822c5bbf: Preparing
+7fdae68e027b: Preparing
+5eec6e8a1064: Preparing
+4602e3540b77: Preparing
+8fa799372e77: Preparing
+b7930b060f15: Preparing
+65f0aa77383f: Preparing
+2e0e2e9caf0d: Preparing
+622a500a957f: Preparing
+99fd976ad0a9: Preparing
+10b4939044cd: Preparing
+bd2fe8b74db6: Preparing
+65f0aa77383f: Waiting
+2e0e2e9caf0d: Waiting
+622a500a957f: Waiting
+99fd976ad0a9: Waiting
+10b4939044cd: Waiting
+bd2fe8b74db6: Waiting
+8fa799372e77: Waiting
+b7930b060f15: Waiting
+2f68822c5bbf: Pushed
+7fdae68e027b: Pushed
+5eec6e8a1064: Pushed
+3ea0a0cbe5ce: Pushed
+8fa799372e77: Pushed
+65f0aa77383f: Pushed
+622a500a957f: Pushed
+2e0e2e9caf0d: Pushed
+10b4939044cd: Pushed
+99fd976ad0a9: Pushed
+b7930b060f15: Pushed
+bd2fe8b74db6: Pushed
+4602e3540b77: Pushed
+056afbc38245943eb629bac3a3be89deebe60dac: digest: sha256:ac67af55325600f5a8ddb0fe591ed2c6a9759670ccbc3b29bdb1c3553d28ca45 size: 3045
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.frontend
+#1 transferring dockerfile: 1.71kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 ...
+
+#3 [auth] library/nginx:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#4 [auth] library/node:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#5 [internal] load metadata for docker.io/library/node:22.16.0-alpine
+#5 DONE 0.9s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 0.9s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 2B done
+#6 DONE 0.0s
+
+#7 [stage-1 1/3] FROM docker.io/library/nginx:alpine@sha256:b2e814d28359e77bd0aa5fed1939620075e4ffa0eb20423cc557b375bd5c14ad
+#7 resolve docker.io/library/nginx:alpine@sha256:b2e814d28359e77bd0aa5fed1939620075e4ffa0eb20423cc557b375bd5c14ad done
+#7 ...
+
+#8 [internal] load build context
+#8 transferring context: 882.06kB 0.0s done
+#8 DONE 0.0s
+
+#7 [stage-1 1/3] FROM docker.io/library/nginx:alpine@sha256:b2e814d28359e77bd0aa5fed1939620075e4ffa0eb20423cc557b375bd5c14ad
+#7 sha256:6544c26a789f03b1a36e45ce8c77ea71d5d3e8d4e07c49ddceccfe0de47aa3e0 2.50kB / 2.50kB done
+#7 sha256:fe07684b16b82247c3539ed86a65ff37a76138ec25d380bd80c869a1a4c73236 0B / 3.80MB 0.1s
+#7 sha256:b2e814d28359e77bd0aa5fed1939620075e4ffa0eb20423cc557b375bd5c14ad 10.33kB / 10.33kB done
+#7 sha256:77656422f7009bf47cd4992cb1a118af09c25bb157336478bdbf399af09e8e41 10.78kB / 10.78kB done
+#7 sha256:fe07684b16b82247c3539ed86a65ff37a76138ec25d380bd80c869a1a4c73236 2.10MB / 3.80MB 0.2s
+#7 sha256:fe07684b16b82247c3539ed86a65ff37a76138ec25d380bd80c869a1a4c73236 3.80MB / 3.80MB 0.2s done
+#7 sha256:3b7062d09e028c442f2b05e76286341d9b23a69a42b9ecd3d226911a5200bc86 0B / 1.81MB 0.4s
+#7 sha256:fb746e72516f99f0b4f5204c47f8c2aa325a4a9d075769800c42548fe722b25d 0B / 627B 0.4s
+#7 sha256:3b7062d09e028c442f2b05e76286341d9b23a69a42b9ecd3d226911a5200bc86 1.81MB / 1.81MB 0.5s done
+#7 extracting sha256:3b7062d09e028c442f2b05e76286341d9b23a69a42b9ecd3d226911a5200bc86 0.1s done
+#7 sha256:fb746e72516f99f0b4f5204c47f8c2aa325a4a9d075769800c42548fe722b25d 627B / 627B 0.5s done
+#7 sha256:a9ff9baf1741d1f2a4a5df1b44b2f09931318cb1a9201f23a01cb295e0274768 955B / 955B 0.6s
+#7 sha256:2c127093dfc748d5aae28bdf3d96936deb033e69cb643eeb75d6070e4333f7c4 0B / 404B 0.6s
+#7 sha256:a9ff9baf1741d1f2a4a5df1b44b2f09931318cb1a9201f23a01cb295e0274768 955B / 955B 0.6s done
+#7 sha256:2c127093dfc748d5aae28bdf3d96936deb033e69cb643eeb75d6070e4333f7c4 404B / 404B 0.7s done
+#7 sha256:b55ed7d7b2def46fd4870c4bb5743ffd31dae1da58ffd897893978b789c62943 1.40kB / 1.40kB 0.7s done
+#7 sha256:92971aeb101e5e1df5c759e2cc239bdce76c34c09f356f428f4256e04039cef2 0B / 16.78MB 0.8s
+#7 sha256:63dda2adf85bd92ed611cda1b94324396aefe5afe0b7b39a72b4ea6362c40552 1.21kB / 1.21kB 0.7s done
+#7 extracting sha256:fb746e72516f99f0b4f5204c47f8c2aa325a4a9d075769800c42548fe722b25d done
+#7 sha256:92971aeb101e5e1df5c759e2cc239bdce76c34c09f356f428f4256e04039cef2 3.24MB / 16.78MB 0.9s
+#7 extracting sha256:a9ff9baf1741d1f2a4a5df1b44b2f09931318cb1a9201f23a01cb295e0274768 done
+#7 extracting sha256:2c127093dfc748d5aae28bdf3d96936deb033e69cb643eeb75d6070e4333f7c4 done
+#7 extracting sha256:63dda2adf85bd92ed611cda1b94324396aefe5afe0b7b39a72b4ea6362c40552 done
+#7 extracting sha256:b55ed7d7b2def46fd4870c4bb5743ffd31dae1da58ffd897893978b789c62943 done
+#7 sha256:92971aeb101e5e1df5c759e2cc239bdce76c34c09f356f428f4256e04039cef2 16.78MB / 16.78MB 1.0s done
+#7 extracting sha256:92971aeb101e5e1df5c759e2cc239bdce76c34c09f356f428f4256e04039cef2
+#7 extracting sha256:92971aeb101e5e1df5c759e2cc239bdce76c34c09f356f428f4256e04039cef2 0.6s done
+#7 DONE 2.2s
+
+#9 [builder  1/14] FROM docker.io/library/node:22.16.0-alpine@sha256:41e4389f3d988d2ed55392df4db1420ad048ae53324a8e2b7c6d19508288107e
+#9 resolve docker.io/library/node:22.16.0-alpine@sha256:41e4389f3d988d2ed55392df4db1420ad048ae53324a8e2b7c6d19508288107e done
+#9 sha256:11d923cca2138d844282dc0c333132bba72deb913d635c3c33e54523b455a4da 1.72kB / 1.72kB done
+#9 sha256:fb419a5d2f1d0d7ebb463275ecb1b4e71b70ecc6b8afa26e48cbe8918cfd944b 6.21kB / 6.21kB done
+#9 sha256:fe07684b16b82247c3539ed86a65ff37a76138ec25d380bd80c869a1a4c73236 3.80MB / 3.80MB 0.2s done
+#9 sha256:65b9c193e6b7c9d299d1f52e4accba0a196032bdc252ed873ada8952c50612b2 50.96MB / 50.96MB 0.6s done
+#9 sha256:826f8ad948ffe9f7dc092f12ede9e6f14c1db6dae6c0c20bad69d3d9056a02a4 1.26MB / 1.26MB 0.3s done
+#9 sha256:41e4389f3d988d2ed55392df4db1420ad048ae53324a8e2b7c6d19508288107e 6.41kB / 6.41kB done
+#9 extracting sha256:fe07684b16b82247c3539ed86a65ff37a76138ec25d380bd80c869a1a4c73236 0.1s done
+#9 sha256:cb37e5b9a0a186241dd70c5ceab5af7a7a891d3180a4b160af2fce1cf46383ac 446B / 446B 0.3s done
+#9 extracting sha256:65b9c193e6b7c9d299d1f52e4accba0a196032bdc252ed873ada8952c50612b2 1.4s
+#9 extracting sha256:65b9c193e6b7c9d299d1f52e4accba0a196032bdc252ed873ada8952c50612b2 2.1s done
+#9 extracting sha256:826f8ad948ffe9f7dc092f12ede9e6f14c1db6dae6c0c20bad69d3d9056a02a4
+#9 extracting sha256:826f8ad948ffe9f7dc092f12ede9e6f14c1db6dae6c0c20bad69d3d9056a02a4 0.0s done
+#9 extracting sha256:cb37e5b9a0a186241dd70c5ceab5af7a7a891d3180a4b160af2fce1cf46383ac done
+#9 DONE 3.0s
+
+#10 [builder  2/14] RUN apk add --no-cache git
+#10 0.141 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+#10 0.250 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+#10 0.539 (1/12) Installing brotli-libs (1.1.0-r2)
+#10 0.556 (2/12) Installing c-ares (1.34.5-r0)
+#10 0.567 (3/12) Installing libunistring (1.3-r0)
+#10 0.586 (4/12) Installing libidn2 (2.3.7-r0)
+#10 0.596 (5/12) Installing nghttp2-libs (1.65.0-r0)
+#10 0.606 (6/12) Installing libpsl (0.21.5-r3)
+#10 0.616 (7/12) Installing zstd-libs (1.5.7-r0)
+#10 0.631 (8/12) Installing libcurl (8.14.1-r1)
+#10 0.645 (9/12) Installing libexpat (2.7.1-r0)
+#10 0.656 (10/12) Installing pcre2 (10.43-r1)
+#10 0.669 (11/12) Installing git (2.49.1-r0)
+#10 0.741 (12/12) Installing git-init-template (2.49.1-r0)
+#10 0.751 Executing busybox-1.37.0-r18.trigger
+#10 0.758 OK: 22 MiB in 30 packages
+#10 DONE 0.9s
+
+#11 [builder  3/14] WORKDIR /app
+#11 DONE 0.0s
+
+#12 [builder  4/14] COPY frontend/package*.json ./
+#12 DONE 0.0s
+
+#13 [builder  5/14] COPY frontend/tsconfig*.json ./
+#13 DONE 0.0s
+
+#14 [builder  6/14] COPY frontend/vite.config.ts ./
+#14 DONE 0.0s
+
+#15 [builder  7/14] COPY frontend/tailwind.config.js ./
+#15 DONE 0.0s
+
+#16 [builder  8/14] COPY frontend/postcss.config.js ./
+#16 DONE 0.0s
+
+#17 [builder  9/14] COPY frontend/eslint.config.js ./
+#17 DONE 0.0s
+
+#18 [builder 10/14] RUN npm install
+#18 0.759 npm error code ENOENT
+#18 0.759 npm error syscall open
+#18 0.759 npm error path /app/package.json
+#18 0.760 npm error errno -2
+#18 0.760 npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/app/package.json'
+#18 0.760 npm error enoent This is related to npm not being able to find a file.
+#18 0.760 npm error enoent
+#18 0.762 npm error A complete log of this run can be found in: /root/.npm/_logs/2025-07-13T13_52_03_372Z-debug-0.log
+#18 ERROR: process "/bin/sh -c npm install" did not complete successfully: exit code: 254
+------
+ > [builder 10/14] RUN npm install:
+0.759 npm error code ENOENT
+0.759 npm error syscall open
+0.759 npm error path /app/package.json
+0.760 npm error errno -2
+0.760 npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/app/package.json'
+0.760 npm error enoent This is related to npm not being able to find a file.
+0.760 npm error enoent
+0.762 npm error A complete log of this run can be found in: /root/.npm/_logs/2025-07-13T13_52_03_372Z-debug-0.log
+------
+Dockerfile.frontend:21
+--------------------
+  19 |     
+  20 |     # Instalar dependencias
+  21 | >>> RUN npm install
+  22 |     
+  23 |     # Copiar código fuente
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm install" did not complete successfully: exit code: 254
+Error: Process completed with exit code 1.
