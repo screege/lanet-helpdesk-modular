@@ -10,7 +10,7 @@ on:
 
 env:
   AZURE_RESOURCE_GROUP: lanet-helpdesk-containers-rg
-  AZURE_LOCATION: eastus2
+  AZURE_LOCATION: centralus
   CONTAINER_GROUP_NAME: lanet-helpdesk
   REGISTRY_NAME: lanethelpdesk
   DOMAIN_NAME: helpdesk.lanet.mx
@@ -81,33 +81,35 @@ jobs:
         
     - name: 🗄️ Create PostgreSQL Database
       run: |
-        echo "🗄️ Creating PostgreSQL Single Server (better availability)..."
-        az postgres server create \
+        echo "🗄️ Creating PostgreSQL Flexible Server in Central US (verified supported region)..."
+        az postgres flexible-server create \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
           --name lanet-helpdesk-db \
           --location ${{ env.AZURE_LOCATION }} \
           --admin-user postgres \
           --admin-password "Poikl55+*" \
-          --sku-name B_Gen5_1 \
-          --storage-size 51200 \
-          --version 11 \
-          --ssl-enforcement Disabled
+          --sku-name Standard_B1ms \
+          --tier Burstable \
+          --storage-size 32 \
+          --version 14 \
+          --public-access 0.0.0.0 \
+          --yes
 
         echo "🗄️ Creating database..."
-        az postgres db create \
+        az postgres flexible-server db create \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
           --server-name lanet-helpdesk-db \
-          --name lanet_helpdesk
+          --database-name lanet_helpdesk
 
         echo "🔧 Configuring firewall rules..."
-        az postgres server firewall-rule create \
+        az postgres flexible-server firewall-rule create \
           --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-          --server lanet-helpdesk-db \
-          --name AllowAzureServices \
+          --name lanet-helpdesk-db \
+          --rule-name AllowAzureServices \
           --start-ip-address 0.0.0.0 \
           --end-ip-address 0.0.0.0
 
-        echo "✅ PostgreSQL Single Server created successfully"
+        echo "✅ PostgreSQL Flexible Server created successfully in Central US"
         
     - name: 🚀 Deploy Container Group
       run: |
