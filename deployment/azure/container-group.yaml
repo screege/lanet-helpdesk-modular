@@ -1,6 +1,6 @@
 apiVersion: 2021-03-01
 location: centralus
-name: lanet-helpdesk
+name: lanet-helpdesk-prod
 properties:
   containers:
   - name: frontend
@@ -135,7 +135,7 @@ properties:
       port: 5001
     - protocol: TCP
       port: 6379
-    dnsNameLabel: lanet-helpdesk
+    dnsNameLabel: lanet-helpdesk-prod
   imageRegistryCredentials:
   - server: ${ACR_LOGIN_SERVER}
     username: ${ACR_USERNAME}
