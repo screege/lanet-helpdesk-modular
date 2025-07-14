@@ -12,7 +12,7 @@ env:
   AZURE_RESOURCE_GROUP: lanet-helpdesk-prod-rg
   AZURE_LOCATION: centralus
   CONTAINER_GROUP_NAME: lanet-helpdesk-prod
-  REGISTRY_NAME: lanethelpdesk
+  REGISTRY_NAME: lanethelpdeskprod
   DOMAIN_NAME: helpdesk.lanet.mx
 
 jobs:
