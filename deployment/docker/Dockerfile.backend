@@ -1,6 +1,6 @@
 # LANET Helpdesk V3 - Backend Dockerfile
 # Using EXACT same Python version as development
-FROM python:3.10.9-slim
+FROM mcr.microsoft.com/cbl-mariner/base/python:3.10
 
 # Set working directory
 WORKDIR /app

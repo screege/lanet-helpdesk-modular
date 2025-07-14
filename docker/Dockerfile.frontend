@@ -1,6 +1,6 @@
 # LANET Helpdesk V3 - Frontend Dockerfile
 # Stage 1: Build the application
-FROM node:18-alpine AS builder
+FROM mcr.microsoft.com/cbl-mariner/base/nodejs:18 AS builder
 
 # Install system dependencies
 RUN apk add --no-cache git
@@ -28,7 +28,7 @@ COPY frontend/index.html ./
 RUN npm run build
 
 # Stage 2: Serve with nginx
-FROM nginx:alpine
+FROM mcr.microsoft.com/cbl-mariner/base/nginx:1.24
 
 # Copy built application
 COPY --from=builder /app/dist /usr/share/nginx/html

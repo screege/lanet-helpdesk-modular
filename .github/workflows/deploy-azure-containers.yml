@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_RESOURCE_GROUP: lanet-helpdesk-containers-rg
+  AZURE_RESOURCE_GROUP: lanet-helpdesk-v2-rg
   AZURE_LOCATION: centralus
-  CONTAINER_GROUP_NAME: lanet-helpdesk
+  CONTAINER_GROUP_NAME: lanet-helpdesk-v2
   REGISTRY_NAME: lanethelpdesk
   DOMAIN_NAME: helpdesk.lanet.mx
 
