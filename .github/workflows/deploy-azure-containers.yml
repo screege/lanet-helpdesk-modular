@@ -174,7 +174,7 @@ jobs:
         export IMAP_USE_SSL="true"
 
         # Prepare container group YAML with environment variables
-        envsubst < deployment/azure/container-group.yaml > /tmp/container-group-final.yaml
+        envsubst < deployment/azure/container-group-simple.yaml > /tmp/container-group-final.yaml
 
         # Deploy container group with multiple containers
         az container create \

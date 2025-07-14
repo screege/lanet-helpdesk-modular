@@ -1,0 +1,48 @@
+apiVersion: 2021-03-01
+location: ${AZURE_REGION}
+name: ${CONTAINER_GROUP_NAME}
+properties:
+  containers:
+  - name: frontend
+    properties:
+      image: ${REGISTRY_LOGIN_SERVER}/lanet-helpdesk-frontend:latest
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 1
+      ports:
+      - port: 80
+        protocol: TCP
+  - name: backend
+    properties:
+      image: ${REGISTRY_LOGIN_SERVER}/lanet-helpdesk-backend:latest
+      resources:
+        requests:
+          cpu: 1
+          memoryInGb: 2
+      ports:
+      - port: 5001
+        protocol: TCP
+      environmentVariables:
+      - name: DATABASE_URL
+        value: postgresql://${DB_ADMIN_USERNAME}:${DB_ADMIN_PASSWORD}@${DB_SERVER_NAME}.postgres.database.azure.com:5432/${DB_NAME}?sslmode=require
+      - name: FLASK_ENV
+        value: production
+      - name: SECRET_KEY
+        value: ${SECRET_KEY}
+  imageRegistryCredentials:
+  - server: ${REGISTRY_LOGIN_SERVER}
+    username: ${REGISTRY_NAME}
+    password: ${REGISTRY_PASSWORD}
+  ipAddress:
+    type: Public
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 5001
+  osType: Linux
+  restartPolicy: Always
+tags:
+  Environment: Production
+  Project: LANET-Helpdesk
