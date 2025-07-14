@@ -1,6 +1,6 @@
 # LANET Helpdesk V3 - Frontend Dockerfile
 # Stage 1: Build the application
-FROM mcr.microsoft.com/devcontainers/javascript-node:18 AS builder
+FROM node:18-alpine AS builder
 
 # Install system dependencies
 RUN apk add --no-cache git
@@ -28,10 +28,7 @@ COPY frontend/index.html ./
 RUN npm run build
 
 # Stage 2: Serve with nginx
-FROM mcr.microsoft.com/devcontainers/base:ubuntu
-
-# Install nginx
-RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
+FROM nginx:alpine
 
 # Copy built application
 COPY --from=builder /app/dist /usr/share/nginx/html
