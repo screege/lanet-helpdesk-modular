@@ -1,0 +1,62 @@
+name: 🔍 Debug Container Status
+
+on:
+  workflow_dispatch:
+
+env:
+  AZURE_RESOURCE_GROUP: lanet-helpdesk-containers-rg
+  CONTAINER_GROUP_NAME: lanet-helpdesk
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 🔐 Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🔍 Check Container Status
+      run: |
+        echo "🔍 Checking container group status..."
+        az container show --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --query "properties.instanceView.state" --output tsv
+        
+        echo ""
+        echo "📊 Container details:"
+        az container show --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --query "properties.containers[].{Name:name,State:properties.instanceView.currentState.state,RestartCount:properties.instanceView.restartCount}" --output table
+        
+        echo ""
+        echo "🌐 Network info:"
+        az container show --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --query "properties.ipAddress" --output json
+        
+        echo ""
+        echo "📋 Recent events:"
+        az container show --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --query "properties.containers[].properties.instanceView.events[-3:]" --output json
+
+    - name: 🔍 Check Container Logs
+      run: |
+        echo "📋 Frontend logs:"
+        az container logs --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --container-name frontend --tail 20 || echo "No frontend logs"
+        
+        echo ""
+        echo "📋 Backend logs:"
+        az container logs --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --container-name backend --tail 20 || echo "No backend logs"
+        
+        echo ""
+        echo "📋 Redis logs:"
+        az container logs --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --container-name redis --tail 10 || echo "No redis logs"
+
+    - name: 🧪 Test Connectivity
+      run: |
+        echo "🧪 Testing connectivity..."
+        CONTAINER_IP=$(az container show --resource-group $AZURE_RESOURCE_GROUP --name $CONTAINER_GROUP_NAME --query ipAddress.ip --output tsv)
+        echo "Container IP: $CONTAINER_IP"
+        
+        echo "Testing port 80 (frontend):"
+        nc -zv $CONTAINER_IP 80 || echo "Port 80 not accessible"
+        
+        echo "Testing port 5001 (backend):"
+        nc -zv $CONTAINER_IP 5001 || echo "Port 5001 not accessible"
+        
+        echo "Testing HTTP response:"
+        curl -v --connect-timeout 10 http://$CONTAINER_IP/ || echo "HTTP request failed"
