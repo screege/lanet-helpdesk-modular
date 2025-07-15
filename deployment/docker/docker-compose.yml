@@ -22,19 +22,10 @@ services:
 
   # Backend API
   backend:
-    image: python:3.10-slim
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.backend
     container_name: lanet-helpdesk-backend
-    working_dir: /app
-    command: >
-      bash -c "
-        apt-get update && apt-get install -y postgresql-client curl git &&
-        pip install flask flask-cors flask-jwt-extended psycopg2-binary redis python-dotenv requests bcrypt openpyxl reportlab &&
-        git clone https://github.com/screege/lanet-helpdesk-modular.git /tmp/app &&
-        cp -r /tmp/app/backend/* /app/ &&
-        cp -r /tmp/app/database /app/ &&
-        mkdir -p logs uploads reports_files &&
-        python app.py
-      "
     environment:
       DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
       JWT_SECRET_KEY: ${JWT_SECRET:-lanet-helpdesk-secret-2024}
@@ -73,34 +64,10 @@ services:
 
   # Frontend
   frontend:
-    image: nginx:alpine
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.frontend
     container_name: lanet-helpdesk-frontend
-    command: >
-      sh -c "
-        apk add --no-cache git nodejs npm &&
-        git clone https://github.com/screege/lanet-helpdesk-modular.git /tmp/app &&
-        cd /tmp/app/frontend &&
-        npm install &&
-        npm run build &&
-        cp -r dist/* /usr/share/nginx/html/ &&
-        echo 'server {
-          listen 80;
-          server_name _;
-          location / {
-            root /usr/share/nginx/html;
-            try_files \$uri \$uri/ /index.html;
-          }
-          location /api/ {
-            proxy_pass http://backend:5001;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
-            client_max_body_size 10M;
-          }
-        }' > /etc/nginx/conf.d/default.conf &&
-        nginx -g 'daemon off;'
-      "
     ports:
       - "80:80"
       - "443:443"
