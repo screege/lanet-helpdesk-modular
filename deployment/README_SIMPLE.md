@@ -113,6 +113,7 @@ certbot renew --force-renewal
 - ✅ SSL configurado
 - ✅ Email funcionando
 - ✅ Backup automático
+- ✅ SLA Monitor (cada 3 minutos)
 - ✅ GitHub Actions automático
 
 **¡La aplicación está lista para producción!** 🚀
