@@ -40,12 +40,12 @@ if __name__ == '__main__':
     from jobs.sla_monitor import run_continuous_monitor
     
     # Get interval from command line argument or use default
-    interval = 15  # Default 15 minutes (menos agresivo para evitar loops)
+    interval = 3  # Default 3 minutes (monitoreo más frecuente para SLA críticos)
     if len(sys.argv) > 1:
         try:
             interval = int(sys.argv[1])
         except ValueError:
-            print("Invalid interval. Using default 15 minutes.")
+            print("Invalid interval. Using default 3 minutes.")
 
     print(f"Starting SLA Monitor with {interval} minute interval...")
     print("Press Ctrl+C to stop")

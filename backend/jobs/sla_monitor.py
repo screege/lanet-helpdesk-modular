@@ -150,7 +150,7 @@ def run_sla_monitor():
             logger.error(f"SLA monitor job failed: {e}")
             raise
 
-def run_continuous_monitor(interval_minutes=5):
+def run_continuous_monitor(interval_minutes=3):
     """Run SLA monitor continuously"""
     logger = logging.getLogger('sla_monitor')
     logger.info(f"Starting continuous SLA monitor (interval: {interval_minutes} minutes)")

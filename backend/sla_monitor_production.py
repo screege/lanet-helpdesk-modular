@@ -75,7 +75,7 @@ def run_single_monitor_cycle():
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
-def run_continuous_monitor(interval_minutes: int = 15):
+def run_continuous_monitor(interval_minutes: int = 3):
     """Run SLA monitoring continuously with specified interval"""
     logger.info(f"🚀 Starting continuous SLA monitoring (interval: {interval_minutes} minutes)")
     
@@ -142,8 +142,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='LANET Helpdesk V3 Production SLA Monitor')
     parser.add_argument('--mode', choices=['test', 'single', 'continuous'], default='single',
                        help='Monitoring mode: test, single cycle, or continuous (default: single)')
-    parser.add_argument('--interval', type=int, default=15,
-                       help='Interval in minutes for continuous monitoring (default: 15)')
+    parser.add_argument('--interval', type=int, default=3,
+                       help='Interval in minutes for continuous monitoring (default: 3)')
     
     args = parser.parse_args()
     
