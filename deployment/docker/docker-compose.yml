@@ -81,55 +81,55 @@ services:
       - lanet-network
     restart: unless-stopped
 
-  # SLA Monitor Service
-  sla-monitor:
-    image: python:3.10-slim
-    container_name: lanet-helpdesk-sla-monitor
-    working_dir: /app
-    command: >
-      bash -c "
-        apt-get update && apt-get install -y postgresql-client curl git &&
-        pip install flask psycopg2-binary redis python-dotenv requests &&
-        git clone https://github.com/screege/lanet-helpdesk-modular.git /tmp/app &&
-        cp -r /tmp/app/backend/* /app/ &&
-        mkdir -p logs &&
-        python run_sla_monitor.py
-      "
-    environment:
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
-    volumes:
-      - sla_logs:/app/logs
-    depends_on:
-      - postgres
-      - backend
-    networks:
-      - lanet-network
-    restart: unless-stopped
+  # SLA Monitor Service - DISABLED (running inside backend container)
+  # sla-monitor:
+  #   image: python:3.10-slim
+  #   container_name: lanet-helpdesk-sla-monitor
+  #   working_dir: /app
+  #   command: >
+  #     bash -c "
+  #       apt-get update && apt-get install -y postgresql-client curl git &&
+  #       pip install flask psycopg2-binary redis python-dotenv requests &&
+  #       git clone https://github.com/screege/lanet-helpdesk-modular.git /tmp/app &&
+  #       cp -r /tmp/app/backend/* /app/ &&
+  #       mkdir -p logs &&
+  #       python run_sla_monitor.py
+  #     "
+  #   environment:
+  #     DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
+  #   volumes:
+  #     - sla_logs:/app/logs
+  #   depends_on:
+  #     - postgres
+  #     - backend
+  #   networks:
+  #     - lanet-network
+  #   restart: unless-stopped
 
-  # Email Processing Service
-  email-processor:
-    image: python:3.10-slim
-    container_name: lanet-helpdesk-email-processor
-    working_dir: /app
-    command: >
-      bash -c "
-        apt-get update && apt-get install -y postgresql-client curl git &&
-        pip install flask psycopg2-binary redis python-dotenv requests &&
-        git clone https://github.com/screege/lanet-helpdesk-modular.git /tmp/app &&
-        cp -r /tmp/app/backend/* /app/ &&
-        mkdir -p logs &&
-        python process_email_queue.py
-      "
-    environment:
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
-    volumes:
-      - email_logs:/app/logs
-    depends_on:
-      - postgres
-      - backend
-    networks:
-      - lanet-network
-    restart: unless-stopped
+  # Email Processing Service - DISABLED (running inside backend container)
+  # email-processor:
+  #   image: python:3.10-slim
+  #   container_name: lanet-helpdesk-email-processor
+  #   working_dir: /app
+  #   command: >
+  #     bash -c "
+  #       apt-get update && apt-get install -y postgresql-client curl git &&
+  #       pip install flask psycopg2-binary redis python-dotenv requests &&
+  #       git clone https://github.com/screege/lanet-helpdesk-modular.git /tmp/app &&
+  #       cp -r /tmp/app/backend/* /app/ &&
+  #       mkdir -p logs &&
+  #       python process_email_queue.py
+  #     "
+  #   environment:
+  #     DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-Poikl55+*}@postgres:5432/lanet_helpdesk
+  #   volumes:
+  #     - email_logs:/app/logs
+  #   depends_on:
+  #     - postgres
+  #     - backend
+  #   networks:
+  #     - lanet-network
+  #   restart: unless-stopped
 
   # Redis for caching and queues
   redis:
