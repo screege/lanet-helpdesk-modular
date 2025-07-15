@@ -17,7 +17,7 @@ on:
 env:
   VPS_HOST: 104.168.159.24
   VPS_PORT: 57411
-  VPS_USER: root
+  VPS_USER: deploy
   DEPLOY_PATH: /opt/lanet-helpdesk
 
 jobs:
@@ -32,13 +32,13 @@ jobs:
     - name: 🔐 Setup SSH
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
+        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
         ssh-keyscan -p ${{ env.VPS_PORT }} ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
         
     - name: 🧪 Test SSH Connection
       run: |
-        ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
+        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
         
     - name: 📊 Pre-deployment Status
       run: |
@@ -50,24 +50,18 @@ jobs:
         
     - name: 🔄 Deploy to VPS
       run: |
-        # Sync code to VPS using rsync
-        echo "📥 Syncing code to VPS..."
-        rsync -avz --delete \
-          -e "ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }}" \
-          --exclude='.git' \
-          --exclude='node_modules' \
-          --exclude='__pycache__' \
-          --exclude='*.pyc' \
-          ./ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
-
-        # Execute deployment commands on VPS
-        ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
           set -e
 
           echo "🔄 Starting deployment process..."
 
           # Navigate to application directory
           cd ${{ env.DEPLOY_PATH }}
+
+          # Pull latest changes
+          echo "📥 Pulling latest code from GitHub..."
+          git fetch origin
+          git reset --hard origin/main
 
           # Set proper permissions
           sudo chown -R deploy:deploy ${{ env.DEPLOY_PATH }}
@@ -135,7 +129,7 @@ jobs:
         
     - name: 📊 Post-deployment Status
       run: |
-        ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
           echo "📊 Post-deployment status:"
           echo "🐳 Docker containers:"
           sudo docker-compose -f ${{ env.DEPLOY_PATH }}/deployment/docker/docker-compose.yml ps
