@@ -53,8 +53,6 @@ services:
       - backend_reports:/app/reports_files
     ports:
       - "5001:5001"
-    ports:
-      - "5001:5001"
     depends_on:
       - postgres
       - redis
