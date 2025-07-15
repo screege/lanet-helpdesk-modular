@@ -13,8 +13,8 @@ cd /opt/lanet-helpdesk && chmod +x deployment/easy_deploy.sh && ./deployment/eas
 
 ## 🌐 **ACCESO A LA APLICACIÓN**
 
-- **HTTP:** http://104.168.159.24
-- **HTTPS:** https://helpdesk.lanet.mx
+- **HTTPS:** https://helpdesk.lanet.mx ✅ (recomendado)
+- **HTTP:** http://104.168.159.24 (redirige automáticamente a HTTPS)
 
 ### **👤 Cuentas de prueba:**
 - **Superadmin:** `ba@lanet.mx` / `TestAdmin123!`
@@ -110,7 +110,7 @@ certbot renew --force-renewal
 - ✅ VPS configurado
 - ✅ Docker funcionando
 - ✅ Base de datos con datos
-- ✅ SSL configurado
+- ✅ SSL configurado (HTTPS + redirección automática)
 - ✅ Email funcionando
 - ✅ Backup automático
 - ✅ SLA Monitor (cada 3 minutos)
