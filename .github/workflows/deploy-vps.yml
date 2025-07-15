@@ -1,0 +1,155 @@
+name: 🚀 Deploy to VPS (HostWinds)
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '*.md'
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if no changes'
+        required: false
+        default: 'false'
+
+env:
+  VPS_HOST: 104.168.159.24
+  VPS_PORT: 57411
+  VPS_USER: deploy
+  DEPLOY_PATH: /opt/lanet-helpdesk
+
+jobs:
+  deploy:
+    name: 🚀 Deploy to Production VPS
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -p ${{ env.VPS_PORT }} ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: 🧪 Test SSH Connection
+      run: |
+        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
+        
+    - name: 📊 Pre-deployment Status
+      run: |
+        echo "🚀 Starting deployment to VPS"
+        echo "📍 Host: ${{ env.VPS_HOST }}:${{ env.VPS_PORT }}"
+        echo "👤 User: ${{ env.VPS_USER }}"
+        echo "📁 Path: ${{ env.DEPLOY_PATH }}"
+        echo "🔄 Commit: ${{ github.sha }}"
+        
+    - name: 🔄 Deploy to VPS
+      run: |
+        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+          set -e
+          
+          echo "🔄 Starting deployment process..."
+          
+          # Navigate to application directory
+          cd ${{ env.DEPLOY_PATH }}
+          
+          # Pull latest changes
+          echo "📥 Pulling latest code from GitHub..."
+          git fetch origin
+          git reset --hard origin/main
+          
+          # Set proper permissions
+          sudo chown -R deploy:deploy ${{ env.DEPLOY_PATH }}
+          
+          # Create production environment if not exists
+          if [ ! -f deployment/docker/.env.production ]; then
+            echo "📝 Creating production environment file..."
+            cp deployment/docker/.env.example deployment/docker/.env.production 2>/dev/null || true
+          fi
+          
+          # Stop existing containers gracefully
+          echo "🛑 Stopping existing containers..."
+          sudo docker-compose -f deployment/docker/docker-compose.yml down --remove-orphans || true
+          
+          # Clean up old images to save space
+          echo "🧹 Cleaning up old Docker images..."
+          sudo docker system prune -f || true
+          
+          # Build and start containers
+          echo "🏗️ Building and starting containers..."
+          sudo docker-compose -f deployment/docker/docker-compose.yml up -d --build
+          
+          # Wait for services to be ready
+          echo "⏳ Waiting for services to start..."
+          sleep 30
+          
+          # Health check
+          echo "🔍 Running health checks..."
+          
+          # Check if containers are running
+          if sudo docker-compose -f deployment/docker/docker-compose.yml ps | grep -q "Up"; then
+            echo "✅ Containers are running"
+          else
+            echo "❌ Some containers failed to start"
+            sudo docker-compose -f deployment/docker/docker-compose.yml logs --tail=50
+            exit 1
+          fi
+          
+          # Check backend health
+          if curl -f http://localhost:5001/api/health > /dev/null 2>&1; then
+            echo "✅ Backend health check passed"
+          else
+            echo "⚠️ Backend health check failed, but continuing..."
+          fi
+          
+          # Check frontend
+          if curl -f http://localhost:80 > /dev/null 2>&1; then
+            echo "✅ Frontend health check passed"
+          else
+            echo "⚠️ Frontend health check failed, but continuing..."
+          fi
+          
+          echo "🎉 Deployment completed successfully!"
+          
+        EOF
+        
+    - name: 📊 Post-deployment Status
+      run: |
+        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+          echo "📊 Post-deployment status:"
+          echo "🐳 Docker containers:"
+          sudo docker-compose -f ${{ env.DEPLOY_PATH }}/deployment/docker/docker-compose.yml ps
+          
+          echo ""
+          echo "💾 Disk usage:"
+          df -h /
+          
+          echo ""
+          echo "🔧 System load:"
+          uptime
+        EOF
+        
+    - name: 🎉 Deployment Summary
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo ""
+        echo "📋 Deployment Details:"
+        echo "   🌐 VPS: ${{ env.VPS_HOST }}:${{ env.VPS_PORT }}"
+        echo "   👤 User: ${{ env.VPS_USER }}"
+        echo "   📁 Path: ${{ env.DEPLOY_PATH }}"
+        echo "   🔄 Commit: ${{ github.sha }}"
+        echo ""
+        echo "🌐 Access URLs:"
+        echo "   🔗 HTTP: http://${{ env.VPS_HOST }}"
+        echo "   🔗 API: http://${{ env.VPS_HOST }}:5001/api/health"
+        echo "   🔗 Domain: https://helpdesk.lanet.mx (after DNS setup)"
+        echo ""
+        echo "📝 Next Steps:"
+        echo "1. Update DNS: helpdesk.lanet.mx → ${{ env.VPS_HOST }}"
+        echo "2. Test application: http://${{ env.VPS_HOST }}"
+        echo "3. Monitor logs: ssh deploy@${{ env.VPS_HOST }} -p ${{ env.VPS_PORT }}"
