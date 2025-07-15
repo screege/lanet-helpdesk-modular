@@ -17,7 +17,7 @@ on:
 env:
   VPS_HOST: 104.168.159.24
   VPS_PORT: 57411
-  VPS_USER: deploy
+  VPS_USER: root
   DEPLOY_PATH: /opt/lanet-helpdesk
 
 jobs:
@@ -50,19 +50,25 @@ jobs:
         
     - name: 🔄 Deploy to VPS
       run: |
+        # Sync code to VPS using rsync
+        echo "📥 Syncing code to VPS..."
+        rsync -avz --delete \
+          -e "ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }}" \
+          --exclude='.git' \
+          --exclude='node_modules' \
+          --exclude='__pycache__' \
+          --exclude='*.pyc' \
+          ./ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
+
+        # Execute deployment commands on VPS
         ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
           set -e
-          
+
           echo "🔄 Starting deployment process..."
-          
+
           # Navigate to application directory
           cd ${{ env.DEPLOY_PATH }}
-          
-          # Pull latest changes
-          echo "📥 Pulling latest code from GitHub..."
-          git fetch origin
-          git reset --hard origin/main
-          
+
           # Set proper permissions
           sudo chown -R deploy:deploy ${{ env.DEPLOY_PATH }}
           
@@ -80,10 +86,19 @@ jobs:
           echo "🧹 Cleaning up old Docker images..."
           sudo docker system prune -f || true
           
+          # Enable Docker to start on boot
+          echo "🔧 Enabling Docker auto-start..."
+          sudo systemctl enable docker
+
           # Build and start containers
           echo "🏗️ Building and starting containers..."
           sudo docker-compose -f deployment/docker/docker-compose.yml up -d --build
-          
+
+          # Start SLA Monitor inside backend container
+          echo "⚡ Starting SLA Monitor..."
+          sleep 10
+          sudo docker exec -d lanet-helpdesk-backend python run_sla_monitor.py 3
+
           # Wait for services to be ready
           echo "⏳ Waiting for services to start..."
           sleep 30
