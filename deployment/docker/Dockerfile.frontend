@@ -10,22 +10,22 @@ RUN apk add --no-cache git
 WORKDIR /app
 
 # Copiar archivos de configuración
-COPY frontend/package.json ./
-COPY frontend/package-lock.json ./
-COPY frontend/tsconfig.json ./
-COPY frontend/tsconfig.node.json ./
-COPY frontend/vite.config.ts ./
-COPY frontend/tailwind.config.js ./
-COPY frontend/postcss.config.js ./
-COPY frontend/eslint.config.js ./
+COPY ./frontend/package.json ./
+COPY ./frontend/package-lock.json ./
+COPY ./frontend/tsconfig.json ./
+COPY ./frontend/tsconfig.node.json ./
+COPY ./frontend/vite.config.ts ./
+COPY ./frontend/tailwind.config.js ./
+COPY ./frontend/postcss.config.js ./
+COPY ./frontend/eslint.config.js ./
 
 # Instalar dependencias
 RUN npm install
 
 # Copiar código fuente
-COPY frontend/src ./src
-COPY frontend/public ./public
-COPY frontend/index.html ./
+COPY ./frontend/src ./src
+COPY ./frontend/public ./public
+COPY ./frontend/index.html ./
 
 # Construir la aplicación (sin verificación TypeScript para Docker)
 RUN npm run build:docker

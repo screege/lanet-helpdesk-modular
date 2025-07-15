@@ -11,13 +11,13 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copiar requirements
-COPY backend/requirements.txt .
+COPY ./backend/requirements.txt .
 
 # Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código fuente del backend
-COPY backend/ .
+COPY ./backend/ .
 
 # Crear directorio de logs
 RUN mkdir -p logs
