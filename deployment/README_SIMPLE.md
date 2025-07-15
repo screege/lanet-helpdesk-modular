@@ -29,6 +29,7 @@ cd /opt/lanet-helpdesk && chmod +x deployment/easy_deploy.sh && ./deployment/eas
 ### **Ver estado:**
 ```bash
 docker ps
+# Deberías ver 4 contenedores: frontend, backend, postgres, redis
 ```
 
 ### **Ver logs:**
@@ -113,7 +114,7 @@ certbot renew --force-renewal
 - ✅ SSL configurado (HTTPS + redirección automática)
 - ✅ Email funcionando
 - ✅ Backup automático
-- ✅ SLA Monitor (cada 3 minutos)
+- ✅ SLA Monitor (cada 3 minutos, integrado en backend)
 - ✅ GitHub Actions automático
 
 **¡La aplicación está lista para producción!** 🚀
