@@ -32,13 +32,13 @@ jobs:
     - name: 🔐 Setup SSH
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
-        chmod 600 ~/.ssh/id_ed25519
+        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -p ${{ env.VPS_PORT }} ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
         
     - name: 🧪 Test SSH Connection
       run: |
-        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
+        ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
         
     - name: 📊 Pre-deployment Status
       run: |
@@ -53,7 +53,7 @@ jobs:
         # Sync code to VPS using rsync
         echo "📥 Syncing code to VPS..."
         rsync -avz --delete \
-          -e "ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }}" \
+          -e "ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }}" \
           --exclude='.git' \
           --exclude='node_modules' \
           --exclude='__pycache__' \
@@ -61,7 +61,7 @@ jobs:
           ./ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.DEPLOY_PATH }}/
 
         # Execute deployment commands on VPS
-        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+        ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
           set -e
 
           echo "🔄 Starting deployment process..."
@@ -135,7 +135,7 @@ jobs:
         
     - name: 📊 Post-deployment Status
       run: |
-        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+        ssh -i ~/.ssh/id_rsa -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
           echo "📊 Post-deployment status:"
           echo "🐳 Docker containers:"
           sudo docker-compose -f ${{ env.DEPLOY_PATH }}/deployment/docker/docker-compose.yml ps
