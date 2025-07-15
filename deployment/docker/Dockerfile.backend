@@ -28,7 +28,7 @@ COPY ./backend/ .
 COPY ./database/ /app/database
 
 # Create necessary directories
-RUN mkdir -p logs uploads
+RUN mkdir -p logs uploads reports_files
 
 # Create non-root user
 RUN useradd -m -u 1000 lanet && \
