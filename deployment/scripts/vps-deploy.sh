@@ -20,6 +20,7 @@ print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 echo "🚀 LANET Helpdesk V3 - VPS Manual Deployment"
 echo "============================================="
 echo "🕐 Deployment triggered at: $(date)"
+echo "🔧 Sudo permissions fixed - ready for production!"
 
 # Configuration
 DEPLOY_PATH="/opt/lanet-helpdesk"
