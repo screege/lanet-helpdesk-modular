@@ -88,17 +88,26 @@ else
 fi
 
 # Paso 9: Configurar SSL (si el dominio está configurado)
-if command -v certbot &> /dev/null; then
-    log "🔒 Verificando SSL..."
-    if certbot certificates | grep -q "helpdesk.lanet.mx"; then
-        log "✅ SSL ya está configurado"
+log "🔒 Configurando SSL automáticamente..."
+if [ -f "deployment/setup_ssl.sh" ]; then
+    chmod +x deployment/setup_ssl.sh
+    if ./deployment/setup_ssl.sh; then
+        log "✅ SSL configurado exitosamente"
     else
-        info "SSL no configurado. Para configurarlo manualmente:"
-        info "certbot certonly --standalone -d helpdesk.lanet.mx --non-interactive --agree-tos --email screege@hotmail.com"
+        warning "⚠️ Error configurando SSL, pero la aplicación funciona en HTTP"
     fi
 else
-    info "Certbot no instalado. Para instalar SSL:"
-    info "apt update && apt install -y certbot"
+    warning "⚠️ Script SSL no encontrado"
+    if command -v certbot &> /dev/null; then
+        if certbot certificates | grep -q "helpdesk.lanet.mx"; then
+            log "✅ SSL ya está configurado"
+        else
+            info "Para configurar SSL manualmente:"
+            info "certbot certonly --standalone -d helpdesk.lanet.mx --non-interactive --agree-tos --email screege@hotmail.com"
+        fi
+    else
+        info "Para instalar SSL: apt update && apt install -y certbot"
+    fi
 fi
 
 # Paso 10: Mostrar resumen final
@@ -112,8 +121,8 @@ log "✅ Base de datos conectada"
 echo ""
 echo "📋 INFORMACIÓN DE ACCESO:"
 echo "------------------------"
-echo "🌐 HTTP:  http://$(curl -s ifconfig.me || echo 'IP_DEL_SERVIDOR')"
-echo "🔒 HTTPS: https://helpdesk.lanet.mx (si SSL está configurado)"
+echo "🔒 HTTPS: https://helpdesk.lanet.mx (recomendado)"
+echo "🌐 HTTP:  http://$(curl -s ifconfig.me || echo 'IP_DEL_SERVIDOR') (redirige a HTTPS)"
 echo ""
 echo "👤 CUENTAS DE PRUEBA:"
 echo "   Superadmin: ba@lanet.mx / TestAdmin123!"

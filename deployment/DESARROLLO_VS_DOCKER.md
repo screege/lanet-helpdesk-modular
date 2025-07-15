@@ -127,12 +127,21 @@ RUN mkdir -p logs uploads
 RUN mkdir -p logs uploads reports_files
 ```
 
-### **2. Permisos corregidos:**
+### **2. Permisos corregidos (PROBLEMA CRÍTICO):**
 ```dockerfile
+# ANTES (INCORRECTO):
+RUN mkdir -p logs uploads reports_files  # Crea como root
 RUN useradd -m -u 1000 lanet && \
-    chown -R lanet:lanet /app
+    chown -R lanet:lanet /app             # Cambia ownership después
+
+# DESPUÉS (CORRECTO):
+RUN useradd -m -u 1000 lanet             # Crea usuario primero
+RUN mkdir -p logs uploads reports_files && \
+    chown -R lanet:lanet /app             # Crea directorios con ownership correcto
 USER lanet
 ```
+
+**⚠️ ORDEN IMPORTA:** Si creas directorios antes del usuario, quedan como `root:root`.
 
 ### **3. Dependencias completas:**
 ```dockerfile
