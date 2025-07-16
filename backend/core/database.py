@@ -79,17 +79,26 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(query, params)
-                    
+
+                    # Check if this is a modifying query (INSERT, UPDATE, DELETE)
+                    is_modifying = query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE'))
+
                     if fetch == 'all':
-                        return cur.fetchall()
+                        result = cur.fetchall()
+                        if is_modifying:
+                            conn.commit()
+                        return result
                     elif fetch == 'one':
-                        return cur.fetchone()
+                        result = cur.fetchone()
+                        if is_modifying:
+                            conn.commit()
+                        return result
                     elif fetch == 'none':
                         conn.commit()
                         return None
                     else:
                         raise ValueError(f"Invalid fetch type: {fetch}")
-                        
+
         except Exception as e:
             self.logger.error(f"Query execution failed: {query[:100]}... Error: {e}")
             raise

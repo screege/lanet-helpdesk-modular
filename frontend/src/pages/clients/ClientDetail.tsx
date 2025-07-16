@@ -10,7 +10,6 @@ import {
   Edit,
   Trash2,
   Calendar,
-  Globe,
   FileText,
   Plus,
   Eye
@@ -19,6 +18,8 @@ import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import SiteForm from '../../components/sites/SiteForm';
 import SiteDetail from '../../components/sites/SiteDetail';
+import TokenManagement from '../../components/agents/TokenManagement';
+import { Site } from '../../services/sitesService';
 
 interface Client {
   client_id: string;
@@ -51,16 +52,7 @@ interface ClientStats {
   tickets_last_30_days: number;
 }
 
-interface Site {
-  site_id: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  country: string;
-  postal_code: string;
-  is_active: boolean;
-}
+
 
 interface User {
   user_id: string;
@@ -88,8 +80,10 @@ const ClientDetail: React.FC = () => {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
 
 
+
   const canEditClients = user?.role === 'superadmin' || user?.role === 'admin';
   const canManageSites = user?.role === 'superadmin' || user?.role === 'admin';
+  const canManageTokens = user?.role === 'superadmin' || user?.role === 'technician';
 
   useEffect(() => {
     if (clientId) {
@@ -217,7 +211,7 @@ const ClientDetail: React.FC = () => {
           // Reload sites data
           const sitesResponse = await apiService.get(`/clients/${clientId}/sites`);
           if (sitesResponse.success) {
-            setSites(sitesResponse.data);
+            setSites(sitesResponse.data as Site[]);
           }
 
           // Show success notification (you could use a toast here)
@@ -258,7 +252,7 @@ const ClientDetail: React.FC = () => {
     try {
       const sitesResponse = await apiService.get(`/clients/${clientId}/sites`);
       if (sitesResponse.success) {
-        setSites(sitesResponse.data);
+        setSites(sitesResponse.data as Site[]);
       }
     } catch (error) {
       console.error('Error reloading sites:', error);
@@ -478,57 +472,72 @@ const ClientDetail: React.FC = () => {
           {sites.length > 0 ? (
             <div className="space-y-3">
               {sites.map((site) => (
-                <div key={site.site_id} className="border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-gray-900">{site.name}</h3>
-                        <div className="flex items-center space-x-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            site.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {site.is_active ? 'Activo' : 'Inactivo'}
-                          </span>
+                <div key={site.site_id} className="border border-gray-200 rounded-lg">
+                  {/* Site Header */}
+                  <div className="p-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-medium text-gray-900">{site.name}</h3>
+                          <div className="flex items-center space-x-2">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              site.is_active
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {site.is_active ? 'Activo' : 'Inactivo'}
+                            </span>
 
-                          {/* Action buttons */}
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={() => handleViewSite(site)}
-                              className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                              title="Ver Detalles"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
+                            {/* Action buttons */}
+                            <div className="flex items-center space-x-1">
+                              <button
+                                onClick={() => handleViewSite(site)}
+                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                title="Ver Detalles"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
 
-                            {canManageSites && (
-                              <>
-                                <button
-                                  onClick={() => handleEditSite(site)}
-                                  className="p-1 text-gray-400 hover:text-yellow-600 transition-colors"
-                                  title="Editar Sitio"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
+                              {canManageSites && (
+                                <>
+                                  <button
+                                    onClick={() => handleEditSite(site)}
+                                    className="p-1 text-gray-400 hover:text-yellow-600 transition-colors"
+                                    title="Editar Sitio"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
 
-                                <button
-                                  onClick={() => handleDeleteSite(site)}
-                                  className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                                  title="Eliminar Sitio"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
+                                  <button
+                                    onClick={() => handleDeleteSite(site)}
+                                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                    title="Eliminar Sitio"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {site.address}, {site.city}, {site.state} {site.postal_code}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {site.address}, {site.city}, {site.state} {site.postal_code}
-                      </p>
                     </div>
                   </div>
+
+                  {/* Tokens Section for this Site */}
+                  {canManageTokens && (
+                    <div className="p-4 bg-gray-50">
+                      <TokenManagement
+                        clientId={clientId!}
+                        siteId={site.site_id}
+                        clientName={client.name}
+                        siteName={site.name}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -581,6 +590,8 @@ const ClientDetail: React.FC = () => {
           )}
         </div>
       </div>
+
+
 
       {/* Site Modals */}
       {showCreateSiteForm && (

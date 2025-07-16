@@ -38,6 +38,7 @@ from modules.dashboard.routes import dashboard_bp
 from modules.sla.routes import sla_bp
 from modules.email.routes import email_bp
 from modules.reports.routes import reports_bp
+from modules.agents.routes import agents_bp
 from modules.reports.monthly_scheduler import monthly_scheduler
 
 def create_app(config_name='development'):
@@ -206,6 +207,7 @@ def create_app(config_name='development'):
     app.register_blueprint(sla_bp, url_prefix='/api/sla')
     app.register_blueprint(email_bp, url_prefix='/api/email')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
+    app.register_blueprint(agents_bp, url_prefix='/api/agents')
 
     # Initialize monthly reports scheduler (but don't start it automatically)
     monthly_scheduler.init_app(app)
