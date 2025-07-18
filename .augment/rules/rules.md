@@ -16,3 +16,20 @@ DATABASE_URL=postgresql://postgres:Poikl55+*@localhost:5432/lanet_helpdesk
 you must have all code, workflow, database associations, api calls and frontend calls present before making changes and see if other modules get affected by new code implementation
 you must always act as a full stack developer
 you must always commit to github and before creating new modules which after tests work create a new branch
+
+CHECKLIST PARA DESARROLLO → DOCKER:
+✅ ANTES DE HACER COMMIT:
+¿Creaste nuevos directorios?
+Agrégalos al Dockerfile: RUN mkdir -p ...
+¿Instalaste nuevas dependencias?
+Agrégalas a requirements.txt
+¿Usas nuevas variables de entorno?
+Agrégalas a deployment/docker/.env
+¿Cambiaste la base de datos?
+Crea script de migración
+¿Funciona en desarrollo?
+Prueba todo antes del commit
+✅ DESPUÉS DEL PUSH:
+GitHub Actions se ejecuta automáticamente (5-10 minutos)
+Verifica que el deployment fue exitoso
+Prueba la funcionalidad en el VPS

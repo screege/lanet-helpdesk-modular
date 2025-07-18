@@ -217,29 +217,48 @@ def agent_heartbeat():
         data = request.get_json()
         if not data:
             return current_app.response_manager.bad_request('Request body required')
-        
+
         asset_id = data.get('asset_id')
         status = data.get('status', {})
-        
+        hardware_inventory = data.get('hardware_inventory')
+        software_inventory = data.get('software_inventory')
+
         if not asset_id:
             return current_app.response_manager.bad_request('asset_id field required')
-        
-        # Update asset last_seen and system_metrics
+
+        # Prepare update data
+        import json
+        update_data = {'system_metrics': status}
+
+        # Add inventory data if provided
+        if hardware_inventory:
+            update_data['hardware_info'] = hardware_inventory
+            current_app.logger.info(f"Updating hardware inventory for asset {asset_id}")
+
+        if software_inventory:
+            update_data['software_info'] = software_inventory
+            current_app.logger.info(f"Updating software inventory for asset {asset_id}")
+
+        # Update asset with all data
         update_query = """
-        UPDATE assets 
-        SET last_seen = NOW(), 
+        UPDATE assets
+        SET last_seen = NOW(),
             agent_status = 'online',
-            system_metrics = %s
+            specifications = COALESCE(specifications, '{}')::jsonb || %s::jsonb
         WHERE asset_id = %s
         """
-        
-        current_app.db_manager.execute_query(update_query, (status, asset_id))
-        
+
+        current_app.db_manager.execute_query(
+            update_query,
+            (json.dumps(update_data), asset_id),
+            fetch='none'
+        )
+
         return current_app.response_manager.success({
             'status': 'ok',
             'next_heartbeat': 60  # seconds
         })
-        
+
     except Exception as e:
         current_app.logger.error(f"Error processing heartbeat: {e}")
         return current_app.response_manager.server_error('Failed to process heartbeat')

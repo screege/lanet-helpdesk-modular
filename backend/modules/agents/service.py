@@ -8,6 +8,7 @@ Handles business logic for agent installation tokens and agent registration
 import logging
 import uuid
 import re
+import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from core.database import DatabaseManager
@@ -349,25 +350,27 @@ class AgentsService:
                 'client_id': client_id,
                 'site_id': site_id,
                 'name': f"{computer_name} (Agent)",
-                'asset_type': 'workstation',
+                'asset_type': 'desktop',
                 'status': 'active',
                 'agent_status': 'online',
-                'agent_version': hardware_info.get('agent_version', '1.0.0'),
                 'last_seen': datetime.now(),
-                'last_inventory_update': datetime.now(),
-                'hardware_specs': hardware_info.get('hardware', {}),
-                'software_inventory': hardware_info.get('software', []),
-                'system_metrics': hardware_info.get('status', {})
+                'specifications': {
+                    'agent_version': hardware_info.get('agent_version', '1.0.0'),
+                    'hardware': hardware_info.get('hardware', {}),
+                    'software': hardware_info.get('software', []),
+                    'system_metrics': hardware_info.get('status', {}),
+                    'os': hardware_info.get('os', ''),
+                    'registration_date': datetime.now().isoformat()
+                }
             }
 
             # Insert asset
             insert_asset_query = """
             INSERT INTO assets (
                 client_id, site_id, name, asset_type, status,
-                agent_status, agent_version, last_seen, last_inventory_update,
-                hardware_specs, software_inventory, system_metrics
+                agent_status, last_seen, specifications
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s
             ) RETURNING asset_id
             """
 
@@ -375,10 +378,8 @@ class AgentsService:
                 insert_asset_query,
                 (
                     client_id, site_id, asset_data['name'], asset_data['asset_type'],
-                    asset_data['status'], asset_data['agent_status'], asset_data['agent_version'],
-                    asset_data['last_seen'], asset_data['last_inventory_update'],
-                    asset_data['hardware_specs'], asset_data['software_inventory'],
-                    asset_data['system_metrics']
+                    asset_data['status'], asset_data['agent_status'], asset_data['last_seen'],
+                    json.dumps(asset_data['specifications'])
                 ),
                 fetch='one'
             )
@@ -390,7 +391,8 @@ class AgentsService:
                 """UPDATE agent_installation_tokens
                    SET usage_count = usage_count + 1, last_used_at = NOW()
                    WHERE token_value = %s""",
-                (token_value,)
+                (token_value,),
+                fetch='none'
             )
 
             # Log successful usage
@@ -445,17 +447,40 @@ class AgentsService:
                     insert_usage_query,
                     (
                         token_result['token_id'], ip_address, user_agent, computer_name,
-                        hardware_info, success, asset_id, error_message
-                    )
+                        json.dumps(hardware_info), success, asset_id, error_message
+                    ),
+                    fetch='none'
                 )
         except Exception as e:
             self.logger.warning(f"Failed to log token usage: {e}")
 
     def _generate_agent_jwt_token(self, asset_id: str, client_id: str, site_id: str) -> str:
         """Generate JWT token for agent authentication"""
-        # This would integrate with the existing JWT system
-        # For now, return a placeholder
-        return f"agent_token_{asset_id}_{uuid.uuid4().hex[:8]}"
+        try:
+            from flask_jwt_extended import create_access_token
+            from datetime import timedelta
+
+            # Create JWT token with agent identity
+            additional_claims = {
+                'asset_id': asset_id,
+                'client_id': client_id,
+                'site_id': site_id,
+                'type': 'agent'
+            }
+
+            # Token expires in 30 days for agents
+            token = create_access_token(
+                identity=f"agent_{asset_id}",
+                expires_delta=timedelta(days=30),
+                additional_claims=additional_claims
+            )
+
+            return token
+
+        except Exception as e:
+            self.logger.error(f"Error generating JWT token: {e}")
+            # Fallback to placeholder if JWT fails
+            return f"agent_token_{asset_id}_{uuid.uuid4().hex[:8]}"
 
     def _get_agent_config(self) -> Dict[str, Any]:
         """Get agent configuration from system_config"""

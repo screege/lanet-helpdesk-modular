@@ -17,6 +17,7 @@ import TicketDetailPage from '@/pages/tickets/TicketDetailPage';
 import TicketEditPage from '@/pages/tickets/TicketEditPage';
 import CategoriesManagement from '@/pages/categories/CategoriesManagement';
 import ReportsManagement from '@/pages/reports/ReportsManagement';
+import Assets from '@/pages/Assets';
 
 
 import EmailConfigTabs from '@/pages/admin/EmailConfigTabs';
@@ -62,6 +63,12 @@ const App: React.FC = () => {
 
               {/* Reports */}
               <Route path="reports" element={<ReportsManagement />} />
+
+              {/* Assets */}
+              <Route path="assets" element={<Assets />} />
+
+              {/* Test route */}
+              <Route path="test-assets" element={<div className="p-6"><h1>Test Assets Page</h1><p>This is a test to verify routing works</p></div>} />
 
 
               {/* Admin routes */}

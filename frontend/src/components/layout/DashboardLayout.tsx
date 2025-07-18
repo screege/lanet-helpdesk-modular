@@ -24,6 +24,7 @@ import {
   FolderTree,
   FileText,
   Database,
+  Monitor,
 } from 'lucide-react';
 
 interface NavItem {
@@ -96,6 +97,12 @@ const DashboardLayout: React.FC = () => {
           href: '/reports',
           icon: BarChart3,
           permission: 'reports.read',
+        },
+        {
+          name: 'Equipos',
+          href: '/assets',
+          icon: Monitor,
+          permission: null,
         },
         {
           name: 'Configuración',
@@ -180,6 +187,12 @@ const DashboardLayout: React.FC = () => {
           name: 'Reportes',
           href: '/reports',
           icon: BarChart3,
+          permission: null,
+        },
+        {
+          name: 'Equipos',
+          href: '/assets',
+          icon: Monitor,
           permission: null,
         },
         {

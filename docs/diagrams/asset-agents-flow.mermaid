@@ -1,0 +1,79 @@
+graph TB
+    subgraph "🌐 Frontend React"
+        UI[Interfaz de Usuario<br/>Gestión de Tokens]
+        AS[AgentsService.ts<br/>API Client]
+        COMP[Componentes React<br/>ClientDetail, SiteTokens]
+        PORTAL[Portal de Activos<br/>Dashboard, Inventario]
+        ASSETS[AssetsService.ts<br/>API Client para Activos]
+    end
+    
+    subgraph "⚙️ Backend Flask"
+        AR[agents/routes.py<br/>API Endpoints]
+        ASV[agents/service.py<br/>Business Logic]
+        DB[core/database.py<br/>Database Manager]
+        AUTH[JWT Authentication<br/>Role-based Access]
+    end
+    
+    subgraph "🗄️ Base de Datos PostgreSQL"
+        AIT[agent_installation_tokens<br/>Tokens principales]
+        ATUH[agent_token_usage_history<br/>Historial de uso]
+        ASSETS[assets<br/>Equipos registrados]
+        CLIENTS[clients<br/>Organizaciones]
+        SITES[sites<br/>Sitios/Ubicaciones]
+        USERS[users<br/>Usuarios del sistema]
+    end
+    
+    subgraph "🖥️ Agente Cliente (Futuro)"
+        AC[Agent Client<br/>Python/Go/C#]
+        REG[Registration Module<br/>Token-based]
+        HB[Heartbeat Module<br/>Status Updates]
+        MON[Monitoring Module<br/>System Metrics]
+        TRAY[System Tray UI<br/>User Interface]
+        TICKET[Ticket Creator<br/>Canal: agente]
+    end
+    
+    %% Frontend Flow
+    UI --> AS
+    AS --> COMP
+    COMP --> UI
+    PORTAL --> ASSETS
+    ASSETS --> AR
+    
+    %% Backend Flow
+    AS --> AR
+    AR --> ASV
+    ASV --> DB
+    AR --> AUTH
+    
+    %% Database Relationships
+    DB --> AIT
+    DB --> ATUH
+    DB --> ASSETS
+    AIT --> CLIENTS
+    AIT --> SITES
+    AIT --> USERS
+    ATUH --> AIT
+    ASSETS --> CLIENTS
+    ASSETS --> SITES
+    
+    %% Agent Flow (Future)
+    AC --> REG
+    REG --> AR
+    AC --> HB
+    HB --> AR
+    AC --> MON
+    MON --> AR
+    AC --> TRAY
+    TRAY --> TICKET
+    TICKET --> AR
+    
+    %% Styling
+    classDef frontend fill:#e1f5fe
+    classDef backend fill:#f3e5f5
+    classDef database fill:#e8f5e8
+    classDef agent fill:#fff3e0
+    
+    class UI,AS,COMP,PORTAL,ASSETS frontend
+    class AR,ASV,DB,AUTH backend
+    class AIT,ATUH,ASSETS,CLIENTS,SITES,USERS database
+    class AC,REG,HB,MON,TRAY,TICKET agent

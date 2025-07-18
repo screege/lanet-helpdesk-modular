@@ -1,0 +1,41 @@
+{
+  "server": {
+    "base_url": "http://localhost:5001/api",
+    "production_url": "https://helpdesk.lanet.mx/api",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "verify_ssl": true,
+    "environment": "development"
+  },
+  "agent": {
+    "heartbeat_interval": 14400,
+    "inventory_interval": 3600,
+    "metrics_interval": 3600,
+    "log_level": "INFO",
+    "auto_start": true,
+    "version": "1.0.0"
+  },
+  "ui": {
+    "show_notifications": true,
+    "minimize_to_tray": true,
+    "auto_hide_after": 5000,
+    "language": "es"
+  },
+  "monitoring": {
+    "cpu_threshold": 90,
+    "memory_threshold": 85,
+    "disk_threshold": 90,
+    "collect_logs": true,
+    "max_log_entries": 100
+  },
+  "security": {
+    "require_approval_for_scripts": true,
+    "allow_remote_assistance": true,
+    "encrypt_communications": true
+  },
+  "database": {
+    "local_db_path": "data/agent.db",
+    "backup_interval": 86400,
+    "max_backup_files": 7
+  }
+}

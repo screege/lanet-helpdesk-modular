@@ -1,0 +1,148 @@
+# Solución para Error 401 y Refactorización de API
+
+Este documento detalla el análisis y la solución para el error `401 (UNAUTHORIZED)` y cómo alinear el código con la arquitectura del proyecto (`helpdesk_msp_architecture.md`).
+
+## 1. Diagnóstico Detallado
+
+*   **Problema Principal:** El backend rechaza la solicitud a `GET /api/assets/` con un error 401 porque no recibe el token de autenticación JWT. El mensaje del servidor es explícito: `{error: 'Authorization token required', ...}`.
+
+*   **Causa Raíz Arquitectónica:** Las llamadas a la API se están realizando de una manera que no sigue la **capa de servicios obligatoria** definida en tu documento `helpdesk_msp_architecture.md`. Probablemente se está usando `axios` directamente desde componentes o contextos, lo que hace difícil y repetitivo adjuntar el token de autenticación a cada solicitud.
+
+*   **Lo que no es:** No es un problema de CORS. Si lo fuera, el error en la consola del navegador sería diferente y mencionaría la política `Access-Control-Allow-Origin`.
+
+## 2. Solución Propuesta (Alineada con tu Arquitectura)
+
+La solución es implementar correctamente la capa de servicios, centralizando toda la comunicación con la API a través de un **cliente de Axios configurado con un interceptor**. Este interceptor se encargará de adjuntar el token JWT a *todas* las peticiones de forma automática.
+
+### Paso 1: Crear el Cliente de API Central (`apiClient.ts`)
+
+Este es el corazón de la solución. Crea este archivo, que actuará como el único punto de configuración para las llamadas a la API.
+
+**Ruta del archivo:** `C:\lanet-helpdesk-v3\frontend\src\api\apiClient.ts`
+
+```typescript
+import axios from 'axios';
+import Cookies from 'js-cookie';
+
+// Define la URL base de tu API. Es una buena práctica sacarla de variables de entorno.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+
+// 1. Crea una instancia de Axios centralizada.
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+});
+
+// 2. Agrega un INTERCEPTOR de solicitudes.
+// Esta función se ejecutará ANTES de que cada solicitud sea enviada.
+apiClient.interceptors.request.use(
+  (config) => {
+    // Obtiene el token de las cookies (asegúrate de que el nombre 'authToken' sea el mismo que usas al guardar el token en el login).
+    const token = Cookies.get('authToken');
+
+    if (token) {
+      // Si el token existe, lo añade a la cabecera 'Authorization'.
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    return config; // Devuelve la configuración modificada.
+  },
+  (error) => {
+    // Maneja errores de la configuración de la solicitud.
+    return Promise.reject(error);
+  }
+);
+
+// 3. (Opcional pero recomendado) Agrega un INTERCEPTOR de respuestas para manejar errores 401 globalmente.
+// Esto es útil para, por ejemplo, redirigir al login si el token expira.
+apiClient.interceptors.response.use(
+  (response) => response, // Si la respuesta es exitosa (2xx), la deja pasar.
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Si el error es 401 (Unauthorized)...
+      console.error("Token inválido o expirado. Limpiando sesión.");
+      // Limpia el token de la cookie.
+      Cookies.remove('authToken'); 
+      // Redirige al usuario a la página de login.
+      window.location.href = '/login'; 
+    }
+    return Promise.reject(error); // Rechaza la promesa para que el .catch() del componente también se active.
+  }
+);
+
+export default apiClient;
+```
+
+### Paso 2: Refactorizar las Llamadas a la API usando Servicios
+
+Ahora, en lugar de usar `axios` directamente, debes usar la instancia `apiClient` que acabas de crear. La mejor manera de hacerlo es a través de una capa de servicios, como indica tu arquitectura.
+
+**Crea un servicio para los activos:**
+
+**Ruta del archivo:** `C:\lanet-helpdesk-v3\frontend\src\services\assetsService.ts`
+```typescript
+import apiClient from '../api/apiClient'; // <-- Importa la instancia configurada
+import { Asset } from '../types'; // <-- Asume que tienes una interfaz de tipo Asset
+
+export const getAllAssets = async (): Promise<Asset[]> => {
+  try {
+    // Usa apiClient, que ya tiene el interceptor con el token.
+    const response = await apiClient.get('/assets/');
+    return response.data.assets || []; // Devuelve los datos de los activos.
+  } catch (error) {
+    console.error('Error al obtener los activos en el servicio:', error);
+    // El error ya fue manejado globalmente por el interceptor, pero puedes lanzarlo de nuevo si necesitas manejarlo en el componente.
+    throw error;
+  }
+};
+
+// Puedes añadir más funciones de servicio aquí...
+// export const getAssetById = async (id: string): Promise<Asset> => { ... };
+```
+
+### Paso 3: Usar el Servicio en el Componente `Assets.tsx`
+
+Finalmente, modifica tu componente para que use la función del servicio, en lugar de hacer la llamada a `axios` directamente. Esto hace tu componente mucho más limpio y enfocado en la UI.
+
+**Ejemplo de refactorización en `Assets.tsx`:**
+```typescript
+// En tu componente Assets.tsx
+import { useEffect, useState } from 'react';
+import { getAllAssets } from '../services/assetsService'; // <-- Importa la función del servicio
+
+const Assets = () => {
+  const [assets, setAssets] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAssets = async () => {
+      try {
+        const assetsData = await getAllAssets(); // <-- ¡Llamada limpia y centralizada!
+        setAssets(assetsData);
+      } catch (error) {
+        // El error ya fue manejado por el interceptor (redirige si es 401).
+        // Aquí puedes manejar otros errores (ej. 500) mostrando un mensaje al usuario.
+        console.error("Error en el componente Assets al obtener los datos.", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAssets();
+  }, []);
+
+  // ... resto de tu componente para renderizar los datos ...
+};
+```
+
+## 3. Verificación
+
+1.  **Limpia las cookies y el caché** de tu navegador.
+2.  **Inicia sesión** en tu aplicación.
+3.  **Verifica en las herramientas de desarrollador** (Pestaña `Application` -> `Cookies`) que la cookie `authToken` se haya creado.
+4.  **Navega a la página de `/assets`**.
+5.  **Revisa la pestaña `Network`**. La solicitud a `/api/assets/` ahora debería:
+    *   Tener un código de estado `200 OK`.
+    *   En la sección `Request Headers`, incluir la cabecera: `Authorization: Bearer tu-jwt-token-aqui`.
+
+Con estos cambios, el problema estará resuelto y tu código será más robusto, seguro y fácil de mantener, cumpliendo con la arquitectura que tú mismo definiste.
+

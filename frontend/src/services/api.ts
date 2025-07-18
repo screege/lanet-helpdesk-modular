@@ -2,8 +2,9 @@ import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { ApiResponse, AuthTokens, LoginCredentials, User } from '@/types';
 
 class ApiService {
-  private api: AxiosInstance;
+  public api: AxiosInstance;
   private baseURL = '/api'; // Use Vite proxy
+  private directBackendURL = 'http://localhost:5001/api'; // Direct backend for auth issues
 
   constructor() {
     this.api = axios.create({
@@ -60,7 +61,7 @@ class ApiService {
   }
 
   // Token management
-  private getAccessToken(): string | null {
+  getAccessToken(): string | null {
     return localStorage.getItem('access_token');
   }
 
@@ -307,3 +308,5 @@ class ApiService {
 
 export const apiService = new ApiService();
 export default apiService;
+
+// Assets API - Now handled by assetsService using centralized apiClient
