@@ -307,10 +307,82 @@ class AgentsService:
                 raise ValueError("Token not found")
             
             return self._format_token_data(token)
-            
+
         except Exception as e:
             self.logger.error(f"Error getting token by ID {token_id}: {e}")
             raise
+
+    def validate_token_for_installation(self, token_value: str) -> Dict[str, Any]:
+        """
+        Validate an installation token and return client/site information for installation UI
+
+        Args:
+            token_value: Installation token value
+
+        Returns:
+            Dict with validation result and client/site information
+        """
+        try:
+            # Validate token using database function
+            validation_result = self.db.execute_query(
+                "SELECT * FROM validate_agent_token(%s)",
+                (token_value,),
+                fetch='one'
+            )
+
+            if not validation_result['is_valid']:
+                return {
+                    'is_valid': False,
+                    'error_message': validation_result['error_message']
+                }
+
+            # Get detailed client and site information
+            client_site_query = """
+            SELECT
+                c.client_id,
+                c.name as client_name,
+                c.rfc as client_rfc,
+                s.site_id,
+                s.name as site_name,
+                s.address as site_address,
+                s.city as site_city,
+                s.state as site_state
+            FROM clients c
+            JOIN sites s ON s.client_id = c.client_id
+            WHERE c.client_id = %s AND s.site_id = %s
+            """
+
+            client_site = self.db.execute_query(
+                client_site_query,
+                (validation_result['client_id'], validation_result['site_id']),
+                fetch='one'
+            )
+
+            if not client_site:
+                return {
+                    'is_valid': False,
+                    'error_message': 'Client or site not found'
+                }
+
+            return {
+                'is_valid': True,
+                'client_id': str(client_site['client_id']),
+                'client_name': client_site['client_name'],
+                'client_rfc': client_site['client_rfc'],
+                'site_id': str(client_site['site_id']),
+                'site_name': client_site['site_name'],
+                'site_address': client_site['site_address'],
+                'site_city': client_site['site_city'],
+                'site_state': client_site['site_state'],
+                'token_value': token_value
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error validating token for installation: {e}")
+            return {
+                'is_valid': False,
+                'error_message': 'Error validating token'
+            }
 
     def register_agent_with_token(self, token_value: str, hardware_info: Dict[str, Any],
                                  ip_address: str, user_agent: str) -> Dict[str, Any]:

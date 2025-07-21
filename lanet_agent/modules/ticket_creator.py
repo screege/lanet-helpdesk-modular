@@ -70,7 +70,7 @@ class TicketCreatorModule:
             server_url = self.config.get_server_url()
             
             # Try the agent-specific endpoint first
-            ticket_url = f"{server_url}/tickets/create-from-agent"
+            ticket_url = f"{server_url}/agents/create-ticket"
             
             # Send ticket creation request
             response = self.session.post(

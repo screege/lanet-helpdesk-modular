@@ -209,7 +209,9 @@ def create_app(config_name='development'):
     app.register_blueprint(email_bp, url_prefix='/api/email')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
     app.register_blueprint(agents_bp, url_prefix='/api/agents')
+    print(f"Registering assets blueprint: {assets_bp}", flush=True)
     app.register_blueprint(assets_bp, url_prefix='/api/assets')
+    print("Assets blueprint registered successfully", flush=True)
 
     # Initialize monthly reports scheduler (but don't start it automatically)
     monthly_scheduler.init_app(app)
@@ -228,9 +230,9 @@ def create_app(config_name='development'):
     def forbidden(error):
         return app.response_manager.error('Forbidden', 403)
     
-    @app.errorhandler(404)
-    def not_found(error):
-        return app.response_manager.error('Resource not found', 404)
+    # @app.errorhandler(404)
+    # def not_found(error):
+    #     return app.response_manager.error('Resource not found', 404)
     
     @app.errorhandler(500)
     def internal_error(error):

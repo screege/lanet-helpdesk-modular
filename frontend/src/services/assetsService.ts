@@ -144,7 +144,7 @@ class AssetsService {
   async getAssetDetail(assetId: string): Promise<{ asset: AssetDetail }> {
     try {
       const response = await apiClient.get(`/assets/${assetId}/detail`);
-      return response.data as { asset: AssetDetail };
+      return response.data.data as { asset: AssetDetail };
     } catch (error: any) {
       console.error('Error fetching asset detail:', error);
       throw new Error(error.response?.data?.message || 'Failed to fetch asset detail');
@@ -210,6 +210,90 @@ class AssetsService {
     } catch (error: any) {
       console.error('Error fetching all assets:', error);
       throw new Error(error.response?.data?.message || error.message || 'Failed to fetch assets');
+    }
+  }
+
+  /**
+   * Get organized dashboard for technicians
+   */
+  async getTechnicianDashboard(): Promise<{
+    overall_summary: any;
+    client_summaries: any[];
+    alerts: any[];
+  }> {
+    try {
+      const response = await apiClient.get('/assets/dashboard/technician');
+      return response.data.data as any;
+    } catch (error: any) {
+      console.error('Error fetching technician dashboard:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch technician dashboard');
+    }
+  }
+
+  /**
+   * Get filtered assets for technicians
+   */
+  async getFilteredAssets(params?: {
+    client_id?: string;
+    site_id?: string;
+    status?: string;
+    search?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<{
+    assets: Asset[];
+    pagination: {
+      total: number;
+      page: number;
+      per_page: number;
+      total_pages: number;
+      has_next: boolean;
+      has_prev: boolean;
+    };
+  }> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.client_id) queryParams.append('client_id', params.client_id);
+      if (params?.site_id) queryParams.append('site_id', params.site_id);
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.page) queryParams.append('page', params.page.toString());
+      if (params?.per_page) queryParams.append('per_page', params.per_page.toString());
+
+      const response = await apiClient.get(`/assets/technician/filtered?${queryParams}`);
+      return response.data.data as any;
+    } catch (error: any) {
+      console.error('Error fetching filtered assets:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch filtered assets');
+    }
+  }
+
+  /**
+   * Get clients with assets (for filter dropdown)
+   */
+  async getClientsWithAssets(): Promise<{ clients: Array<{ client_id: string; client_name: string; asset_count: number }> }> {
+    try {
+      const response = await apiClient.get('/assets/clients');
+      return response.data.data as any;
+    } catch (error: any) {
+      console.error('Error fetching clients with assets:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch clients');
+    }
+  }
+
+  /**
+   * Get sites with assets (for filter dropdown)
+   */
+  async getSitesWithAssets(clientId?: string): Promise<{ sites: Array<{ site_id: string; site_name: string; client_id: string; client_name: string; asset_count: number }> }> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (clientId) queryParams.append('client_id', clientId);
+
+      const response = await apiClient.get(`/assets/sites?${queryParams}`);
+      return response.data.data as any;
+    } catch (error: any) {
+      console.error('Error fetching sites with assets:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch sites');
     }
   }
 

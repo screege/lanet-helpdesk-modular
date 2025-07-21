@@ -148,3 +148,8 @@ class ConfigManager:
                 "max_backup_files": 7
             }
         }
+
+    def reload(self):
+        """Reload configuration from file"""
+        self.logger.info("Reloading configuration...")
+        self.load_config()

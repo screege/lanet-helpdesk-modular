@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { assetsService } from '@/services/assetsService';
+import TechnicianDashboard from '@/components/assets/TechnicianDashboard';
 
 interface Asset {
   asset_id: string;
@@ -185,6 +186,11 @@ const Assets: React.FC = () => {
         <span className="ml-2">Cargando equipos...</span>
       </div>
     );
+  }
+
+  // Show technician dashboard for superadmin and technician roles
+  if (user?.role === 'superadmin' || user?.role === 'technician') {
+    return <TechnicianDashboard />;
   }
 
   return (

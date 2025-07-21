@@ -73,7 +73,10 @@ class AgentCore:
             if self.ui_enabled:
                 self.logger.info("Starting system tray UI...")
                 self._start_system_tray()
-            
+
+            # Start periodic checks
+            self._start_periodic_checks()
+
             self.logger.info("✅ Agent started successfully")
             return True
             
@@ -110,6 +113,38 @@ class AgentCore:
             
         except Exception as e:
             self.logger.error(f"Error stopping agent: {e}", exc_info=True)
+
+    def _start_periodic_checks(self):
+        """Start periodic system checks and automatic ticket creation"""
+        try:
+            def periodic_check_loop():
+                """Background thread for periodic checks"""
+                check_interval = self.config.get('monitoring.check_interval', 300)  # 5 minutes default
+
+                while self.running:
+                    try:
+                        # Check for system issues and create tickets if needed
+                        self.monitoring.check_for_issues_and_create_tickets()
+
+                        # Wait for next check
+                        for _ in range(check_interval):
+                            if not self.running:
+                                break
+                            time.sleep(1)
+
+                    except Exception as e:
+                        self.logger.error(f"Error in periodic check: {e}")
+                        time.sleep(60)  # Wait 1 minute before retrying
+
+            # Start periodic checks thread
+            periodic_thread = threading.Thread(target=periodic_check_loop, daemon=True)
+            periodic_thread.start()
+            self.threads.append(periodic_thread)
+
+            self.logger.info("Periodic checks started")
+
+        except Exception as e:
+            self.logger.error(f"Error starting periodic checks: {e}")
     
     def is_running(self) -> bool:
         """Check if agent is running"""

@@ -51,6 +51,15 @@ class MonitoringModule:
         self.disk_threshold = self.config.get('monitoring.disk_threshold', 90)
         
         self.logger.info("Monitoring module initialized")
+
+        # Thresholds for automatic ticket creation
+        self.cpu_threshold = self.config.get('monitoring.cpu_threshold', 90)
+        self.memory_threshold = self.config.get('monitoring.memory_threshold', 90)
+        self.disk_threshold = self.config.get('monitoring.disk_threshold', 90)
+        self.auto_ticket_enabled = self.config.get('monitoring.auto_ticket_enabled', True)
+
+        # Track last ticket creation to avoid spam
+        self.last_ticket_times = {}
     
     def start(self):
         """Start monitoring in background"""
@@ -549,3 +558,91 @@ class MonitoringModule:
 
         except Exception as e:
             self.logger.warning(f"System info detection failed: {e}")
+
+    def check_for_issues_and_create_tickets(self):
+        """Check system for issues and create tickets automatically if needed"""
+        if not self.auto_ticket_enabled:
+            return
+
+        try:
+            current_metrics = self.get_current_metrics()
+            if not current_metrics:
+                return
+
+            issues_found = []
+
+            # Check CPU usage
+            cpu_usage = current_metrics.get('cpu_usage', 0)
+            if cpu_usage > self.cpu_threshold:
+                issues_found.append({
+                    'type': 'cpu_high',
+                    'severity': 'alta' if cpu_usage > 95 else 'media',
+                    'subject': f'Alto uso de CPU detectado ({cpu_usage}%)',
+                    'description': f'El sistema está experimentando un alto uso de CPU del {cpu_usage}%. Esto puede afectar el rendimiento del equipo.',
+                    'value': cpu_usage
+                })
+
+            # Check Memory usage
+            memory_usage = current_metrics.get('memory_usage', 0)
+            if memory_usage > self.memory_threshold:
+                issues_found.append({
+                    'type': 'memory_high',
+                    'severity': 'alta' if memory_usage > 95 else 'media',
+                    'subject': f'Alto uso de memoria detectado ({memory_usage}%)',
+                    'description': f'El sistema está experimentando un alto uso de memoria del {memory_usage}%. Esto puede causar lentitud en el sistema.',
+                    'value': memory_usage
+                })
+
+            # Check Disk usage
+            for disk in current_metrics.get('disk_usage', []):
+                disk_usage = disk.get('usage_percent', 0)
+                if disk_usage > self.disk_threshold:
+                    issues_found.append({
+                        'type': 'disk_high',
+                        'severity': 'critica' if disk_usage > 95 else 'alta',
+                        'subject': f'Disco {disk.get("device", "desconocido")} casi lleno ({disk_usage}%)',
+                        'description': f'El disco {disk.get("device", "desconocido")} está {disk_usage}% lleno. Se recomienda liberar espacio urgentemente.',
+                        'value': disk_usage
+                    })
+
+            # Create tickets for issues found
+            for issue in issues_found:
+                self._create_automatic_ticket(issue)
+
+        except Exception as e:
+            self.logger.error(f"Error checking for issues: {e}")
+
+    def _create_automatic_ticket(self, issue: dict):
+        """Create an automatic ticket for a detected issue"""
+        try:
+            issue_type = issue['type']
+            current_time = time.time()
+
+            # Check if we've created a ticket for this issue recently (avoid spam)
+            last_ticket_time = self.last_ticket_times.get(issue_type, 0)
+            cooldown_period = 3600  # 1 hour cooldown
+
+            if current_time - last_ticket_time < cooldown_period:
+                self.logger.debug(f"Skipping ticket creation for {issue_type} - cooldown period active")
+                return
+
+            # Import ticket creator here to avoid circular imports
+            from modules.ticket_creator import TicketCreatorModule
+            ticket_creator = TicketCreatorModule(self.config, self.database)
+
+            # Create the ticket
+            success = ticket_creator.create_ticket(
+                subject=issue['subject'],
+                description=issue['description'],
+                priority=issue['severity'],
+                include_system_info=True
+            )
+
+            if success:
+                self.last_ticket_times[issue_type] = current_time
+                self.logger.info(f"Automatic ticket created for {issue_type}: {issue['subject']}")
+            else:
+                self.logger.error(f"Failed to create automatic ticket for {issue_type}")
+
+        except Exception as e:
+            self.logger.error(f"Error creating automatic ticket: {e}")

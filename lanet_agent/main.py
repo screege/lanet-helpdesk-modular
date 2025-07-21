@@ -59,6 +59,26 @@ def main():
                 print("❌ Agent registration failed!")
                 sys.exit(1)
             return
+
+        # Check if agent is already registered
+        if not agent.is_registered():
+            logger.info("Agent not registered, showing installation window...")
+
+            # Show installation window
+            from ui.installation_window import InstallationWindow
+            installation_window = InstallationWindow(config_manager, agent.database)
+
+            installation_success = installation_window.show()
+
+            if not installation_success:
+                logger.info("Installation cancelled by user")
+                print("Installation cancelled")
+                sys.exit(0)
+
+            logger.info("Installation completed, restarting agent...")
+            # Reload configuration after installation
+            config_manager.reload()
+            agent = AgentCore(config_manager, ui_enabled=not args.no_ui)
         
         # Handle test mode
         if args.test:

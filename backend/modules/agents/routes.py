@@ -165,6 +165,33 @@ def delete_token(token_id):
         return current_app.response_manager.server_error('Failed to delete token')
 
 # =====================================================
+# TOKEN VALIDATION ENDPOINTS
+# =====================================================
+
+@agents_bp.route('/validate-token', methods=['POST'])
+def validate_installation_token():
+    """Validate an installation token and return client/site information (no authentication required)"""
+    try:
+        data = request.get_json()
+        if not data:
+            return current_app.response_manager.bad_request('Request body required')
+
+        token_value = data.get('token')
+        if not token_value:
+            return current_app.response_manager.bad_request('token field required')
+
+        service = AgentsService(current_app.db_manager)
+        validation_result = service.validate_token_for_installation(token_value)
+
+        return current_app.response_manager.success(validation_result)
+
+    except ValueError as e:
+        return current_app.response_manager.bad_request(str(e))
+    except Exception as e:
+        current_app.logger.error(f"Error validating token: {e}")
+        return current_app.response_manager.server_error('Failed to validate token')
+
+# =====================================================
 # AGENT REGISTRATION ENDPOINTS
 # =====================================================
 
@@ -302,3 +329,90 @@ def agent_inventory_update():
     except Exception as e:
         current_app.logger.error(f"Error updating inventory: {e}")
         return current_app.response_manager.server_error('Failed to update inventory')
+
+@agents_bp.route('/create-ticket', methods=['POST'])
+@jwt_required()
+def create_ticket_from_agent():
+    """Create a ticket automatically from an agent"""
+    try:
+        data = request.get_json()
+        if not data:
+            return current_app.response_manager.bad_request('Request body required')
+
+        # Get current agent info
+        current_user_id = get_jwt_identity()
+
+        # Get agent information
+        agent_query = """
+        SELECT a.asset_id, a.name as asset_name, a.client_id, a.site_id,
+               c.name as client_name, s.name as site_name
+        FROM assets a
+        JOIN clients c ON a.client_id = c.client_id
+        JOIN sites s ON a.site_id = s.site_id
+        WHERE a.agent_user_id = %s AND a.is_active = true
+        """
+
+        agent_info = current_app.db_manager.execute_query(
+            agent_query, (current_user_id,), fetch='one'
+        )
+
+        if not agent_info:
+            return current_app.response_manager.bad_request('Agent not found or not associated with an asset')
+
+        # Validate required fields
+        required_fields = ['subject', 'description', 'priority']
+        for field in required_fields:
+            if not data.get(field):
+                return current_app.response_manager.bad_request(f'{field} is required')
+
+        # Get assigned technician for this client/site
+        technician_query = """
+        SELECT ta.technician_id
+        FROM technician_assignments ta
+        WHERE ta.client_id = %s AND ta.is_active = true
+        ORDER BY ta.is_primary DESC, ta.priority ASC
+        LIMIT 1
+        """
+
+        assigned_technician = current_app.db_manager.execute_query(
+            technician_query, (agent_info['client_id'],), fetch='one'
+        )
+
+        # Prepare ticket data
+        ticket_data = {
+            'client_id': str(agent_info['client_id']),
+            'site_id': str(agent_info['site_id']),
+            'asset_id': str(agent_info['asset_id']),
+            'created_by': current_user_id,
+            'assigned_to': assigned_technician['technician_id'] if assigned_technician else None,
+            'subject': data['subject'],
+            'description': f"[TICKET AUTOMÁTICO DESDE AGENTE]\n\n{data['description']}\n\n--- Información del Sistema ---\nEquipo: {agent_info['asset_name']}\nCliente: {agent_info['client_name']}\nSitio: {agent_info['site_name']}",
+            'affected_person': data.get('affected_person', 'Sistema Automático'),
+            'affected_person_contact': data.get('affected_person_contact', 'agente@sistema.local'),
+            'priority': data['priority'],
+            'channel': 'agente',
+            'category_id': data.get('category_id'),
+            'agent_auto_info': {
+                'asset_name': agent_info['asset_name'],
+                'client_name': agent_info['client_name'],
+                'site_name': agent_info['site_name'],
+                'created_automatically': True,
+                'agent_data': data.get('agent_data', {})
+            }
+        }
+
+        # Create ticket using tickets service
+        from modules.tickets.service import TicketsService
+        tickets_service = TicketsService(current_app.db_manager)
+
+        result = tickets_service.create_ticket(ticket_data)
+
+        if result:
+            current_app.logger.info(f"Automatic ticket created by agent {current_user_id}: {result.get('ticket_number')}")
+            return current_app.response_manager.success(result, 'Ticket created successfully from agent')
+        else:
+            return current_app.response_manager.server_error('Failed to create ticket from agent')
+
+    except Exception as e:
+        current_app.logger.error(f"Error creating ticket from agent: {e}")
+        return current_app.response_manager.server_error('Failed to create ticket from agent')
