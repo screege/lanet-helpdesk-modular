@@ -37,10 +37,28 @@ from modules.categories.routes import categories_bp
 from modules.dashboard.routes import dashboard_bp
 from modules.sla.routes import sla_bp
 from modules.email.routes import email_bp
-from modules.reports.routes import reports_bp
+# Import reports module with fallback to simple version
+try:
+    from modules.reports.routes import reports_bp
+    REPORTS_AVAILABLE = True
+    print("✅ Full reports module imported successfully")
+except Exception as e:
+    print(f"⚠️ Full reports module import failed: {e}")
+    print("🔄 Falling back to simplified reports module...")
+    try:
+        from modules.reports.routes_simple import reports_bp
+        REPORTS_AVAILABLE = True
+        print("✅ Simplified reports module imported successfully")
+    except Exception as e2:
+        print(f"❌ Simplified reports module import also failed: {e2}")
+        REPORTS_AVAILABLE = False
+        reports_bp = None
 from modules.agents.routes import agents_bp
 from modules.assets.routes import assets_bp
-from modules.reports.monthly_scheduler import monthly_scheduler
+# Monthly scheduler disabled for now due to pandas dependency
+SCHEDULER_AVAILABLE = False
+monthly_scheduler = None
+print("⚠️ Monthly scheduler disabled due to pandas dependency")
 
 def create_app(config_name='development'):
     """Application factory pattern"""
@@ -207,15 +225,24 @@ def create_app(config_name='development'):
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(sla_bp, url_prefix='/api/sla')
     app.register_blueprint(email_bp, url_prefix='/api/email')
-    app.register_blueprint(reports_bp, url_prefix='/api/reports')
+    # Register reports blueprint only if available
+    if REPORTS_AVAILABLE and reports_bp:
+        app.register_blueprint(reports_bp, url_prefix='/api/reports')
+        print("✅ Reports blueprint registered successfully")
+    else:
+        print("⚠️ Reports blueprint not registered due to import issues")
     app.register_blueprint(agents_bp, url_prefix='/api/agents')
     print(f"Registering assets blueprint: {assets_bp}", flush=True)
     app.register_blueprint(assets_bp, url_prefix='/api/assets')
     print("Assets blueprint registered successfully", flush=True)
 
     # Initialize monthly reports scheduler (but don't start it automatically)
-    monthly_scheduler.init_app(app)
-    app.logger.info("Monthly Reports Scheduler initialized")
+    # Initialize monthly reports scheduler only if available
+    if SCHEDULER_AVAILABLE and monthly_scheduler:
+        monthly_scheduler.init_app(app)
+        app.logger.info("Monthly Reports Scheduler initialized")
+    else:
+        app.logger.warning("Monthly Reports Scheduler not initialized due to import issues")
 
     # Global error handlers
     @app.errorhandler(400)
@@ -230,9 +257,9 @@ def create_app(config_name='development'):
     def forbidden(error):
         return app.response_manager.error('Forbidden', 403)
     
-    # @app.errorhandler(404)
-    # def not_found(error):
-    #     return app.response_manager.error('Resource not found', 404)
+    @app.errorhandler(404)
+    def not_found(error):
+        return app.response_manager.error('Resource not found', 404)
     
     @app.errorhandler(500)
     def internal_error(error):
