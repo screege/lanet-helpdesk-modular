@@ -54,11 +54,12 @@ def main():
             if success:
                 logger.info("✅ Agent registered successfully!")
                 print("✅ Agent registered successfully!")
+                print("🚀 Starting agent in normal operation mode...")
+                # Continue to normal operation after successful registration
             else:
                 logger.error("❌ Agent registration failed!")
                 print("❌ Agent registration failed!")
                 sys.exit(1)
-            return
 
         # Check if agent is already registered
         if not agent.is_registered():

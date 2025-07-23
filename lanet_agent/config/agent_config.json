@@ -5,11 +5,18 @@
     "timeout": 30,
     "retry_attempts": 3,
     "verify_ssl": true,
-    "environment": "development"
+    "environment": "development",
+    "heartbeat_interval": 60,
+    "inventory_interval": 3600,
+    "metrics_interval": 300,
+    "server_url": "https://helpdesk.lanet.mx/api",
+    "tokens_default_expiry_days": "30",
+    "tokens_enabled": "true",
+    "tokens_max_usage": "0"
   },
   "agent": {
-    "heartbeat_interval": 14400,
-    "inventory_interval": 3600,
+    "heartbeat_interval": 300,
+    "inventory_interval": 86400,
     "metrics_interval": 3600,
     "log_level": "INFO",
     "auto_start": true,

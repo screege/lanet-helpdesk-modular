@@ -239,7 +239,7 @@ def register_agent_with_token():
 
 @agents_bp.route('/heartbeat', methods=['POST'])
 def agent_heartbeat():
-    """Agent heartbeat endpoint (agent authentication required)"""
+    """Agent heartbeat endpoint with tiered data support (agent authentication required)"""
     try:
         data = request.get_json()
         if not data:
@@ -247,44 +247,167 @@ def agent_heartbeat():
 
         asset_id = data.get('asset_id')
         status = data.get('status', {})
+        heartbeat_type = data.get('heartbeat_type', 'full')  # 'status' or 'full'
         hardware_inventory = data.get('hardware_inventory')
         software_inventory = data.get('software_inventory')
 
         if not asset_id:
             return current_app.response_manager.bad_request('asset_id field required')
 
-        # Prepare update data
+        current_app.logger.info(f"📡 Received {heartbeat_type} heartbeat from asset {asset_id}")
+
+        # Handle tiered heartbeat processing
         import json
-        update_data = {'system_metrics': status}
+        import hashlib
 
-        # Add inventory data if provided
-        if hardware_inventory:
-            update_data['hardware_info'] = hardware_inventory
-            current_app.logger.info(f"Updating hardware inventory for asset {asset_id}")
+        if heartbeat_type == 'status':
+            # TIER 1: Lightweight status update (optimized for performance)
+            current_app.logger.info(f"Processing TIER 1 status heartbeat for {asset_id}")
 
-        if software_inventory:
-            update_data['software_info'] = software_inventory
-            current_app.logger.info(f"Updating software inventory for asset {asset_id}")
+            # Update optimized status table
+            status_update_query = """
+            INSERT INTO assets_status_optimized (
+                asset_id, agent_status, cpu_percent, memory_percent,
+                disk_percent, last_seen, last_heartbeat, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), NOW())
+            ON CONFLICT (asset_id) DO UPDATE SET
+                agent_status = EXCLUDED.agent_status,
+                cpu_percent = EXCLUDED.cpu_percent,
+                memory_percent = EXCLUDED.memory_percent,
+                disk_percent = EXCLUDED.disk_percent,
+                last_seen = EXCLUDED.last_seen,
+                last_heartbeat = EXCLUDED.last_heartbeat,
+                updated_at = EXCLUDED.updated_at
+            """
 
-        # Update asset with all data
-        update_query = """
-        UPDATE assets
-        SET last_seen = NOW(),
-            agent_status = 'online',
-            specifications = COALESCE(specifications, '{}')::jsonb || %s::jsonb
-        WHERE asset_id = %s
-        """
+            current_app.db_manager.execute_query(
+                status_update_query,
+                (
+                    asset_id,
+                    status.get('agent_status', 'online'),
+                    status.get('cpu_percent', 0),
+                    status.get('memory_percent', 0),
+                    status.get('disk_percent', 0)
+                ),
+                fetch='none'
+            )
 
-        current_app.db_manager.execute_query(
-            update_query,
-            (json.dumps(update_data), asset_id),
-            fetch='none'
-        )
+            # Return shorter interval for status heartbeats
+            return current_app.response_manager.success({
+                'status': 'ok',
+                'next_heartbeat': 300  # 5 minutes for status heartbeats
+            })
 
-        return current_app.response_manager.success({
-            'status': 'ok',
-            'next_heartbeat': 60  # seconds
-        })
+        else:
+            # TIER 2: Full heartbeat with inventory (less frequent)
+            current_app.logger.info(f"TIER 2: Processing full heartbeat for {asset_id}")
+            current_app.logger.info(f"Hardware inventory present: {bool(hardware_inventory)}")
+            current_app.logger.info(f"Software inventory present: {bool(software_inventory)}")
+
+            # Log SMART data if present
+            if hardware_inventory and 'disks' in hardware_inventory:
+                disks = hardware_inventory['disks']
+                current_app.logger.info(f"Found {len(disks)} disks in hardware inventory")
+                for i, disk in enumerate(disks):
+                    health = disk.get('health_status', 'Unknown')
+                    smart = disk.get('smart_status', 'Unknown')
+                    model = disk.get('model', 'Unknown')
+                    interface = disk.get('interface_type', 'Unknown')
+                    current_app.logger.info(f"  Disk {i+1}: {model} - Health: '{health}', SMART: '{smart}', Interface: '{interface}'")
+                    current_app.logger.info(f"    All disk keys: {list(disk.keys())}")
+            else:
+                current_app.logger.warning("No disk data found in hardware_inventory")
+
+            # Update status table
+            status_update_query = """
+            INSERT INTO assets_status_optimized (
+                asset_id, agent_status, cpu_percent, memory_percent,
+                disk_percent, last_seen, last_heartbeat, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), NOW())
+            ON CONFLICT (asset_id) DO UPDATE SET
+                agent_status = EXCLUDED.agent_status,
+                cpu_percent = EXCLUDED.cpu_percent,
+                memory_percent = EXCLUDED.memory_percent,
+                disk_percent = EXCLUDED.disk_percent,
+                last_seen = EXCLUDED.last_seen,
+                last_heartbeat = EXCLUDED.last_heartbeat,
+                updated_at = EXCLUDED.updated_at
+            """
+
+            current_app.db_manager.execute_query(
+                status_update_query,
+                (
+                    asset_id,
+                    status.get('agent_status', 'online'),
+                    status.get('cpu_usage', 0),
+                    status.get('memory_usage', 0),
+                    status.get('disk_usage', 0)
+                ),
+                fetch='none'
+            )
+
+            # Update inventory if provided
+            if hardware_inventory or software_inventory:
+                current_app.logger.info(f"Updating inventory snapshot for {asset_id}")
+
+                # Create inventory snapshot
+                inventory_data = {
+                    'hardware_info': hardware_inventory or {},
+                    'software_info': software_inventory or {}
+                }
+
+                inventory_hash = hashlib.md5(json.dumps(inventory_data, sort_keys=True).encode()).hexdigest()
+
+                # Insert new inventory snapshot
+                inventory_query = """
+                INSERT INTO assets_inventory_snapshots (
+                    asset_id, hardware_summary, software_summary,
+                    full_inventory_compressed, inventory_hash
+                ) VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (asset_id, version) DO NOTHING
+                """
+
+                import gzip
+                compressed_inventory = gzip.compress(json.dumps(inventory_data).encode())
+
+                current_app.db_manager.execute_query(
+                    inventory_query,
+                    (
+                        asset_id,
+                        json.dumps(hardware_inventory or {}),
+                        json.dumps(software_inventory or {}),
+                        compressed_inventory,
+                        inventory_hash
+                    ),
+                    fetch='none'
+                )
+
+                # Also update main assets table for backward compatibility
+                update_data = {'system_metrics': status}
+                if hardware_inventory:
+                    update_data['hardware_info'] = hardware_inventory
+                if software_inventory:
+                    update_data['software_info'] = software_inventory
+
+                legacy_update_query = """
+                UPDATE assets
+                SET last_seen = NOW(),
+                    agent_status = 'online',
+                    specifications = COALESCE(specifications, '{}')::jsonb || %s::jsonb
+                WHERE asset_id = %s
+                """
+
+                current_app.db_manager.execute_query(
+                    legacy_update_query,
+                    (json.dumps(update_data), asset_id),
+                    fetch='none'
+                )
+
+            # Return longer interval for full heartbeats
+            return current_app.response_manager.success({
+                'status': 'ok',
+                'next_heartbeat': 86400  # 24 hours for full heartbeats
+            })
 
     except Exception as e:
         current_app.logger.error(f"Error processing heartbeat: {e}")

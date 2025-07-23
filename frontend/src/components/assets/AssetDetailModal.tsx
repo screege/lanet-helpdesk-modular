@@ -265,10 +265,10 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, as
 
             {activeTab === 'hardware' && (
               <div className="space-y-4">
-                {assetDetails?.specifications?.hardware_info ? (
+                {assetDetails?.formatted_hardware ? (
                   <div className="space-y-4">
                     {/* System Information */}
-                    {assetDetails.specifications.hardware_info.system && (
+                    {assetDetails.formatted_hardware.system && (
                       <div>
                         <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                           <Cpu className="w-4 h-4 mr-2" />
@@ -276,17 +276,17 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, as
                         </h4>
                         <div className="bg-gray-50 p-3 rounded">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                            <div><span className="font-medium">Hostname:</span> {assetDetails.specifications.hardware_info.system.hostname}</div>
-                            <div><span className="font-medium">Plataforma:</span> {assetDetails.specifications.hardware_info.system.platform}</div>
-                            <div><span className="font-medium">Procesador:</span> {assetDetails.specifications.hardware_info.system.processor}</div>
-                            <div><span className="font-medium">Arquitectura:</span> {assetDetails.specifications.hardware_info.system.architecture}</div>
+                            <div><span className="font-medium">Hostname:</span> {assetDetails.formatted_hardware.system.hostname}</div>
+                            <div><span className="font-medium">Plataforma:</span> {assetDetails.formatted_hardware.system.platform}</div>
+                            <div><span className="font-medium">Procesador:</span> {assetDetails.formatted_hardware.system.processor}</div>
+                            <div><span className="font-medium">Arquitectura:</span> {assetDetails.formatted_hardware.system.architecture}</div>
                           </div>
                         </div>
                       </div>
                     )}
 
                     {/* Memory Information */}
-                    {assetDetails.specifications.hardware_info.memory && (
+                    {assetDetails.formatted_hardware.memory && (
                       <div>
                         <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                           <MemoryStick className="w-4 h-4 mr-2" />
@@ -294,29 +294,65 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, as
                         </h4>
                         <div className="bg-gray-50 p-3 rounded">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                            <div><span className="font-medium">Total:</span> {assetDetails.specifications.hardware_info.memory.total}</div>
-                            <div><span className="font-medium">Disponible:</span> {assetDetails.specifications.hardware_info.memory.available}</div>
-                            <div><span className="font-medium">Usado:</span> {assetDetails.specifications.hardware_info.memory.used}</div>
-                            <div><span className="font-medium">Porcentaje:</span> {assetDetails.specifications.hardware_info.memory.percent}%</div>
+                            <div><span className="font-medium">Total:</span> {assetDetails.formatted_hardware.memory.total_gb} GB</div>
+                            <div><span className="font-medium">Disponible:</span> {assetDetails.formatted_hardware.memory.available_gb} GB</div>
+                            <div><span className="font-medium">Usado:</span> {assetDetails.formatted_hardware.memory.used_gb} GB</div>
+                            <div><span className="font-medium">Porcentaje:</span> {assetDetails.formatted_hardware.memory.usage_percent}%</div>
                           </div>
+                          {/* Memory Modules */}
+                          {assetDetails.formatted_hardware.memory.modules && assetDetails.formatted_hardware.memory.modules.length > 0 && (
+                            <div className="mt-3">
+                              <h5 className="font-medium text-gray-700 mb-2">Módulos de Memoria ({assetDetails.formatted_hardware.memory.modules.length})</h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {assetDetails.formatted_hardware.memory.modules.map((module: any, index: number) => (
+                                  <div key={index} className="bg-white p-2 rounded border text-xs">
+                                    <div><span className="font-medium">Slot {index + 1}:</span> {module.capacity_gb} GB</div>
+                                    <div><span className="font-medium">Fabricante:</span> {module.manufacturer}</div>
+                                    <div><span className="font-medium">Velocidad:</span> {module.speed_mhz} MHz</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
 
                     {/* Disk Information */}
-                    {assetDetails.specifications.hardware_info.disk && (
+                    {assetDetails.formatted_hardware.disks && assetDetails.formatted_hardware.disks.length > 0 && (
                       <div>
                         <h4 className="font-medium text-gray-900 mb-2 flex items-center">
                           <HardDrive className="w-4 h-4 mr-2" />
                           Almacenamiento
                         </h4>
-                        <div className="space-y-2">
-                          {assetDetails.specifications.hardware_info.disk.map((disk: any, index: number) => (
+                        <div className="space-y-3">
+                          {assetDetails.formatted_hardware.disks.map((disk: any, index: number) => (
                             <div key={index} className="bg-gray-50 p-3 rounded">
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                                <div><span className="font-medium">Dispositivo:</span> {disk.device}</div>
-                                <div><span className="font-medium">Total:</span> {disk.total}</div>
-                                <div><span className="font-medium">Usado:</span> {disk.used} ({disk.percent}%)</div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-1 text-sm">
+                                  <div><span className="font-medium">Dispositivo:</span> {disk.device}</div>
+                                  <div><span className="font-medium">Tipo:</span> {disk.fstype || 'N/A'}</div>
+                                  <div><span className="font-medium">Total:</span> {disk.total_gb} GB</div>
+                                  <div><span className="font-medium">Usado:</span> {disk.used_gb} GB ({disk.usage_percent}%)</div>
+                                </div>
+                                <div className="space-y-1 text-sm">
+                                  {disk.model && <div><span className="font-medium">Modelo:</span> {disk.model}</div>}
+                                  {disk.serial_number && <div><span className="font-medium">Serie:</span> {disk.serial_number}</div>}
+                                  {disk.interface_type && <div><span className="font-medium">Interfaz:</span> {disk.interface_type}</div>}
+                                  <div>
+                                    <span className="font-medium">Estado SMART:</span>
+                                    <span className={`ml-1 px-2 py-1 rounded text-xs ${
+                                      disk.health_status === 'OK' ? 'bg-green-100 text-green-800' :
+                                      disk.health_status === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-red-100 text-red-800'
+                                    }`}>
+                                      {disk.health_status || 'Desconocido'}
+                                    </span>
+                                  </div>
+                                  {disk.temperature && disk.temperature !== 'Not available' && (
+                                    <div><span className="font-medium">Temperatura:</span> {disk.temperature}°C</div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -338,62 +374,174 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, as
 
             {activeTab === 'software' && (
               <div className="space-y-4">
-                <div className="text-center py-8">
-                  <HardDrive className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">Información de software</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Esta funcionalidad estará disponible próximamente.
-                  </p>
-                </div>
+                {assetDetails?.specifications?.software_info ? (
+                  <div className="space-y-4">
+                    {/* Operating System */}
+                    {assetDetails.specifications.software_info.operating_system && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                          <Monitor className="w-4 h-4 mr-2" />
+                          Sistema Operativo
+                        </h4>
+                        <div className="bg-gray-50 p-3 rounded">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div><span className="font-medium">Nombre:</span> {assetDetails.specifications.software_info.operating_system.name}</div>
+                            <div><span className="font-medium">Versión:</span> {assetDetails.specifications.software_info.operating_system.version}</div>
+                            <div><span className="font-medium">Arquitectura:</span> {assetDetails.specifications.software_info.operating_system.architecture}</div>
+                            <div><span className="font-medium">Build:</span> {assetDetails.specifications.software_info.operating_system.build}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* System Information */}
+                    {assetDetails.specifications.software_info.system_info && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                          <Cpu className="w-4 h-4 mr-2" />
+                          Información del Sistema
+                        </h4>
+                        <div className="bg-gray-50 p-3 rounded">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            <div><span className="font-medium">Nombre del Equipo:</span> {assetDetails.specifications.software_info.system_info.computer_name}</div>
+                            <div><span className="font-medium">Arquitectura:</span> {assetDetails.specifications.software_info.system_info.architecture}</div>
+                            <div><span className="font-medium">Procesador:</span> {assetDetails.specifications.software_info.system_info.processor}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Installed Programs */}
+                    {assetDetails.specifications.software_info.installed_programs && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                          <HardDrive className="w-4 h-4 mr-2" />
+                          Programas Instalados ({assetDetails.specifications.software_info.installed_programs.length})
+                        </h4>
+                        <div className="bg-gray-50 p-3 rounded max-h-96 overflow-y-auto">
+                          <div className="space-y-2">
+                            {assetDetails.specifications.software_info.installed_programs.map((program: any, index: number) => (
+                              <div key={index} className="flex justify-between items-center py-2 px-3 bg-white rounded border">
+                                <div className="flex-1">
+                                  <div className="font-medium text-sm text-gray-900">{program.name}</div>
+                                  <div className="text-xs text-gray-500">
+                                    Versión: {program.version || 'N/A'} | Editor: {program.publisher || 'N/A'}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Python Information */}
+                    {assetDetails.specifications.software_info.python && (
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                          <Activity className="w-4 h-4 mr-2" />
+                          Python
+                        </h4>
+                        <div className="bg-gray-50 p-3 rounded">
+                          <div className="text-sm">
+                            <div><span className="font-medium">Versión:</span> {assetDetails.specifications.software_info.python.version}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <HardDrive className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No hay información de software</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      La información de software no está disponible para este equipo.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === 'metrics' && (
               <div className="space-y-4">
-                {assetDetails?.specifications?.system_metrics ? (
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2 flex items-center">
-                        <Activity className="w-4 h-4 mr-2" />
-                        Métricas Actuales
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <div className="text-sm">
-                            <div className="font-medium text-blue-900">CPU</div>
-                            <div className="text-2xl font-bold text-blue-600">
-                              {assetDetails.specifications.system_metrics.cpu_usage || 0}%
-                            </div>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                      <Activity className="w-4 h-4 mr-2" />
+                      Métricas en Tiempo Real
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <div className="text-sm">
+                          <div className="font-medium text-blue-900">CPU</div>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {assetDetails?.cpu_percent || 0}%
                           </div>
+                          <div className="text-xs text-blue-700 mt-1">Uso actual del procesador</div>
                         </div>
-                        <div className="bg-green-50 p-4 rounded-lg">
-                          <div className="text-sm">
-                            <div className="font-medium text-green-900">Memoria</div>
-                            <div className="text-2xl font-bold text-green-600">
-                              {assetDetails.specifications.system_metrics.memory_usage || 0}%
-                            </div>
+                      </div>
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <div className="text-sm">
+                          <div className="font-medium text-green-900">Memoria</div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {assetDetails?.memory_percent || 0}%
                           </div>
+                          <div className="text-xs text-green-700 mt-1">Uso actual de RAM</div>
                         </div>
-                        <div className="bg-yellow-50 p-4 rounded-lg">
-                          <div className="text-sm">
-                            <div className="font-medium text-yellow-900">Disco</div>
-                            <div className="text-2xl font-bold text-yellow-600">
-                              {assetDetails.specifications.system_metrics.disk_usage || 0}%
-                            </div>
+                      </div>
+                      <div className="bg-yellow-50 p-4 rounded-lg">
+                        <div className="text-sm">
+                          <div className="font-medium text-yellow-900">Disco</div>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {assetDetails?.disk_percent || 0}%
                           </div>
+                          <div className="text-xs text-yellow-700 mt-1">Uso del disco principal</div>
                         </div>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Activity className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No hay métricas disponibles</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Las métricas del sistema no están disponibles para este equipo.
-                    </p>
+
+                  {/* Additional System Info */}
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+                      <Clock className="w-4 h-4 mr-2" />
+                      Información del Sistema
+                    </h4>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium text-gray-700">Estado de Conexión:</span>
+                          <span className={`ml-2 px-2 py-1 rounded text-xs ${
+                            assetDetails?.connection_status === 'online' ? 'bg-green-100 text-green-800' :
+                            assetDetails?.connection_status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {assetDetails?.connection_status === 'online' ? 'En línea' :
+                             assetDetails?.connection_status === 'warning' ? 'Advertencia' : 'Desconectado'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Último Heartbeat:</span>
+                          <span className="ml-2 text-gray-600">
+                            {assetDetails?.last_heartbeat ? formatLastSeen(assetDetails.last_heartbeat) : 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Última Actualización:</span>
+                          <span className="ml-2 text-gray-600">
+                            {formatLastSeen(assetDetails?.last_seen || asset.last_seen)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Alertas Activas:</span>
+                          <span className="ml-2 text-gray-600">
+                            {assetDetails?.alert_count || 0}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
           </div>

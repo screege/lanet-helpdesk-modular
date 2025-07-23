@@ -126,13 +126,22 @@ const FilteredAssetsList: React.FC<FilteredAssetsListProps> = ({ filters, onAsse
     return date.toLocaleDateString('es-MX');
   };
 
-  const getSystemSpecs = (specifications: any) => {
-    if (!specifications) return { cpu: 'N/A', ram: 'N/A' };
-    
-    const cpu = specifications.cpu_usage ? `${specifications.cpu_usage}%` : 'N/A';
-    const ram = specifications.memory_usage ? `${specifications.memory_usage}%` : 'N/A';
-    
-    return { cpu, ram };
+  const getSystemSpecs = (asset: any) => {
+    // Try to get real-time metrics first (from optimized table)
+    if (asset.cpu_percent !== null && asset.cpu_percent !== undefined) {
+      const cpu = `${asset.cpu_percent}%`;
+      const ram = asset.memory_percent !== null ? `${asset.memory_percent}%` : 'N/A';
+      return { cpu, ram };
+    }
+
+    // Fallback to specifications (legacy data)
+    if (asset.specifications) {
+      const cpu = asset.specifications.cpu_usage ? `${asset.specifications.cpu_usage}%` : 'N/A';
+      const ram = asset.specifications.memory_usage ? `${asset.specifications.memory_usage}%` : 'N/A';
+      return { cpu, ram };
+    }
+
+    return { cpu: 'N/A', ram: 'N/A' };
   };
 
   const handlePageChange = (newPage: number) => {
@@ -213,7 +222,7 @@ const FilteredAssetsList: React.FC<FilteredAssetsListProps> = ({ filters, onAsse
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {assets.map((asset) => {
-                  const specs = getSystemSpecs(asset.specifications);
+                  const specs = getSystemSpecs(asset);
                   return (
                     <tr key={asset.asset_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">

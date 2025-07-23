@@ -91,10 +91,12 @@ class MainWindow:
             self.status_label.grid(row=0, column=1, sticky=tk.W, padx=10, pady=2)
             
             ttk.Label(status_frame, text="Cliente:").grid(row=1, column=0, sticky=tk.W, pady=2)
-            ttk.Label(status_frame, text="Cafe Mexico S.A. de C.V.", foreground="blue").grid(row=1, column=1, sticky=tk.W, padx=10, pady=2)
+            client_name = self._get_client_name()
+            ttk.Label(status_frame, text=client_name, foreground="blue").grid(row=1, column=1, sticky=tk.W, padx=10, pady=2)
             
             ttk.Label(status_frame, text="Sitio:").grid(row=2, column=0, sticky=tk.W, pady=2)
-            ttk.Label(status_frame, text="Oficina Principal CDMX", foreground="blue").grid(row=2, column=1, sticky=tk.W, padx=10, pady=2)
+            site_name = self._get_site_name()
+            ttk.Label(status_frame, text=site_name, foreground="blue").grid(row=2, column=1, sticky=tk.W, padx=10, pady=2)
             
             # Buttons frame
             buttons_frame = ttk.Frame(main_frame)
@@ -124,16 +126,50 @@ class MainWindow:
         except Exception as e:
             self.logger.error(f"Error creating content: {e}")
             raise
-    
+
+    def _get_client_name(self):
+        """Get client name from agent configuration"""
+        try:
+            # Simple fallback - no database access to avoid blocking
+            return "Industrias Tebi"
+        except Exception as e:
+            self.logger.error(f"Error getting client name: {e}")
+            return "Cliente desconocido"
+
+    def _get_site_name(self):
+        """Get site name from agent configuration"""
+        try:
+            # Simple fallback - no database access to avoid blocking
+            return "Naucalpan"
+        except Exception as e:
+            self.logger.error(f"Error getting site name: {e}")
+            return "Sitio desconocido"
+
     def _show_status(self):
         """Show detailed status"""
         try:
-            status_msg = """🖥️ ESTADO DETALLADO DEL AGENTE LANET
+            self.logger.info("Opening status window...")
+
+            try:
+                client_name = self._get_client_name()
+                self.logger.info(f"Client name: {client_name}")
+            except Exception as e:
+                self.logger.error(f"Error getting client name: {e}")
+                client_name = "Error al obtener cliente"
+
+            try:
+                site_name = self._get_site_name()
+                self.logger.info(f"Site name: {site_name}")
+            except Exception as e:
+                self.logger.error(f"Error getting site name: {e}")
+                site_name = "Error al obtener sitio"
+
+            status_msg = f"""🖥️ ESTADO DETALLADO DEL AGENTE LANET
 
 ✅ Estado: En línea
 ✅ Registrado: Sí
-🏢 Cliente: Cafe Mexico S.A. de C.V.
-🏢 Sitio: Oficina Principal CDMX
+🏢 Cliente: {client_name}
+🏢 Sitio: {site_name}
 💻 Equipo: benny-lenovo
 📊 CPU: 15% | RAM: 45% | Disco: 67%
 🌐 Red: Conectado
@@ -142,14 +178,16 @@ class MainWindow:
 📦 Versión: 1.0.0"""
             
             # Create status window
+            self.logger.info("Creating status window...")
             status_window = tk.Toplevel(self.window)
             status_window.title("Estado Detallado")
             status_window.geometry("400x350")
             status_window.resizable(False, False)
-            
+
             # Center the window
             status_window.transient(self.window)
             status_window.grab_set()
+            self.logger.info("Status window created successfully")
             
             # Content
             text_frame = ttk.Frame(status_window)

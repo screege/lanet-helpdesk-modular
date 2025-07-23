@@ -35,8 +35,8 @@ class AgentCore:
         
         # Initialize modules
         self.registration = RegistrationModule(self.config, self.database)
-        self.heartbeat = HeartbeatModule(self.config, self.database)
         self.monitoring = MonitoringModule(self.config, self.database)
+        self.heartbeat = HeartbeatModule(self.config, self.database, self.monitoring)
         self.ticket_creator = TicketCreatorModule(self.config, self.database)
         
         # System tray UI (initialized later if enabled)

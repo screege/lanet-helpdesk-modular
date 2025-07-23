@@ -3,8 +3,7 @@ import { ApiResponse, AuthTokens, LoginCredentials, User } from '@/types';
 
 class ApiService {
   public api: AxiosInstance;
-  private baseURL = '/api'; // Use Vite proxy
-  private directBackendURL = 'http://localhost:5001/api'; // Direct backend for auth issues
+  private baseURL = '/api'; // Always use relative path for proxy/nginx
 
   constructor() {
     this.api = axios.create({

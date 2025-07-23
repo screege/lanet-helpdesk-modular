@@ -498,6 +498,30 @@ class AgentsService:
                 pass
             raise
 
+    def _check_existing_asset_by_name(self, computer_name: str) -> Optional[Dict]:
+        """Check if asset already exists based on computer name"""
+        try:
+            # Check by computer name
+            existing_asset = self.db.execute_query(
+                """SELECT asset_id, name, client_id, site_id
+                   FROM assets
+                   WHERE name = %s
+                   AND status = 'active'
+                   LIMIT 1""",
+                (f"{computer_name} (Agent)",),
+                fetch='one'
+            )
+
+            if existing_asset:
+                self.logger.info(f"Found existing asset by computer name: {computer_name}")
+                return existing_asset
+
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error checking existing asset: {e}")
+            return None
+
     def _log_token_usage(self, token_value: str, ip_address: str, user_agent: str,
                         computer_name: str, hardware_info: Dict[str, Any],
                         success: bool, asset_id: Optional[str], error_message: Optional[str]):

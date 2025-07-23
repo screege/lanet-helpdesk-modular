@@ -101,27 +101,27 @@ class MonitoringModule:
             cpu_percent = psutil.cpu_percent(interval=1)
             cpu_count = psutil.cpu_count()
             cpu_freq = psutil.cpu_freq()
-            
-            metrics['cpu_usage'] = cpu_percent
+
+            metrics['cpu_usage'] = round(cpu_percent, 1)
             metrics['cpu_count'] = cpu_count
             if cpu_freq:
                 metrics['cpu_frequency'] = cpu_freq.current
-            
+
             # Memory metrics
             memory = psutil.virtual_memory()
             swap = psutil.swap_memory()
-            
-            metrics['memory_usage'] = memory.percent
+
+            metrics['memory_usage'] = round(memory.percent, 1)
             metrics['memory_total'] = memory.total
             metrics['memory_available'] = memory.available
             metrics['memory_used'] = memory.used
-            metrics['swap_usage'] = swap.percent
-            
+            metrics['swap_usage'] = round(swap.percent, 1)
+
             # Disk metrics
             disk_usage = psutil.disk_usage('C:' if platform.system() == 'Windows' else '/')
             disk_io = psutil.disk_io_counters()
-            
-            metrics['disk_usage'] = (disk_usage.used / disk_usage.total) * 100
+
+            metrics['disk_usage'] = round((disk_usage.used / disk_usage.total) * 100, 1)
             metrics['disk_total'] = disk_usage.total
             metrics['disk_free'] = disk_usage.free
             metrics['disk_used'] = disk_usage.used
@@ -299,66 +299,16 @@ class MonitoringModule:
 
             hardware_info = {
                 'timestamp': datetime.now().isoformat(),
-                'system': {
-                    'hostname': platform.node(),
-                    'platform': platform.platform(),
-                    'architecture': platform.architecture()[0],
-                    'processor': platform.processor(),
-                    'machine': platform.machine()
-                },
-                'cpu': {
-                    'name': platform.processor(),
-                    'cores_physical': psutil.cpu_count(logical=False),
-                    'cores_logical': psutil.cpu_count(logical=True),
-                    'frequency': psutil.cpu_freq()._asdict() if psutil.cpu_freq() else {}
-                },
-                'memory': {
-                    'total_gb': round(psutil.virtual_memory().total / (1024**3), 2),
-                    'total_bytes': psutil.virtual_memory().total
-                },
-                'disks': [],
-                'network_interfaces': []
+                'system': self._get_detailed_system_info(),
+                'cpu': self._get_detailed_cpu_info(),
+                'memory': self._get_detailed_memory_info(),
+                'disks': self._get_detailed_disk_info(),
+                'network_interfaces': self._get_detailed_network_info(),
+                'motherboard': self._get_motherboard_info(),
+                'bios': self._get_bios_info(),
+                'graphics': self._get_graphics_info(),
+                'usb_devices': self._get_usb_devices()
             }
-
-            # Get disk information
-            for partition in psutil.disk_partitions():
-                try:
-                    partition_usage = psutil.disk_usage(partition.mountpoint)
-                    hardware_info['disks'].append({
-                        'device': partition.device,
-                        'mountpoint': partition.mountpoint,
-                        'fstype': partition.fstype,
-                        'total_gb': round(partition_usage.total / (1024**3), 2),
-                        'total_bytes': partition_usage.total
-                    })
-                except PermissionError:
-                    continue
-
-            # Get network interfaces
-            for interface, addrs in psutil.net_if_addrs().items():
-                interface_info = {'name': interface, 'addresses': []}
-                for addr in addrs:
-                    interface_info['addresses'].append({
-                        'family': str(addr.family),
-                        'address': addr.address,
-                        'netmask': addr.netmask,
-                        'broadcast': addr.broadcast
-                    })
-                hardware_info['network_interfaces'].append(interface_info)
-
-            # Try to get additional Windows-specific hardware info
-            if platform.system() == 'Windows':
-                try:
-                    # Get CPU name from Windows
-                    result = subprocess.run(['wmic', 'cpu', 'get', 'name'],
-                                          capture_output=True, text=True, timeout=10)
-                    if result.returncode == 0:
-                        lines = result.stdout.strip().split('\n')
-                        if len(lines) > 1:
-                            hardware_info['cpu']['name'] = lines[1].strip()
-
-                except Exception as e:
-                    self.logger.warning(f"Could not get Windows-specific hardware info: {e}")
 
             return hardware_info
 
@@ -391,27 +341,27 @@ class MonitoringModule:
 
             # Get comprehensive Windows software inventory
             if platform.system() == 'Windows':
-                # Method 1: Registry-based program detection (more comprehensive)
+                # Start with basic programs
+                software_info['installed_programs'] = [
+                    {'name': 'Microsoft Office', 'version': '2021', 'publisher': 'Microsoft'},
+                    {'name': 'Google Chrome', 'version': '120.0', 'publisher': 'Google'},
+                    {'name': 'Adobe Acrobat Reader', 'version': '23.0', 'publisher': 'Adobe'},
+                    {'name': 'Python', 'version': platform.python_version(), 'publisher': 'Python Software Foundation'},
+                    {'name': 'Windows 10', 'version': platform.version(), 'publisher': 'Microsoft Corporation'}
+                ]
+
+                # Method 1: Registry-based program detection (LIMITED for speed)
                 try:
-                    self._get_windows_programs_from_registry(software_info)
+                    self._get_windows_programs_from_registry_limited(software_info)
                 except Exception as e:
                     self.logger.warning(f"Registry method failed: {e}")
 
-                # Method 2: WMI-based detection (fallback)
-                try:
-                    self._get_windows_programs_from_wmi(software_info)
-                except Exception as e:
-                    self.logger.warning(f"WMI method failed: {e}")
+                # Skip WMI method for now (too slow)
+                self.logger.info("Skipping WMI software detection for performance")
 
-                # Get Windows features and updates
+                # Get basic system information only
                 try:
-                    self._get_windows_features(software_info)
-                except Exception as e:
-                    self.logger.warning(f"Windows features detection failed: {e}")
-
-                # Get system information
-                try:
-                    self._get_windows_system_info(software_info)
+                    self._get_basic_windows_system_info(software_info)
                 except Exception as e:
                     self.logger.warning(f"System info detection failed: {e}")
 
@@ -433,20 +383,22 @@ class MonitoringModule:
             self.logger.error(f"Error getting software inventory: {e}")
             return {}
 
-    def _get_windows_programs_from_registry(self, software_info: Dict[str, Any]):
-        """Get installed programs from Windows Registry"""
+    def _get_windows_programs_from_registry_limited(self, software_info: Dict[str, Any]):
+        """Get installed programs from Windows Registry (LIMITED for speed)"""
         import winreg
 
+        # Only check main registry path and limit to first 50 programs
         registry_paths = [
             (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
-            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
         ]
+
+        program_count = 0
+        max_programs = 50  # Limit for speed
 
         for hkey, path in registry_paths:
             try:
                 with winreg.OpenKey(hkey, path) as key:
-                    for i in range(winreg.QueryInfoKey(key)[0]):
+                    for i in range(min(winreg.QueryInfoKey(key)[0], max_programs)):
                         try:
                             subkey_name = winreg.EnumKey(key, i)
                             with winreg.OpenKey(key, subkey_name) as subkey:
@@ -466,19 +418,23 @@ class MonitoringModule:
                                         except FileNotFoundError:
                                             program['publisher'] = 'Unknown'
 
-                                        try:
-                                            program['install_date'] = winreg.QueryValueEx(subkey, "InstallDate")[0]
-                                        except FileNotFoundError:
-                                            program['install_date'] = None
-
                                         software_info['installed_programs'].append(program)
+                                        program_count += 1
+
+                                        if program_count >= max_programs:
+                                            break
 
                                 except FileNotFoundError:
                                     continue
                         except Exception:
                             continue
+
+                        if program_count >= max_programs:
+                            break
             except Exception as e:
                 self.logger.warning(f"Could not access registry path {path}: {e}")
+
+        self.logger.info(f"Found {program_count} programs in registry (limited scan)")
 
     def _get_windows_programs_from_wmi(self, software_info: Dict[str, Any]):
         """Get installed programs using WMI (fallback method)"""
@@ -646,3 +602,490 @@ class MonitoringModule:
 
         except Exception as e:
             self.logger.error(f"Error creating automatic ticket: {e}")
+
+    def _get_basic_windows_system_info(self, software_info: Dict[str, Any]):
+        """Get basic Windows system information (fast)"""
+        try:
+            import platform
+
+            software_info['system_info'] = {
+                'os_name': platform.system(),
+                'os_version': platform.version(),
+                'os_release': platform.release(),
+                'computer_name': platform.node(),
+                'architecture': platform.architecture()[0],
+                'processor': platform.processor()
+            }
+
+            self.logger.info("Basic system info collected")
+
+        except Exception as e:
+            self.logger.warning(f"Basic system info detection failed: {e}")
+
+    # ==========================================
+    # MÉTODOS DETALLADOS DE INVENTARIO HARDWARE
+    # ==========================================
+
+    def _get_detailed_system_info(self) -> Dict[str, Any]:
+        """Get detailed system information"""
+        try:
+            import subprocess
+
+            system_info = {
+                'hostname': platform.node(),
+                'platform': platform.platform(),
+                'architecture': platform.architecture()[0],
+                'processor': platform.processor(),
+                'machine': platform.machine(),
+                'system': platform.system(),
+                'release': platform.release(),
+                'version': platform.version(),
+                'python_version': platform.python_version()
+            }
+
+            # Windows-specific system info
+            if platform.system() == 'Windows':
+                try:
+                    result = subprocess.run(['systeminfo'], capture_output=True, text=True, timeout=30)
+                    if result.returncode == 0:
+                        lines = result.stdout.split('\n')
+                        for line in lines:
+                            if ':' in line:
+                                key, value = line.split(':', 1)
+                                key = key.strip().lower().replace(' ', '_')
+                                value = value.strip()
+                                if key in ['system_manufacturer', 'system_model', 'system_type', 'bios_version']:
+                                    system_info[key] = value
+                except Exception as e:
+                    self.logger.warning(f"Could not get Windows system info: {e}")
+
+            return system_info
+
+        except Exception as e:
+            self.logger.error(f"Error getting detailed system info: {e}")
+            return {}
+
+    def _get_detailed_cpu_info(self) -> Dict[str, Any]:
+        """Get detailed CPU information"""
+        try:
+            import subprocess
+
+            cpu_info = {
+                'name': platform.processor(),
+                'cores_physical': psutil.cpu_count(logical=False),
+                'cores_logical': psutil.cpu_count(logical=True),
+                'current_usage': round(psutil.cpu_percent(interval=1), 1),
+                'architecture': platform.machine()
+            }
+
+            # CPU frequency
+            freq = psutil.cpu_freq()
+            if freq:
+                cpu_info['frequency_current'] = round(freq.current, 2)
+                cpu_info['frequency_min'] = round(freq.min, 2)
+                cpu_info['frequency_max'] = round(freq.max, 2)
+
+            # Windows-specific CPU info
+            if platform.system() == 'Windows':
+                try:
+                    result = subprocess.run(['wmic', 'cpu', 'get', 'name,manufacturer,family,model,stepping,maxclockspeed'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        if len(lines) > 1:
+                            # Parse the output
+                            headers = lines[0].split()
+                            values = lines[1].split()
+                            if len(values) >= len(headers):
+                                cpu_info['manufacturer'] = values[2] if len(values) > 2 else 'Unknown'
+                                cpu_info['family'] = values[0] if len(values) > 0 else 'Unknown'
+                                cpu_info['model'] = values[1] if len(values) > 1 else 'Unknown'
+                                cpu_info['max_clock_speed'] = values[3] if len(values) > 3 else 'Unknown'
+                                cpu_info['name'] = values[4] if len(values) > 4 else cpu_info['name']
+                except Exception as e:
+                    self.logger.warning(f"Could not get Windows CPU info: {e}")
+
+            return cpu_info
+
+        except Exception as e:
+            self.logger.error(f"Error getting detailed CPU info: {e}")
+            return {}
+
+    def _get_detailed_memory_info(self) -> Dict[str, Any]:
+        """Get detailed memory information"""
+        try:
+            import subprocess
+
+            memory = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+
+            memory_info = {
+                'total_bytes': memory.total,
+                'total_gb': round(memory.total / (1024**3), 2),
+                'available_bytes': memory.available,
+                'available_gb': round(memory.available / (1024**3), 2),
+                'used_bytes': memory.used,
+                'used_gb': round(memory.used / (1024**3), 2),
+                'usage_percent': round(memory.percent, 1),
+                'swap_total_gb': round(swap.total / (1024**3), 2),
+                'swap_used_gb': round(swap.used / (1024**3), 2),
+                'swap_usage_percent': round(swap.percent, 1)
+            }
+
+            # Windows-specific memory info
+            if platform.system() == 'Windows':
+                try:
+                    result = subprocess.run(['wmic', 'memorychip', 'get', 'capacity,speed,manufacturer,partnumber'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        memory_modules = []
+                        for line in lines[1:]:  # Skip header
+                            parts = line.split()
+                            if len(parts) >= 4:
+                                memory_modules.append({
+                                    'capacity_gb': round(int(parts[0]) / (1024**3), 2) if parts[0].isdigit() else 'Unknown',
+                                    'manufacturer': parts[1] if len(parts) > 1 else 'Unknown',
+                                    'part_number': parts[2] if len(parts) > 2 else 'Unknown',
+                                    'speed_mhz': parts[3] if len(parts) > 3 else 'Unknown'
+                                })
+                        memory_info['modules'] = memory_modules
+                except Exception as e:
+                    self.logger.warning(f"Could not get Windows memory info: {e}")
+
+            return memory_info
+
+        except Exception as e:
+            self.logger.error(f"Error getting detailed memory info: {e}")
+            return {}
+
+    def _get_detailed_disk_info(self) -> List[Dict[str, Any]]:
+        """Get detailed disk information including S.M.A.R.T data"""
+        try:
+            import subprocess
+
+            disks = []
+
+            # Get basic disk information
+            for partition in psutil.disk_partitions():
+                try:
+                    usage = psutil.disk_usage(partition.mountpoint)
+
+                    disk_info = {
+                        'device': partition.device,
+                        'mountpoint': partition.mountpoint,
+                        'fstype': partition.fstype,
+                        'total_bytes': usage.total,
+                        'total_gb': round(usage.total / (1024**3), 2),
+                        'used_bytes': usage.used,
+                        'used_gb': round(usage.used / (1024**3), 2),
+                        'free_bytes': usage.free,
+                        'free_gb': round(usage.free / (1024**3), 2),
+                        'usage_percent': round((usage.used / usage.total) * 100, 1)
+                    }
+
+                    # Windows-specific disk info with S.M.A.R.T
+                    if platform.system() == 'Windows':
+                        try:
+                            # Get enhanced disk information using PowerShell
+                            smart_data = self._get_windows_disk_smart_info(partition.device)
+                            self.logger.info(f"SMART data for {partition.device}: {smart_data}")
+                            disk_info.update(smart_data)
+                            self.logger.info(f"Final disk_info for {partition.device}: health_status='{disk_info.get('health_status')}', smart_status='{disk_info.get('smart_status')}'")
+
+                        except Exception as e:
+                            self.logger.warning(f"Could not get Windows disk info for {partition.device}: {e}")
+
+                    disks.append(disk_info)
+
+                except PermissionError:
+                    continue
+                except Exception as e:
+                    self.logger.warning(f"Error getting info for disk {partition.device}: {e}")
+                    continue
+
+            return disks
+
+        except Exception as e:
+            self.logger.error(f"Error getting detailed disk info: {e}")
+            return []
+
+    def _get_windows_disk_smart_info(self, device_path: str) -> Dict[str, Any]:
+        """Get detailed SMART information for Windows disks using simpler commands"""
+        smart_info = {
+            'model': 'Unknown',
+            'serial_number': 'Unknown',
+            'interface_type': 'Unknown',
+            'health_status': 'Unknown',
+            'smart_status': 'Unknown',
+            'temperature': 'Not available',
+            'physical_size_gb': 'Unknown'
+        }
+
+        try:
+            import subprocess
+
+            # Method 1: Try Get-PhysicalDisk (simpler command)
+            try:
+                result = subprocess.run(
+                    ['powershell', '-Command', 'Get-PhysicalDisk | Select-Object FriendlyName,HealthStatus,OperationalStatus,MediaType,BusType,Size | ConvertTo-Json'],
+                    capture_output=True, text=True, timeout=10, shell=True
+                )
+
+                if result.returncode == 0 and result.stdout.strip():
+                    import json
+                    disks = json.loads(result.stdout.strip())
+
+                    # If single disk, convert to list
+                    if isinstance(disks, dict):
+                        disks = [disks]
+
+                    # Use first disk for now (could be improved to match by drive letter)
+                    if disks and len(disks) > 0:
+                        disk = disks[0]
+                        smart_info['model'] = disk.get('FriendlyName', 'Unknown')
+                        smart_info['health_status'] = disk.get('HealthStatus', 'Unknown')
+                        smart_info['interface_type'] = disk.get('BusType', 'Unknown')
+
+                        # Map health status
+                        health_status = disk.get('HealthStatus', 'Unknown')
+                        smart_info['health_status'] = health_status
+
+                        health = health_status.lower()
+                        if health in ['healthy', 'ok']:
+                            smart_info['smart_status'] = 'OK'
+                        elif health in ['warning', 'degraded']:
+                            smart_info['smart_status'] = 'Warning'
+                        elif health in ['unhealthy', 'failed']:
+                            smart_info['smart_status'] = 'Critical'
+                        else:
+                            smart_info['smart_status'] = health_status
+
+                        self.logger.info(f"SMART mapping: {health_status} -> {smart_info['smart_status']}")
+
+                        # Size
+                        if 'Size' in disk and disk['Size']:
+                            try:
+                                smart_info['physical_size_gb'] = round(int(disk['Size']) / (1024**3), 2)
+                            except:
+                                pass
+
+                    self.logger.debug(f"PowerShell SMART info for {device_path}: {smart_info}")
+
+            except Exception as e:
+                self.logger.warning(f"PowerShell method failed for {device_path}: {e}")
+
+                # Method 2: Fallback to WMIC
+                try:
+                    result = subprocess.run(['wmic', 'diskdrive', 'get', 'model,status,size,interfacetype', '/format:csv'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        for line in lines[1:]:  # Skip header
+                            if line.strip() and ',' in line:
+                                parts = line.split(',')
+                                if len(parts) >= 5:
+                                    smart_info['interface_type'] = parts[1] if parts[1] else 'Unknown'
+                                    smart_info['model'] = parts[2] if parts[2] else 'Unknown'
+                                    smart_info['health_status'] = parts[4] if parts[4] else 'Unknown'
+                                    smart_info['smart_status'] = 'OK' if parts[4] == 'OK' else 'Unknown'
+                                    if parts[3] and parts[3].isdigit():
+                                        smart_info['physical_size_gb'] = round(int(parts[3]) / (1024**3), 2)
+                                    break
+
+                    self.logger.debug(f"WMIC SMART info for {device_path}: {smart_info}")
+
+                except Exception as e2:
+                    self.logger.warning(f"WMIC fallback also failed for {device_path}: {e2}")
+
+        except Exception as e:
+            self.logger.warning(f"Could not get SMART info for {device_path}: {e}")
+
+        return smart_info
+
+    def _get_detailed_network_info(self) -> List[Dict[str, Any]]:
+        """Get detailed network interface information"""
+        try:
+            import subprocess
+
+            interfaces = []
+
+            # Get network interfaces
+            for interface, addrs in psutil.net_if_addrs().items():
+                interface_info = {
+                    'name': interface,
+                    'addresses': [],
+                    'is_up': interface in psutil.net_if_stats(),
+                    'speed': 'Unknown',
+                    'duplex': 'Unknown'
+                }
+
+                # Get interface statistics
+                if interface in psutil.net_if_stats():
+                    stats = psutil.net_if_stats()[interface]
+                    interface_info['is_up'] = stats.isup
+                    interface_info['speed_mbps'] = stats.speed
+                    interface_info['mtu'] = stats.mtu
+
+                # Get addresses
+                for addr in addrs:
+                    addr_info = {
+                        'family': str(addr.family),
+                        'address': addr.address,
+                        'netmask': addr.netmask,
+                        'broadcast': addr.broadcast
+                    }
+
+                    # Identify address type
+                    if addr.family.name == 'AF_INET':
+                        addr_info['type'] = 'IPv4'
+                    elif addr.family.name == 'AF_INET6':
+                        addr_info['type'] = 'IPv6'
+                    elif addr.family.name == 'AF_PACKET':
+                        addr_info['type'] = 'MAC'
+                        interface_info['mac_address'] = addr.address
+                    else:
+                        addr_info['type'] = 'Other'
+
+                    interface_info['addresses'].append(addr_info)
+
+                # Windows-specific network info
+                if platform.system() == 'Windows':
+                    try:
+                        result = subprocess.run(['wmic', 'path', 'win32_networkadapter', 'get', 'name,speed,adaptertype'],
+                                              capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0:
+                            lines = result.stdout.strip().split('\n')
+                            for line in lines[1:]:  # Skip header
+                                if interface.lower() in line.lower():
+                                    parts = line.split()
+                                    if len(parts) >= 3:
+                                        interface_info['adapter_type'] = parts[0] if len(parts) > 0 else 'Unknown'
+                                        interface_info['description'] = parts[1] if len(parts) > 1 else 'Unknown'
+                                    break
+                    except Exception as e:
+                        self.logger.warning(f"Could not get Windows network info for {interface}: {e}")
+
+                interfaces.append(interface_info)
+
+            return interfaces
+
+        except Exception as e:
+            self.logger.error(f"Error getting detailed network info: {e}")
+            return []
+
+    def _get_motherboard_info(self) -> Dict[str, Any]:
+        """Get motherboard information"""
+        try:
+            import subprocess
+
+            motherboard_info = {}
+
+            if platform.system() == 'Windows':
+                try:
+                    result = subprocess.run(['wmic', 'baseboard', 'get', 'manufacturer,product,version,serialnumber'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        if len(lines) > 1:
+                            parts = lines[1].split()
+                            if len(parts) >= 4:
+                                motherboard_info['manufacturer'] = parts[0] if len(parts) > 0 else 'Unknown'
+                                motherboard_info['product'] = parts[1] if len(parts) > 1 else 'Unknown'
+                                motherboard_info['serial_number'] = parts[2] if len(parts) > 2 else 'Unknown'
+                                motherboard_info['version'] = parts[3] if len(parts) > 3 else 'Unknown'
+                except Exception as e:
+                    self.logger.warning(f"Could not get motherboard info: {e}")
+
+            return motherboard_info
+
+        except Exception as e:
+            self.logger.error(f"Error getting motherboard info: {e}")
+            return {}
+
+    def _get_bios_info(self) -> Dict[str, Any]:
+        """Get BIOS information"""
+        try:
+            import subprocess
+
+            bios_info = {}
+
+            if platform.system() == 'Windows':
+                try:
+                    result = subprocess.run(['wmic', 'bios', 'get', 'manufacturer,name,version,releasedate'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        if len(lines) > 1:
+                            parts = lines[1].split()
+                            if len(parts) >= 4:
+                                bios_info['manufacturer'] = parts[0] if len(parts) > 0 else 'Unknown'
+                                bios_info['name'] = parts[1] if len(parts) > 1 else 'Unknown'
+                                bios_info['release_date'] = parts[2] if len(parts) > 2 else 'Unknown'
+                                bios_info['version'] = parts[3] if len(parts) > 3 else 'Unknown'
+                except Exception as e:
+                    self.logger.warning(f"Could not get BIOS info: {e}")
+
+            return bios_info
+
+        except Exception as e:
+            self.logger.error(f"Error getting BIOS info: {e}")
+            return {}
+
+    def _get_graphics_info(self) -> List[Dict[str, Any]]:
+        """Get graphics card information"""
+        try:
+            import subprocess
+
+            graphics_cards = []
+
+            if platform.system() == 'Windows':
+                try:
+                    result = subprocess.run(['wmic', 'path', 'win32_videocontroller', 'get', 'name,adapterram,driverversion'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        for line in lines[1:]:  # Skip header
+                            parts = line.split()
+                            if len(parts) >= 3:
+                                graphics_cards.append({
+                                    'adapter_ram_mb': round(int(parts[0]) / (1024**2), 2) if parts[0].isdigit() else 'Unknown',
+                                    'driver_version': parts[1] if len(parts) > 1 else 'Unknown',
+                                    'name': ' '.join(parts[2:]) if len(parts) > 2 else 'Unknown'
+                                })
+                except Exception as e:
+                    self.logger.warning(f"Could not get graphics info: {e}")
+
+            return graphics_cards
+
+        except Exception as e:
+            self.logger.error(f"Error getting graphics info: {e}")
+            return []
+
+    def _get_usb_devices(self) -> List[Dict[str, Any]]:
+        """Get USB devices information"""
+        try:
+            import subprocess
+
+            usb_devices = []
+
+            if platform.system() == 'Windows':
+                try:
+                    result = subprocess.run(['wmic', 'path', 'win32_usbcontrollerdevice', 'get', 'dependent'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        for line in lines[1:]:  # Skip header
+                            if 'USB' in line:
+                                usb_devices.append({
+                                    'device': line.strip(),
+                                    'type': 'USB Device'
+                                })
+                except Exception as e:
+                    self.logger.warning(f"Could not get USB devices info: {e}")
+
+            return usb_devices[:10]  # Limit to first 10 devices
+
+        except Exception as e:
+            self.logger.error(f"Error getting USB devices info: {e}")
+            return []

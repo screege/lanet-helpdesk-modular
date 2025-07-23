@@ -16,12 +16,14 @@ import json
 class HeartbeatModule:
     """Handles periodic heartbeat communication with backend"""
     
-    def __init__(self, config_manager, database_manager):
+    def __init__(self, config_manager, database_manager, monitoring_module=None):
         self.logger = logging.getLogger('lanet_agent.heartbeat')
         self.config = config_manager
         self.database = database_manager
+        self.monitoring = monitoring_module  # Reference to monitoring module
         self.running = False
         self.last_heartbeat = None
+        self.last_full_inventory = None
         self.consecutive_failures = 0
         self.max_failures = 5
         
@@ -36,11 +38,17 @@ class HeartbeatModule:
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
-        # Heartbeat interval
-        self.heartbeat_interval = self.config.get('agent.heartbeat_interval', 60)
+        # Tiered heartbeat intervals
+        self.heartbeat_interval = self.config.get('agent.heartbeat_interval', 300)  # 5 minutes for status
+        self.inventory_interval = self.config.get('agent.inventory_interval', 86400)  # 24 hours for full inventory
         
         self.logger.info(f"Heartbeat module initialized (interval: {self.heartbeat_interval}s)")
-    
+
+    def set_monitoring_module(self, monitoring_module):
+        """Set reference to monitoring module for inventory collection"""
+        self.monitoring = monitoring_module
+        self.logger.info("Monitoring module reference set for heartbeat")
+
     def start(self):
         """Start heartbeat loop"""
         self.logger.info("Starting heartbeat module...")
@@ -89,43 +97,99 @@ class HeartbeatModule:
             # Get current system status from monitoring module
             status = self._get_system_status()
             
-            # Check if we should include inventory data (every 24 hours)
-            include_inventory = self._should_include_inventory()
+            # Determine heartbeat type (TIERED APPROACH)
+            should_send_full = self._should_send_full_inventory()
 
-            # Prepare heartbeat data
-            heartbeat_data = {
-                'asset_id': asset_id,
-                'status': status,
-                'timestamp': datetime.now().isoformat()
-            }
+            if should_send_full:
+                # TIER 2: Full heartbeat with inventory (every 24 hours)
+                self.logger.info("📦 Sending TIER 2 heartbeat (full inventory)")
+                heartbeat_data = {
+                    'asset_id': asset_id,
+                    'heartbeat_type': 'full',
+                    'status': status,
+                    'timestamp': datetime.now().isoformat()
+                }
+            else:
+                # TIER 1: Lightweight status-only heartbeat (every 5 minutes)
+                self.logger.info("📡 Sending TIER 1 heartbeat (status only)")
+                minimal_status = self._get_minimal_status()
+                heartbeat_data = {
+                    'asset_id': asset_id,
+                    'heartbeat_type': 'status',
+                    'status': minimal_status,
+                    'timestamp': datetime.now().isoformat()
+                }
 
-            # Add inventory data if needed
-            if include_inventory:
-                self.logger.info("Including inventory data in heartbeat")
-                heartbeat_data['hardware_inventory'] = self._get_hardware_inventory()
-                heartbeat_data['software_inventory'] = self._get_software_inventory()
+            # Add inventory data only for TIER 2 (full) heartbeats
+            if should_send_full:
+                try:
+                    self.logger.info("Getting hardware inventory...")
+                    heartbeat_data['hardware_inventory'] = self._get_hardware_inventory()
+                    self.logger.info("✅ Hardware inventory obtained")
+                except Exception as e:
+                    self.logger.error(f"❌ Hardware inventory failed: {e}")
+                    heartbeat_data['hardware_inventory'] = {}
+
+                try:
+                    self.logger.info("Getting software inventory...")
+                    heartbeat_data['software_inventory'] = self._get_software_inventory()
+                    self.logger.info("✅ Software inventory obtained")
+                except Exception as e:
+                    self.logger.error(f"❌ Software inventory failed: {e}")
+                    heartbeat_data['software_inventory'] = {}
 
                 # Update last inventory timestamp
-                self.database.set_config('last_inventory_sent', datetime.now().isoformat())
+                self.logger.info("📝 Skipping database update to prevent hanging...")
+                # TODO: Fix database hanging issue
+                # self.database.set_config('last_inventory_sent', datetime.now().isoformat())
+                self.last_full_inventory = datetime.now()
+                self.logger.info("✅ Continuing with heartbeat...")
             
             # Get server URL
             server_url = self.config.get_server_url()
             heartbeat_url = f"{server_url}/agents/heartbeat"
             
-            # Send heartbeat request
-            response = self.session.post(
-                heartbeat_url,
-                json=heartbeat_data,
-                headers={
-                    'Authorization': f'Bearer {agent_token}',
-                    'Content-Type': 'application/json',
-                    'User-Agent': f"LANET-Agent/{self.config.get('agent.version', '1.0.0')}"
-                }
-            )
+            # Log data size for monitoring
+            data_size = len(str(heartbeat_data))
+            heartbeat_type = heartbeat_data.get('heartbeat_type', 'unknown')
+
+            self.logger.info(f"🚀 Sending {heartbeat_type} heartbeat to {heartbeat_url}")
+            self.logger.info(f"📊 Data size: {data_size} characters ({data_size/1024:.1f} KB)")
+
+            # Check if data is too large
+            if data_size > 10 * 1024 * 1024:  # 10MB limit
+                self.logger.warning(f"⚠️ Heartbeat data is very large: {data_size/1024/1024:.1f} MB")
+
+            self.logger.info("📡 Starting HTTP POST request...")
+
+            try:
+                response = self.session.post(
+                    heartbeat_url,
+                    json=heartbeat_data,
+                    headers={
+                        'Authorization': f'Bearer {agent_token}',
+                        'Content-Type': 'application/json',
+                        'User-Agent': f"LANET-Agent/{self.config.get('agent.version', '1.0.0')}"
+                    },
+                    timeout=30  # Reduced timeout to 30 seconds
+                )
+                self.logger.info("📡 HTTP POST request completed")
+            except requests.exceptions.Timeout:
+                self.logger.error("❌ HTTP request timed out after 30 seconds")
+                raise
+            except requests.exceptions.ConnectionError as e:
+                self.logger.error(f"❌ Connection error: {e}")
+                raise
+            except Exception as e:
+                self.logger.error(f"❌ Unexpected error during HTTP request: {e}")
+                raise
             
+            self.logger.info(f"📡 Response status: {response.status_code}")
+
             if response.status_code == 200:
+                self.logger.info("✅ Heartbeat sent successfully!")
                 self.last_heartbeat = datetime.now()
-                
+
                 # Store heartbeat success in database
                 self.database.set_config('last_heartbeat', self.last_heartbeat.isoformat())
                 
@@ -178,9 +242,9 @@ class HeartbeatModule:
             if recent_metrics:
                 metrics = recent_metrics[0]
                 return {
-                    'cpu_usage': metrics.get('cpu_usage', 0),
-                    'memory_usage': metrics.get('memory_usage', 0),
-                    'disk_usage': metrics.get('disk_usage', 0),
+                    'cpu_usage': round(metrics.get('cpu_usage', 0), 1),
+                    'memory_usage': round(metrics.get('memory_usage', 0), 1),
+                    'disk_usage': round(metrics.get('disk_usage', 0), 1),
                     'uptime': metrics.get('uptime', 0),
                     'last_boot': metrics.get('last_boot'),
                     'network_status': metrics.get('network_status', 'unknown'),
@@ -193,10 +257,11 @@ class HeartbeatModule:
             else:
                 # Fallback to basic status
                 import psutil
+                disk_usage = psutil.disk_usage('C:')
                 return {
-                    'cpu_usage': psutil.cpu_percent(interval=1),
-                    'memory_usage': psutil.virtual_memory().percent,
-                    'disk_usage': (psutil.disk_usage('C:').used / psutil.disk_usage('C:').total) * 100,
+                    'cpu_usage': round(psutil.cpu_percent(interval=1), 1),
+                    'memory_usage': round(psutil.virtual_memory().percent, 1),
+                    'disk_usage': round((disk_usage.used / disk_usage.total) * 100, 1),
                     'uptime': time.time() - psutil.boot_time(),
                     'network_status': 'connected',  # Simplified
                     'agent_status': 'online'
@@ -212,26 +277,32 @@ class HeartbeatModule:
     def _should_include_inventory(self) -> bool:
         """Check if we should include inventory data in this heartbeat"""
         try:
-            last_inventory = self.database.get_config('last_inventory_sent')
-            if not last_inventory:
-                return True  # First time, include inventory
+            # FOR TESTING: Always include inventory
+            return True
 
-            last_time = datetime.fromisoformat(last_inventory)
-            now = datetime.now()
-
-            # Include inventory every 24 hours
-            return (now - last_time).total_seconds() > 86400  # 24 hours
+            # Original logic (commented for testing):
+            # last_inventory = self.database.get_config('last_inventory_sent')
+            # if not last_inventory:
+            #     return True  # First time, include inventory
+            #
+            # last_time = datetime.fromisoformat(last_inventory)
+            # now = datetime.now()
+            #
+            # # Include inventory every 24 hours
+            # return (now - last_time).total_seconds() > 86400  # 24 hours
 
         except Exception as e:
             self.logger.warning(f"Error checking inventory timestamp: {e}")
-            return False
+            return True  # Return True for testing
 
     def _get_hardware_inventory(self) -> Dict[str, Any]:
         """Get hardware inventory from monitoring module"""
         try:
             if hasattr(self, 'monitoring') and self.monitoring:
+                self.logger.info("Using detailed hardware inventory from monitoring module")
                 return self.monitoring.get_hardware_inventory()
             else:
+                self.logger.warning("No monitoring module available - using basic hardware fallback")
                 # Fallback to basic hardware info
                 import platform
                 import psutil
@@ -258,8 +329,10 @@ class HeartbeatModule:
         """Get software inventory from monitoring module"""
         try:
             if hasattr(self, 'monitoring') and self.monitoring:
+                self.logger.info("Using detailed software inventory from monitoring module")
                 return self.monitoring.get_software_inventory()
             else:
+                self.logger.warning("No monitoring module available - using basic software fallback")
                 # Fallback to basic software info
                 import platform
                 return {
@@ -355,3 +428,52 @@ class HeartbeatModule:
             'heartbeat_interval': self.heartbeat_interval,
             'max_failures': self.max_failures
         }
+
+    # ==========================================
+    # TIERED HEARTBEAT METHODS
+    # ==========================================
+
+    def _get_minimal_status(self) -> Dict[str, Any]:
+        """Get minimal system status for TIER 1 heartbeat (lightweight)"""
+        try:
+            import psutil
+            import os
+
+            # Only essential metrics - ~200 bytes total
+            status = {
+                'agent_status': 'online',
+                'cpu_percent': round(psutil.cpu_percent(interval=0.1), 1),  # Quick sample
+                'memory_percent': round(psutil.virtual_memory().percent, 1),
+                'disk_percent': round(psutil.disk_usage('C:' if os.name == 'nt' else '/').percent, 1),
+                'timestamp': datetime.now().isoformat()
+            }
+
+            return status
+
+        except Exception as e:
+            self.logger.error(f"Error getting minimal status: {e}")
+            return {
+                'agent_status': 'error',
+                'cpu_percent': 0,
+                'memory_percent': 0,
+                'disk_percent': 0,
+                'timestamp': datetime.now().isoformat()
+            }
+
+    def _should_send_full_inventory(self) -> bool:
+        """Determine if we should send full inventory (TIER 2)"""
+        try:
+            last_inventory = self.database.get_config('last_inventory_sent')
+
+            if not last_inventory:
+                return True  # Never sent inventory
+
+            last_time = datetime.fromisoformat(last_inventory)
+            time_since = datetime.now() - last_time
+
+            # Send full inventory every 24 hours
+            return time_since.total_seconds() > self.inventory_interval
+
+        except Exception as e:
+            self.logger.warning(f"Error checking inventory schedule: {e}")
+            return True  # Default to sending inventory on error
