@@ -81,7 +81,8 @@ npm run dev
 ## 📚 **Comprehensive Documentation**
 
 ### **🔧 Deployment & Setup**
-- [**Production Deployment Guide**](docs/PRODUCTION_DEPLOYMENT_GUIDE.md) - Complete Ubuntu server deployment
+- [**Production Deployment Guide**](deployment/PRODUCTION_DEPLOYMENT_GUIDE.md) - Complete Ubuntu server deployment
+- [**UTF-8 Database Procedures**](docs/UTF8_DATABASE_PROCEDURES.md) - ⚠️ **CRITICAL** - Spanish character encoding procedures
 - [**Database Setup Guide**](docs/DATABASE_SETUP_GUIDE.md) - PostgreSQL configuration and initialization
 - [**File Structure Guide**](docs/FILE_STRUCTURE_GUIDE.md) - Complete codebase organization
 

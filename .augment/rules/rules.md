@@ -16,6 +16,7 @@ DATABASE_URL=postgresql://postgres:Poikl55+*@localhost:5432/lanet_helpdesk
 you must have all code, workflow, database associations, api calls and frontend calls present before making changes and see if other modules get affected by new code implementation
 you must always act as a full stack developer
 you must always commit to github and before creating new modules which after tests work create a new branch
+you must establish 1 shell connection and on it execute commands needed in the remote server
 
 CHECKLIST PARA DESARROLLO → DOCKER:
 ✅ ANTES DE HACER COMMIT:

@@ -155,25 +155,99 @@ curl -I https://helpdesk.lanet.mx
 - **Interval:** 3 minutes
 - **Logs:** `/logs/sla_monitor.log`
 
+### ✅ CRITICAL FIX: Auto-Start After Server Reboot (July 23, 2025)
+
+#### **Problem Solved**
+**Issue:** SLA Monitor did not auto-start after server reboots, requiring manual intervention.
+
+**Root Cause:**
+1. Systemd service had incorrect `docker-compose` path
+2. No automatic SLA Monitor startup after container initialization
+
+#### **Solution Implemented**
+
+**1. Fixed Systemd Service Path:**
+```bash
+# Corrected path in /etc/systemd/system/lanet-helpdesk.service
+ExecStart=/usr/local/bin/docker-compose -f deployment/docker/docker-compose.yml up -d
+# (was incorrectly: /usr/bin/docker-compose)
+```
+
+**2. Created Auto-Start Script:**
+```bash
+# /opt/lanet-helpdesk/scripts/start-sla-monitor.sh
+#!/bin/bash
+sleep 10
+docker exec -d lanet-helpdesk-backend python run_sla_monitor.py
+echo SLA Monitor auto-started
+```
+
+**3. Updated Systemd Service:**
+```ini
+[Unit]
+Description=LANET Helpdesk Docker Containers
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/lanet-helpdesk
+ExecStart=/usr/local/bin/docker-compose -f deployment/docker/docker-compose.yml up -d
+ExecStartPost=/bin/sleep 15
+ExecStartPost=/opt/lanet-helpdesk/scripts/start-sla-monitor.sh
+ExecStop=/usr/local/bin/docker-compose -f deployment/docker/docker-compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### **Verification After Reboot**
+```bash
+# Check systemd service status
+systemctl status lanet-helpdesk.service
+
+# Verify containers are running
+docker ps --format 'table {{.Names}}\t{{.Status}}'
+
+# Confirm SLA Monitor is active
+docker exec lanet-helpdesk-backend tail -5 logs/sla_monitor.log
+
+# Should show recent activity like:
+# 2025-07-23 14:51:59,671 - sla_monitor - INFO - Processing email queue...
+# 2025-07-23 14:52:00,596 - sla_monitor - INFO - SLA monitor job completed successfully
+```
+
 ### Auto-Start Procedures
-1. **Manual Start:**
+1. **Automatic (Recommended):**
+   - Systemd service handles container startup
+   - Auto-start script launches SLA Monitor after 25 seconds
+   - ✅ **WORKING** - Tested after server reboot
+
+2. **Manual Start (If needed):**
    ```bash
    docker exec -d lanet-helpdesk-backend python run_sla_monitor.py
    ```
 
-2. **Auto-Start:** Included in post-reboot script
-
 3. **Verification:**
    ```bash
-   docker exec lanet-helpdesk-backend ps aux | grep sla
-   docker exec lanet-helpdesk-backend tail -5 logs/sla_monitor.log
+   # Check if process is running
+   docker exec lanet-helpdesk-backend pgrep -f run_sla_monitor.py
+
+   # View recent logs
+   docker exec lanet-helpdesk-backend tail -10 logs/sla_monitor.log
+
+   # Monitor in real-time
+   docker exec lanet-helpdesk-backend tail -f logs/sla_monitor.log
    ```
 
 ### Functionality
 - SLA violation monitoring
-- Email processing and ticket creation
+- Email processing and ticket creation (every 3 minutes)
 - Scheduled report processing
 - Notification management
+- ✅ **UTF-8 Email Support** - Spanish characters display correctly
 
 ## Asset Agents Module
 
@@ -235,13 +309,90 @@ All migrations applied successfully:
 - `003_fix_generate_agent_token_v2.sql`
 - `004_simple_token_generator.sql`
 
+### ⚠️ CRITICAL: UTF-8 Database Backup and Restore Procedures
+
+#### **Problem Solved (July 23, 2025)**
+**Issue:** Email templates and notifications showed corrupted Spanish characters:
+- `Número` appeared as `N├║mero`
+- `Título` appeared as `T├¡tulo`
+- `Descripción` appeared as `Descripci├│n`
+
+**Root Cause:** Incorrect database backup/restore procedures that didn't preserve UTF-8 encoding.
+
+#### **CORRECT Backup Procedure for UTF-8**
+```bash
+# DEVELOPMENT (Windows PowerShell)
+$env:PGPASSWORD="Poikl55+*"
+pg_dump -h localhost -p 5432 -U postgres -d lanet_helpdesk `
+  --encoding=UTF8 `
+  --no-owner `
+  --no-privileges `
+  --clean `
+  --if-exists `
+  --format=plain `
+  --file="backup_utf8_$(Get-Date -Format 'yyyyMMdd_HHmmss').sql"
+```
+
+```bash
+# PRODUCTION (Linux)
+docker exec lanet-helpdesk-db pg_dump -U postgres -d lanet_helpdesk \
+  --encoding=UTF8 \
+  --no-owner \
+  --no-privileges \
+  --clean \
+  --if-exists \
+  --format=plain > backup_utf8_$(date +%Y%m%d_%H%M%S).sql
+```
+
+#### **CORRECT Restore Procedure for UTF-8**
+```bash
+# 1. Stop backend to prevent connections
+docker stop lanet-helpdesk-backend
+
+# 2. Drop and recreate database with UTF-8
+docker exec lanet-helpdesk-db psql -U postgres -c 'DROP DATABASE IF EXISTS lanet_helpdesk;'
+docker exec lanet-helpdesk-db psql -U postgres -c 'CREATE DATABASE lanet_helpdesk WITH ENCODING UTF8;'
+
+# 3. Restore with UTF-8 encoding
+docker exec -i lanet-helpdesk-db psql -U postgres -d lanet_helpdesk < backup_utf8_file.sql
+
+# 4. Restart backend
+docker start lanet-helpdesk-backend
+
+# 5. Restart SLA Monitor
+docker exec -d lanet-helpdesk-backend python run_sla_monitor.py
+```
+
+#### **Verification Commands**
+```bash
+# Check database encoding
+docker exec lanet-helpdesk-db psql -U postgres -l
+
+# Verify Spanish characters in email templates
+docker exec lanet-helpdesk-db psql -U postgres -d lanet_helpdesk -c \
+  "SELECT name, subject FROM email_templates WHERE name LIKE '%ticket%' LIMIT 2;"
+
+# Test email with Spanish characters
+# Create a test ticket and verify email shows: "Número", "Título", "Descripción"
+```
+
+### Legacy Backup Procedures (DEPRECATED)
+**⚠️ DO NOT USE - These cause UTF-8 corruption:**
+```bash
+# WRONG - Causes character corruption
+pg_dump ... | Out-File -Encoding UTF8 ...
+pg_dump ... --inserts --column-inserts ...
+```
+
 ### Backup Procedures
 **Location:** Multiple backup files in `/database/` directory
-**Latest:** `backup_complete_rls_rbac_20250715_094016.sql`
+**Latest UTF-8 Backup:** `backup_utf8_20250723_081132.sql` (✅ Verified working)
 
-**Manual Backup Command:**
+**Manual Backup Command (CORRECT):**
 ```bash
-docker exec lanet-helpdesk-db pg_dump -U postgres -d lanet_helpdesk > backup_$(date +%Y%m%d_%H%M%S).sql
+docker exec lanet-helpdesk-db pg_dump -U postgres -d lanet_helpdesk \
+  --encoding=UTF8 --no-owner --no-privileges --clean --if-exists \
+  > backup_utf8_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 ## SSL/HTTPS Configuration
@@ -298,11 +449,26 @@ docker-compose -f deployment/docker/docker-compose.yml up -d frontend
 #### 2. SLA Monitor Not Running
 **Diagnosis:**
 ```bash
-docker exec lanet-helpdesk-backend ps aux | grep sla
+# Check if process exists
+docker exec lanet-helpdesk-backend pgrep -f run_sla_monitor.py
+
+# Check recent logs
+docker exec lanet-helpdesk-backend tail -5 logs/sla_monitor.log
+
+# Check systemd service status
+systemctl status lanet-helpdesk.service
 ```
 **Solution:**
 ```bash
+# Manual start
 docker exec -d lanet-helpdesk-backend python run_sla_monitor.py
+
+# If systemd service failed, restart it
+systemctl restart lanet-helpdesk.service
+
+# Verify auto-start script exists and is executable
+ls -la /opt/lanet-helpdesk/scripts/start-sla-monitor.sh
+chmod +x /opt/lanet-helpdesk/scripts/start-sla-monitor.sh
 ```
 
 #### 3. Database Connection Issues
@@ -324,6 +490,47 @@ certbot renew --nginx
 docker exec lanet-helpdesk-db psql -U postgres -d lanet_helpdesk -c "SELECT generate_agent_token('550e8400-e29b-41d4-a716-446655440001', '660e8400-e29b-41d4-a716-446655440001');"
 ```
 **Solution:** Function already fixed with table aliases
+
+#### 6. UTF-8 Character Corruption in Emails
+**Symptoms:** Spanish characters appear corrupted in emails:
+- `Número` shows as `N├║mero`
+- `Título` shows as `T├¡tulo`
+- `Descripción` shows as `Descripci├│n`
+
+**Cause:** Database backup/restore without proper UTF-8 encoding
+
+**Diagnosis:**
+```bash
+# Check current database encoding
+docker exec lanet-helpdesk-db psql -U postgres -l | grep lanet_helpdesk
+
+# Test email template characters
+docker exec lanet-helpdesk-db psql -U postgres -d lanet_helpdesk -c \
+  "SELECT name, subject FROM email_templates LIMIT 2;"
+```
+
+**Solution:**
+```bash
+# 1. Create proper UTF-8 backup (from development)
+$env:PGPASSWORD="Poikl55+*"
+pg_dump -h localhost -p 5432 -U postgres -d lanet_helpdesk \
+  --encoding=UTF8 --no-owner --no-privileges --clean --if-exists \
+  --format=plain --file="backup_utf8_corrected.sql"
+
+# 2. Upload to production
+scp -i "path/to/ssh_key" -P 57411 backup_utf8_corrected.sql root@104.168.159.24:/tmp/
+
+# 3. Restore with UTF-8 (on production server)
+cd /opt/lanet-helpdesk
+docker stop lanet-helpdesk-backend
+docker exec lanet-helpdesk-db psql -U postgres -c 'DROP DATABASE IF EXISTS lanet_helpdesk;'
+docker exec lanet-helpdesk-db psql -U postgres -c 'CREATE DATABASE lanet_helpdesk WITH ENCODING UTF8;'
+docker exec -i lanet-helpdesk-db psql -U postgres -d lanet_helpdesk < /tmp/backup_utf8_corrected.sql
+docker start lanet-helpdesk-backend
+docker exec -d lanet-helpdesk-backend python run_sla_monitor.py
+
+# 4. Verify fix by creating test ticket and checking email
+```
 
 ### Emergency Recovery Procedures
 
@@ -600,12 +807,19 @@ docker exec lanet-helpdesk-backend tail -f logs/sla_monitor.log
 1. **Frontend Container Issue:** System nginx disabled permanently
 2. **Asset Agents SQL Function:** Ambiguity resolved with table aliases
 3. **Auto-Recovery:** Comprehensive post-reboot automation
-4. **SLA Monitor:** Integrated startup and monitoring
+4. **SLA Monitor Auto-Start:** ✅ **FIXED** - Systemd service with auto-start script (July 23, 2025)
+5. **UTF-8 Database Encoding:** ✅ **FIXED** - Proper backup/restore procedures (July 23, 2025)
+6. **Spanish Character Corruption:** ✅ **FIXED** - Email templates display correctly
 
 #### Known Limitations
 - **Container Timezone:** Containers use UTC internally (application handles timezone conversion)
 - **Email in Docker:** SMTP works in development but may have Docker networking issues
 - **Resource Limits:** No specific limits set (relies on system resources)
+
+#### ✅ RESOLVED Issues (July 23, 2025)
+- **SLA Monitor Auto-Start:** Now starts automatically after server reboot
+- **UTF-8 Email Corruption:** Spanish characters (ñ, á, é, í, ó, ú) display correctly
+- **Database Encoding:** Proper UTF-8 backup/restore procedures documented
 
 #### Future Improvements
 - **Container timezone:** Configure containers to use host timezone
@@ -615,10 +829,17 @@ docker exec lanet-helpdesk-backend tail -f logs/sla_monitor.log
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** July 21, 2025
-**Next Review:** August 21, 2025
+**Document Version:** 2.0
+**Last Updated:** July 23, 2025
+**Next Review:** August 23, 2025
 **Maintained by:** LANET Development Team
+
+**Major Updates in v2.0:**
+- ✅ SLA Monitor auto-start solution documented
+- ✅ UTF-8 database backup/restore procedures added
+- ✅ Spanish character corruption fix documented
+- ✅ Systemd service configuration updated
+- ✅ Comprehensive troubleshooting for UTF-8 issues
 
 ---
 
