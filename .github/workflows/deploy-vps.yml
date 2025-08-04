@@ -76,14 +76,27 @@ jobs:
           echo "🛑 Stopping existing containers..."
           sudo docker-compose down --remove-orphans || true
 
+          # Force stop ALL Docker containers to free up ports
+          echo "🛑 Force stopping ALL Docker containers..."
+          sudo docker stop $(sudo docker ps -aq) 2>/dev/null || true
+
           # Force remove any conflicting containers
           echo "🧹 Force removing any conflicting containers..."
           sudo docker rm -f lanet-helpdesk-frontend lanet-helpdesk-backend lanet-helpdesk-postgres lanet-helpdesk-redis lanet-helpdesk-sla-monitor lanet-helpdesk-email-processor 2>/dev/null || true
+
+          # Remove any containers using port 5432
+          echo "🔍 Removing any containers using port 5432..."
+          sudo docker ps -a --filter "publish=5432" --format "{{.ID}}" | xargs -r sudo docker rm -f 2>/dev/null || true
 
           # Stop any existing PostgreSQL services that might conflict with port 5432
           echo "🛑 Stopping any existing PostgreSQL services..."
           sudo systemctl stop postgresql 2>/dev/null || true
           sudo systemctl disable postgresql 2>/dev/null || true
+
+          # Kill any processes using port 5432
+          echo "🔍 Checking for processes using port 5432..."
+          sudo lsof -ti:5432 | xargs -r sudo kill -9 2>/dev/null || true
+          sudo fuser -k 5432/tcp 2>/dev/null || true
 
           # Clean up old images to save space
           echo "🧹 Cleaning up old Docker images..."
