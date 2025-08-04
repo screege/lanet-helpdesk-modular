@@ -417,7 +417,57 @@ class AgentsService:
             site_id = str(validation_result['site_id'])
             computer_name = hardware_info.get('computer_name', 'Unknown')
 
-            # Create asset record
+            # Generate hardware fingerprint for duplicate detection
+            hardware_fingerprint = self._generate_hardware_fingerprint(hardware_info)
+
+            # Check for existing asset by hardware fingerprint first
+            existing_asset = self._check_existing_asset_by_fingerprint(
+                hardware_fingerprint, client_id, site_id
+            )
+
+            # If not found by fingerprint, check by computer name as fallback
+            if not existing_asset:
+                existing_asset = self._check_existing_asset_by_name(f"{computer_name} (Agent)")
+
+            # If existing asset found, update it instead of creating new one
+            if existing_asset:
+                self.logger.info(f"Found existing asset {existing_asset['asset_id']} for {computer_name}")
+
+                # Update existing asset with latest information
+                asset_id = str(existing_asset['asset_id'])
+                self._update_existing_asset(asset_id, hardware_info, hardware_fingerprint)
+
+                # Update token usage count
+                self.db.execute_query(
+                    """UPDATE agent_installation_tokens
+                       SET usage_count = usage_count + 1, last_used_at = NOW()
+                       WHERE token_value = %s""",
+                    (token_value,),
+                    fetch='none'
+                )
+
+                # Log successful usage
+                self._log_token_usage(token_value, ip_address, user_agent, computer_name,
+                                    hardware_info, True, asset_id, None)
+
+                # Generate JWT token for agent authentication
+                agent_token = self._generate_agent_jwt_token(asset_id, client_id, site_id)
+
+                self.logger.info(f"Successfully updated existing asset {asset_id} for {computer_name}")
+
+                return {
+                    'success': True,
+                    'asset_id': asset_id,
+                    'client_id': client_id,
+                    'site_id': site_id,
+                    'client_name': validation_result['client_name'],
+                    'site_name': validation_result['site_name'],
+                    'agent_token': agent_token,
+                    'config': self._get_agent_config(),
+                    'existing_asset': True
+                }
+
+            # Create new asset record
             asset_data = {
                 'client_id': client_id,
                 'site_id': site_id,
@@ -432,7 +482,10 @@ class AgentsService:
                     'software': hardware_info.get('software', []),
                     'system_metrics': hardware_info.get('status', {}),
                     'os': hardware_info.get('os', ''),
-                    'registration_date': datetime.now().isoformat()
+                    'registration_date': datetime.now().isoformat(),
+                    'hardware_fingerprint': hardware_fingerprint,
+                    'network_interfaces': hardware_info.get('network_interfaces', []),
+                    'platform_details': hardware_info.get('platform_details', {})
                 }
             }
 
@@ -487,18 +540,128 @@ class AgentsService:
                 'config': self._get_agent_config()
             }
 
-        except Exception as e:
-            self.logger.error(f"Error registering agent with token {token_value}: {e}")
-            # Log failed attempt if we have token info
+        except ValueError as ve:
+            # Token validation errors - don't crash the backend
+            self.logger.warning(f"Token validation error for {token_value}: {ve}")
             try:
                 self._log_token_usage(token_value, ip_address, user_agent,
-                                    hardware_info.get('computer_name'), hardware_info,
-                                    False, None, str(e))
-            except:
-                pass
-            raise
+                                    hardware_info.get('computer_name', 'Unknown'), hardware_info,
+                                    False, None, str(ve))
+            except Exception as log_error:
+                self.logger.error(f"Failed to log token usage: {log_error}")
+            raise ve
+        except Exception as e:
+            # Unexpected errors - log but don't crash backend
+            self.logger.error(f"Unexpected error registering agent with token {token_value}: {e}", exc_info=True)
 
-    def _check_existing_asset_by_name(self, computer_name: str) -> Optional[Dict]:
+            # Try to log failed attempt
+            try:
+                self._log_token_usage(token_value, ip_address, user_agent,
+                                    hardware_info.get('computer_name', 'Unknown'), hardware_info,
+                                    False, None, f"Registration error: {str(e)}")
+            except Exception as log_error:
+                self.logger.error(f"Failed to log token usage after error: {log_error}")
+
+            # Re-raise as a controlled error to prevent backend crash
+            raise Exception(f"Agent registration failed: {str(e)}")
+
+    def _generate_hardware_fingerprint(self, hardware_info: Dict[str, Any]) -> str:
+        """Generate a unique hardware fingerprint from hardware information"""
+        try:
+            import hashlib
+
+            # Collect unique hardware identifiers
+            fingerprint_data = []
+
+            # Computer name
+            if hardware_info.get('computer_name'):
+                fingerprint_data.append(f"name:{hardware_info['computer_name']}")
+
+            # Network interfaces (MAC addresses)
+            network_interfaces = hardware_info.get('network_interfaces', [])
+            mac_addresses = []
+            for interface in network_interfaces:
+                if 'mac_address' in interface and interface['mac_address']:
+                    mac_addresses.append(interface['mac_address'].upper())
+
+            if mac_addresses:
+                mac_addresses.sort()  # Ensure consistent ordering
+                fingerprint_data.append(f"mac:{','.join(mac_addresses)}")
+
+            # Hardware details
+            hardware = hardware_info.get('hardware', {})
+            if hardware:
+                # CPU info
+                cpu = hardware.get('cpu', {})
+                if cpu.get('cores'):
+                    fingerprint_data.append(f"cpu_cores:{cpu['cores']}")
+
+                # Memory info
+                memory = hardware.get('memory', {})
+                if memory.get('total_bytes'):
+                    fingerprint_data.append(f"memory:{memory['total_bytes']}")
+
+                # Disk info
+                disk = hardware.get('disk', {})
+                if disk.get('total_bytes'):
+                    fingerprint_data.append(f"disk:{disk['total_bytes']}")
+
+            # Platform details
+            platform_details = hardware_info.get('platform_details', {})
+            if platform_details:
+                if platform_details.get('machine'):
+                    fingerprint_data.append(f"machine:{platform_details['machine']}")
+                if platform_details.get('processor'):
+                    fingerprint_data.append(f"processor:{platform_details['processor']}")
+
+            # Create hash from collected data
+            if fingerprint_data:
+                fingerprint_string = '|'.join(sorted(fingerprint_data))
+                fingerprint_hash = hashlib.sha256(fingerprint_string.encode('utf-8')).hexdigest()[:16]
+                self.logger.info(f"Generated hardware fingerprint: {fingerprint_hash} from {len(fingerprint_data)} identifiers")
+                return fingerprint_hash
+            else:
+                # Fallback to computer name hash if no hardware data available
+                fallback_data = hardware_info.get('computer_name', 'unknown')
+                fingerprint_hash = hashlib.sha256(fallback_data.encode('utf-8')).hexdigest()[:16]
+                self.logger.warning(f"Using fallback fingerprint: {fingerprint_hash}")
+                return fingerprint_hash
+
+        except Exception as e:
+            self.logger.error(f"Error generating hardware fingerprint: {e}")
+            # Return a fallback fingerprint
+            import hashlib
+            fallback_data = hardware_info.get('computer_name', 'unknown')
+            return hashlib.sha256(fallback_data.encode('utf-8')).hexdigest()[:16]
+
+    def _check_existing_asset_by_fingerprint(self, hardware_fingerprint: str,
+                                           client_id: str, site_id: str) -> Optional[Dict]:
+        """Check if asset already exists based on hardware fingerprint"""
+        try:
+            # Check by hardware fingerprint within the same client/site
+            existing_asset = self.db.execute_query(
+                """SELECT asset_id, name, client_id, site_id, specifications
+                   FROM assets
+                   WHERE client_id = %s
+                   AND site_id = %s
+                   AND status = 'active'
+                   AND specifications->>'hardware_fingerprint' = %s
+                   LIMIT 1""",
+                (client_id, site_id, hardware_fingerprint),
+                fetch='one'
+            )
+
+            if existing_asset:
+                self.logger.info(f"Found existing asset by hardware fingerprint: {hardware_fingerprint}")
+                return existing_asset
+
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error checking existing asset by fingerprint: {e}")
+            return None
+
+    def _check_existing_asset_by_name(self, asset_name: str) -> Optional[Dict]:
         """Check if asset already exists based on computer name"""
         try:
             # Check by computer name
@@ -508,19 +671,59 @@ class AgentsService:
                    WHERE name = %s
                    AND status = 'active'
                    LIMIT 1""",
-                (f"{computer_name} (Agent)",),
+                (asset_name,),
                 fetch='one'
             )
 
             if existing_asset:
-                self.logger.info(f"Found existing asset by computer name: {computer_name}")
+                self.logger.info(f"Found existing asset by name: {asset_name}")
                 return existing_asset
 
             return None
 
         except Exception as e:
-            self.logger.error(f"Error checking existing asset: {e}")
+            self.logger.error(f"Error checking existing asset by name: {e}")
             return None
+
+    def _update_existing_asset(self, asset_id: str, hardware_info: Dict[str, Any],
+                             hardware_fingerprint: str):
+        """Update existing asset with latest hardware information"""
+        try:
+            # Update asset with latest information
+            update_query = """
+            UPDATE assets
+            SET
+                agent_status = 'online',
+                last_seen = NOW(),
+                specifications = specifications || %s,
+                updated_at = NOW()
+            WHERE asset_id = %s
+            """
+
+            # Prepare updated specifications
+            updated_specs = {
+                'agent_version': hardware_info.get('agent_version', '1.0.0'),
+                'hardware': hardware_info.get('hardware', {}),
+                'software': hardware_info.get('software', []),
+                'system_metrics': hardware_info.get('status', {}),
+                'os': hardware_info.get('os', ''),
+                'last_registration_date': datetime.now().isoformat(),
+                'hardware_fingerprint': hardware_fingerprint,
+                'network_interfaces': hardware_info.get('network_interfaces', []),
+                'platform_details': hardware_info.get('platform_details', {})
+            }
+
+            self.db.execute_query(
+                update_query,
+                (json.dumps(updated_specs), asset_id),
+                fetch='none'
+            )
+
+            self.logger.info(f"Updated existing asset {asset_id} with latest hardware information")
+
+        except Exception as e:
+            self.logger.error(f"Error updating existing asset {asset_id}: {e}")
+            raise
 
     def _log_token_usage(self, token_value: str, ip_address: str, user_agent: str,
                         computer_name: str, hardware_info: Dict[str, Any],

@@ -55,6 +55,7 @@ except Exception as e:
         reports_bp = None
 from modules.agents.routes import agents_bp
 from modules.assets.routes import assets_bp
+from modules.bitlocker.routes import bitlocker_bp
 # Monthly scheduler disabled for now due to pandas dependency
 SCHEDULER_AVAILABLE = False
 monthly_scheduler = None
@@ -235,6 +236,8 @@ def create_app(config_name='development'):
     print(f"Registering assets blueprint: {assets_bp}", flush=True)
     app.register_blueprint(assets_bp, url_prefix='/api/assets')
     print("Assets blueprint registered successfully", flush=True)
+    app.register_blueprint(bitlocker_bp, url_prefix='/api/bitlocker')
+    print("BitLocker blueprint registered successfully", flush=True)
 
     # Initialize monthly reports scheduler (but don't start it automatically)
     # Initialize monthly reports scheduler only if available

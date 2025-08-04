@@ -254,7 +254,7 @@ def agent_heartbeat():
         if not asset_id:
             return current_app.response_manager.bad_request('asset_id field required')
 
-        current_app.logger.info(f"📡 Received {heartbeat_type} heartbeat from asset {asset_id}")
+        current_app.logger.info(f"Received {heartbeat_type} heartbeat from asset {asset_id}")
 
         # Handle tiered heartbeat processing
         import json
@@ -288,6 +288,28 @@ def agent_heartbeat():
                     status.get('cpu_percent', 0),
                     status.get('memory_percent', 0),
                     status.get('disk_percent', 0)
+                ),
+                fetch='none'
+            )
+
+            # NUEVO: Registrar heartbeat en tabla asset_heartbeats
+            heartbeat_insert_query = """
+            INSERT INTO asset_heartbeats (
+                asset_id, cpu_usage, memory_usage, disk_usage,
+                status, agent_version, network_status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+
+            current_app.db_manager.execute_query(
+                heartbeat_insert_query,
+                (
+                    asset_id,
+                    status.get('cpu_percent', 0),
+                    status.get('memory_percent', 0),
+                    status.get('disk_percent', 0),
+                    status.get('agent_status', 'online'),
+                    status.get('agent_version', '1.0.0'),
+                    'connected'
                 ),
                 fetch='none'
             )
@@ -346,6 +368,29 @@ def agent_heartbeat():
                 fetch='none'
             )
 
+            # NUEVO: Registrar heartbeat completo en tabla asset_heartbeats
+            heartbeat_insert_query = """
+            INSERT INTO asset_heartbeats (
+                asset_id, cpu_usage, memory_usage, disk_usage,
+                status, agent_version, network_status, system_uptime
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """
+
+            current_app.db_manager.execute_query(
+                heartbeat_insert_query,
+                (
+                    asset_id,
+                    status.get('cpu_usage', 0),
+                    status.get('memory_usage', 0),
+                    status.get('disk_usage', 0),
+                    status.get('agent_status', 'online'),
+                    status.get('agent_version', '1.0.0'),
+                    'connected',
+                    status.get('uptime', 0)
+                ),
+                fetch='none'
+            )
+
             # Update inventory if provided
             if hardware_inventory or software_inventory:
                 current_app.logger.info(f"Updating inventory snapshot for {asset_id}")
@@ -358,17 +403,28 @@ def agent_heartbeat():
 
                 inventory_hash = hashlib.md5(json.dumps(inventory_data, sort_keys=True).encode()).hexdigest()
 
-                # Insert new inventory snapshot
+                # Insert or update inventory snapshot
                 inventory_query = """
                 INSERT INTO assets_inventory_snapshots (
                     asset_id, hardware_summary, software_summary,
                     full_inventory_compressed, inventory_hash
                 ) VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (asset_id, version) DO NOTHING
+                ON CONFLICT (asset_id, version) DO UPDATE SET
+                    hardware_summary = EXCLUDED.hardware_summary,
+                    software_summary = EXCLUDED.software_summary,
+                    full_inventory_compressed = EXCLUDED.full_inventory_compressed,
+                    inventory_hash = EXCLUDED.inventory_hash,
+                    created_at = NOW()
                 """
 
                 import gzip
                 compressed_inventory = gzip.compress(json.dumps(inventory_data).encode())
+
+                # Log what we're about to save
+                current_app.logger.info(f"SAVING TO DB: About to save hardware inventory for {asset_id}")
+                if hardware_inventory and 'disks' in hardware_inventory:
+                    for i, disk in enumerate(hardware_inventory['disks']):
+                        current_app.logger.info(f"SAVING DISK {i+1}: health='{disk.get('health_status')}', smart='{disk.get('smart_status')}', interface='{disk.get('interface_type')}'")
 
                 current_app.db_manager.execute_query(
                     inventory_query,
@@ -381,6 +437,185 @@ def agent_heartbeat():
                     ),
                     fetch='none'
                 )
+
+                current_app.logger.info(f"SAVED TO DB: Hardware inventory saved successfully for {asset_id}")
+
+                # Process BitLocker data if present
+                if hardware_inventory and 'bitlocker' in hardware_inventory:
+                    try:
+                        current_app.logger.info(f"Processing BitLocker data for asset {asset_id}")
+                        bitlocker_data = hardware_inventory['bitlocker']
+                        
+                        if bitlocker_data.get('supported') and bitlocker_data.get('volumes'):
+                            from utils.encryption import encrypt_data
+                            
+                            for volume in bitlocker_data['volumes']:
+                                volume_letter = volume.get('volume_letter')
+                                recovery_key = volume.get('recovery_key')
+                                
+                                if volume_letter and recovery_key:
+                                    # Encrypt the recovery key
+                                    encrypted_key = encrypt_data(recovery_key)
+                                    
+                                    # Upsert BitLocker data
+                                    bitlocker_upsert_query = """
+                                        INSERT INTO bitlocker_keys (
+                                            asset_id, volume_letter, volume_label, protection_status,
+                                            encryption_method, key_protector_type, recovery_key_id,
+                                            recovery_key_encrypted, last_verified_at
+                                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                                        ON CONFLICT (asset_id, volume_letter) DO UPDATE SET
+                                            volume_label = EXCLUDED.volume_label,
+                                            protection_status = EXCLUDED.protection_status,
+                                            encryption_method = EXCLUDED.encryption_method,
+                                            key_protector_type = EXCLUDED.key_protector_type,
+                                            recovery_key_id = EXCLUDED.recovery_key_id,
+                                            recovery_key_encrypted = EXCLUDED.recovery_key_encrypted,
+                                            last_verified_at = EXCLUDED.last_verified_at,
+                                            updated_at = NOW()
+                                    """
+                                    
+                                    current_app.db_manager.execute_query(
+                                        bitlocker_upsert_query,
+                                        (
+                                            asset_id,
+                                            volume_letter,
+                                            volume.get('volume_label', 'Local Disk'),
+                                            volume.get('protection_status', 'Unknown'),
+                                            volume.get('encryption_method'),
+                                            volume.get('key_protector_type'),
+                                            volume.get('recovery_key_id'),
+                                            encrypted_key
+                                        ),
+                                        fetch='none'
+                                    )
+                                    
+                                    current_app.logger.info(f"✅ BitLocker data saved for volume {volume_letter}")
+                            
+                            current_app.logger.info(f"✅ BitLocker processing completed for asset {asset_id}")
+                        else:
+                            current_app.logger.info(f"BitLocker not supported or no volumes for asset {asset_id}")
+                    
+                    except Exception as e:
+                        current_app.logger.error(f"Error processing BitLocker data for asset {asset_id}: {e}")
+
+                # Process BitLocker data if present
+                if hardware_inventory and 'bitlocker' in hardware_inventory:
+                    try:
+                        current_app.logger.info(f"Processing BitLocker data for asset {asset_id}")
+                        bitlocker_data = hardware_inventory['bitlocker']
+                        
+                        if bitlocker_data.get('supported') and bitlocker_data.get('volumes'):
+                            from utils.encryption import encrypt_data
+                            
+                            for volume in bitlocker_data['volumes']:
+                                volume_letter = volume.get('volume_letter')
+                                recovery_key = volume.get('recovery_key')
+                                
+                                if volume_letter and recovery_key:
+                                    # Encrypt the recovery key
+                                    encrypted_key = encrypt_data(recovery_key)
+                                    
+                                    # Upsert BitLocker data
+                                    bitlocker_upsert_query = """
+                                        INSERT INTO bitlocker_keys (
+                                            asset_id, volume_letter, volume_label, protection_status,
+                                            encryption_method, key_protector_type, recovery_key_id,
+                                            recovery_key_encrypted, last_verified_at
+                                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                                        ON CONFLICT (asset_id, volume_letter) DO UPDATE SET
+                                            volume_label = EXCLUDED.volume_label,
+                                            protection_status = EXCLUDED.protection_status,
+                                            encryption_method = EXCLUDED.encryption_method,
+                                            key_protector_type = EXCLUDED.key_protector_type,
+                                            recovery_key_id = EXCLUDED.recovery_key_id,
+                                            recovery_key_encrypted = EXCLUDED.recovery_key_encrypted,
+                                            last_verified_at = EXCLUDED.last_verified_at,
+                                            updated_at = NOW()
+                                    """
+                                    
+                                    current_app.db_manager.execute_query(
+                                        bitlocker_upsert_query,
+                                        (
+                                            asset_id,
+                                            volume_letter,
+                                            volume.get('volume_label', 'Local Disk'),
+                                            volume.get('protection_status', 'Unknown'),
+                                            volume.get('encryption_method'),
+                                            volume.get('key_protector_type'),
+                                            volume.get('recovery_key_id'),
+                                            encrypted_key
+                                        ),
+                                        fetch='none'
+                                    )
+                                    
+                                    current_app.logger.info(f"✅ BitLocker data saved for volume {volume_letter}")
+                            
+                            current_app.logger.info(f"✅ BitLocker processing completed for asset {asset_id}")
+                        else:
+                            current_app.logger.info(f"BitLocker not supported or no volumes for asset {asset_id}")
+                    
+                    except Exception as e:
+                        current_app.logger.error(f"Error processing BitLocker data for asset {asset_id}: {e}")
+
+                # Process BitLocker data if present
+                if hardware_inventory and 'bitlocker' in hardware_inventory:
+                    try:
+                        current_app.logger.info(f"Processing BitLocker data for asset {asset_id}")
+                        bitlocker_data = hardware_inventory['bitlocker']
+                        
+                        if bitlocker_data.get('supported') and bitlocker_data.get('volumes'):
+                            from utils.encryption import encrypt_data
+                            
+                            for volume in bitlocker_data['volumes']:
+                                volume_letter = volume.get('volume_letter')
+                                recovery_key = volume.get('recovery_key')
+                                
+                                if volume_letter and recovery_key:
+                                    # Encrypt the recovery key
+                                    encrypted_key = encrypt_data(recovery_key)
+                                    
+                                    # Upsert BitLocker data
+                                    bitlocker_upsert_query = """
+                                        INSERT INTO bitlocker_keys (
+                                            asset_id, volume_letter, volume_label, protection_status,
+                                            encryption_method, key_protector_type, recovery_key_id,
+                                            recovery_key_encrypted, last_verified_at
+                                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                                        ON CONFLICT (asset_id, volume_letter) DO UPDATE SET
+                                            volume_label = EXCLUDED.volume_label,
+                                            protection_status = EXCLUDED.protection_status,
+                                            encryption_method = EXCLUDED.encryption_method,
+                                            key_protector_type = EXCLUDED.key_protector_type,
+                                            recovery_key_id = EXCLUDED.recovery_key_id,
+                                            recovery_key_encrypted = EXCLUDED.recovery_key_encrypted,
+                                            last_verified_at = EXCLUDED.last_verified_at,
+                                            updated_at = NOW()
+                                    """
+                                    
+                                    current_app.db_manager.execute_query(
+                                        bitlocker_upsert_query,
+                                        (
+                                            asset_id,
+                                            volume_letter,
+                                            volume.get('volume_label', 'Local Disk'),
+                                            volume.get('protection_status', 'Unknown'),
+                                            volume.get('encryption_method'),
+                                            volume.get('key_protector_type'),
+                                            volume.get('recovery_key_id'),
+                                            encrypted_key
+                                        ),
+                                        fetch='none'
+                                    )
+                                    
+                                    current_app.logger.info(f"✅ BitLocker data saved for volume {volume_letter}")
+                            
+                            current_app.logger.info(f"✅ BitLocker processing completed for asset {asset_id}")
+                        else:
+                            current_app.logger.info(f"BitLocker not supported or no volumes for asset {asset_id}")
+                    
+                    except Exception as e:
+                        current_app.logger.error(f"Error processing BitLocker data for asset {asset_id}: {e}")
 
                 # Also update main assets table for backward compatibility
                 update_data = {'system_metrics': status}
@@ -403,10 +638,10 @@ def agent_heartbeat():
                     fetch='none'
                 )
 
-            # Return longer interval for full heartbeats
+            # Return normal interval for all heartbeats (15 minutes)
             return current_app.response_manager.success({
                 'status': 'ok',
-                'next_heartbeat': 86400  # 24 hours for full heartbeats
+                'next_heartbeat': 900  # 15 minutes for all heartbeats
             })
 
     except Exception as e:

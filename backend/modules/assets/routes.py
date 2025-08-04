@@ -141,19 +141,20 @@ def get_organization_inventory():
 def get_technician_dashboard():
     """Get organized assets dashboard for technicians - grouped by client"""
     try:
-        # Get assets summary grouped by client with real-time status
+        # Get assets summary grouped by client with real-time status from heartbeats
         client_summary_query = """
         SELECT
             c.client_id,
             c.name as client_name,
             COUNT(a.asset_id) as total_assets,
-            COUNT(CASE WHEN st.last_seen > NOW() - INTERVAL '10 minutes' THEN 1 END) as online_assets,
-            COUNT(CASE WHEN st.last_seen BETWEEN NOW() - INTERVAL '1 hour' AND NOW() - INTERVAL '10 minutes' THEN 1 END) as warning_assets,
-            COUNT(CASE WHEN st.last_seen < NOW() - INTERVAL '1 hour' OR st.last_seen IS NULL THEN 1 END) as offline_assets,
+            COUNT(CASE WHEN COALESCE(h.last_heartbeat, st.last_seen) > NOW() - INTERVAL '20 minutes' THEN 1 END) as online_assets,
+            COUNT(CASE WHEN COALESCE(h.last_heartbeat, st.last_seen) BETWEEN NOW() - INTERVAL '1 hour' AND NOW() - INTERVAL '20 minutes' THEN 1 END) as warning_assets,
+            COUNT(CASE WHEN COALESCE(h.last_heartbeat, st.last_seen) < NOW() - INTERVAL '1 hour' OR (h.last_heartbeat IS NULL AND st.last_seen IS NULL) THEN 1 END) as offline_assets,
             MAX(COALESCE(st.last_seen, a.last_seen)) as last_update
         FROM clients c
         LEFT JOIN assets a ON c.client_id = a.client_id AND a.status = 'active'
         LEFT JOIN assets_status_optimized st ON a.asset_id = st.asset_id
+        LEFT JOIN asset_latest_heartbeat h ON a.asset_id = h.asset_id
         WHERE c.is_active = true
         GROUP BY c.client_id, c.name
         HAVING COUNT(a.asset_id) > 0
@@ -164,16 +165,17 @@ def get_technician_dashboard():
             client_summary_query, fetch='all'
         )
 
-        # Get overall summary with real-time status
+        # Get overall summary with real-time status from heartbeats
         overall_summary_query = """
         SELECT
             COUNT(a.asset_id) as total_assets,
-            COUNT(CASE WHEN st.last_seen > NOW() - INTERVAL '10 minutes' THEN 1 END) as online_assets,
-            COUNT(CASE WHEN st.last_seen BETWEEN NOW() - INTERVAL '1 hour' AND NOW() - INTERVAL '10 minutes' THEN 1 END) as warning_assets,
-            COUNT(CASE WHEN st.last_seen < NOW() - INTERVAL '1 hour' OR st.last_seen IS NULL THEN 1 END) as offline_assets,
-            MAX(COALESCE(st.last_seen, a.last_seen)) as last_update
+            COUNT(CASE WHEN COALESCE(h.last_heartbeat, st.last_seen) > NOW() - INTERVAL '20 minutes' THEN 1 END) as online_assets,
+            COUNT(CASE WHEN COALESCE(h.last_heartbeat, st.last_seen) BETWEEN NOW() - INTERVAL '1 hour' AND NOW() - INTERVAL '20 minutes' THEN 1 END) as warning_assets,
+            COUNT(CASE WHEN COALESCE(h.last_heartbeat, st.last_seen) < NOW() - INTERVAL '1 hour' OR (h.last_heartbeat IS NULL AND st.last_seen IS NULL) THEN 1 END) as offline_assets,
+            MAX(COALESCE(h.last_heartbeat, st.last_seen, a.last_seen)) as last_update
         FROM assets a
         LEFT JOIN assets_status_optimized st ON a.asset_id = st.asset_id
+        LEFT JOIN asset_latest_heartbeat h ON a.asset_id = h.asset_id
         WHERE a.status = 'active'
         """
 
@@ -276,7 +278,7 @@ def get_filtered_assets_for_technician():
             a.asset_id,
             a.name,
             COALESCE(st.agent_status, a.agent_status::text, 'offline') as agent_status,
-            COALESCE(st.last_seen, a.last_seen) as last_seen,
+            COALESCE(h.last_heartbeat, st.last_seen, a.last_seen) as last_seen,
             a.specifications,
             s.name as site_name,
             s.site_id,
@@ -288,14 +290,15 @@ def get_filtered_assets_for_technician():
             st.disk_percent,
             st.last_heartbeat,
             CASE
-                WHEN st.last_seen > NOW() - INTERVAL '10 minutes' THEN 'online'
-                WHEN st.last_seen > NOW() - INTERVAL '1 hour' THEN 'warning'
+                WHEN COALESCE(h.last_heartbeat, st.last_seen) > NOW() - INTERVAL '20 minutes' THEN 'online'
+                WHEN COALESCE(h.last_heartbeat, st.last_seen) > NOW() - INTERVAL '1 hour' THEN 'warning'
                 ELSE 'offline'
             END as connection_status
         FROM assets a
         JOIN sites s ON a.site_id = s.site_id
         JOIN clients c ON a.client_id = c.client_id
         LEFT JOIN assets_status_optimized st ON a.asset_id = st.asset_id
+        LEFT JOIN asset_latest_heartbeat h ON a.asset_id = h.asset_id
         WHERE {where_clause}
         ORDER BY c.name, s.name, a.name
         LIMIT %s OFFSET %s

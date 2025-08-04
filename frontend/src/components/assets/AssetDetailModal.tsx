@@ -15,9 +15,12 @@ import {
   Calendar,
   User,
   MapPin,
-  Building
+  Building,
+  Shield
 } from 'lucide-react';
 import { assetsService } from '../../services/assetsService';
+import BitLockerTab from './BitLockerTab';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Asset {
   asset_id: string;
@@ -39,10 +42,14 @@ interface AssetDetailModalProps {
 }
 
 const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, asset }) => {
+  const { user, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
   const [assetDetails, setAssetDetails] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if user can view BitLocker tab
+  const canViewBitLocker = hasRole(['superadmin', 'technician', 'client_admin']);
 
   useEffect(() => {
     if (isOpen && asset) {
@@ -165,7 +172,8 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, as
               { id: 'general', name: 'General', icon: Monitor },
               { id: 'hardware', name: 'Hardware', icon: Cpu },
               { id: 'software', name: 'Software', icon: HardDrive },
-              { id: 'metrics', name: 'Métricas', icon: Activity }
+              { id: 'metrics', name: 'Métricas', icon: Activity },
+              ...(canViewBitLocker ? [{ id: 'bitlocker', name: 'BitLocker', icon: Shield }] : [])
             ].map((tab) => {
               const Icon = tab.icon;
               return (
@@ -280,6 +288,12 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, as
                             <div><span className="font-medium">Plataforma:</span> {assetDetails.formatted_hardware.system.platform}</div>
                             <div><span className="font-medium">Procesador:</span> {assetDetails.formatted_hardware.system.processor}</div>
                             <div><span className="font-medium">Arquitectura:</span> {assetDetails.formatted_hardware.system.architecture}</div>
+                            {assetDetails.formatted_hardware.system.domain && (
+                              <div><span className="font-medium">Dominio:</span> {assetDetails.formatted_hardware.system.domain}</div>
+                            )}
+                            {assetDetails.formatted_hardware.system.workgroup && (
+                              <div><span className="font-medium">Grupo de Trabajo:</span> {assetDetails.formatted_hardware.system.workgroup}</div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -543,6 +557,13 @@ const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onClose, as
                   </div>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'bitlocker' && canViewBitLocker && (
+              <BitLockerTab
+                assetId={asset.asset_id}
+                userRole={user?.role || ''}
+              />
             )}
           </div>
         )}
