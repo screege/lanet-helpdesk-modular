@@ -6,6 +6,7 @@ const API_BASE_URL = '/api';
 // Create centralized Axios instance
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 10000, // 10 second timeout
 });
 
 // Request interceptor to add auth token
@@ -32,6 +33,13 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Handle network errors more gracefully
+    if (!error.response) {
+      // Network error (no response received)
+      console.warn('Network error detected, will retry automatically');
+      error.message = 'Network Error';
+      return Promise.reject(error);
+    }
 
     if (error.response && error.response.status === 401) {
       console.error("Token invalid or expired. Clearing session.");

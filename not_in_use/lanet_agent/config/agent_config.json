@@ -1,0 +1,55 @@
+{
+  "server": {
+    "base_url": "http://localhost:5001/api",
+    "production_url": "https://helpdesk.lanet.mx/api",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "verify_ssl": true,
+    "environment": "development",
+    "heartbeat_interval": 60,
+    "inventory_interval": 3600,
+    "metrics_interval": 300,
+    "server_url": "https://helpdesk.lanet.mx/api",
+    "tokens_default_expiry_days": "30",
+    "tokens_enabled": "true",
+    "tokens_max_usage": "0"
+  },
+  "agent": {
+    "heartbeat_interval": 86400,
+    "inventory_interval": 86400,
+    "metrics_interval": 3600,
+    "log_level": "INFO",
+    "auto_start": true,
+    "version": "1.0.0"
+  },
+  "ui": {
+    "show_notifications": true,
+    "minimize_to_tray": true,
+    "auto_hide_after": 5000,
+    "language": "es"
+  },
+  "monitoring": {
+    "cpu_threshold": 90,
+    "memory_threshold": 85,
+    "disk_threshold": 90,
+    "collect_logs": true,
+    "max_log_entries": 100
+  },
+  "security": {
+    "require_approval_for_scripts": true,
+    "allow_remote_assistance": true,
+    "encrypt_communications": true
+  },
+  "database": {
+    "local_db_path": "data/agent.db",
+    "backup_interval": 86400,
+    "max_backup_files": 7
+  },
+  "registration": {
+    "asset_id": "b0efd80c-15ac-493b-b4eb-ad325ddacdcd",
+    "client_id": "75f6b906-db3a-404d-b032-3a52eac324c4",
+    "site_id": "d01df78a-c48b-40c2-b943-ef0830e26bf1",
+    "registered": true,
+    "registration_date": "2025-07-26T08:30:00.000000"
+  }
+}

@@ -70,13 +70,28 @@ const TechnicianDashboard: React.FC = () => {
     loadDashboardData();
   }, []);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (retryCount = 0) => {
     try {
       setLoading(true);
       setError(null);
+
+      // Add small delay on first load to ensure auth is ready
+      if (retryCount === 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       const data = await assetsService.getTechnicianDashboard();
       setDashboardData(data);
     } catch (err: any) {
+      console.error('Dashboard load error:', err);
+
+      // Auto-retry once on network errors
+      if (retryCount === 0 && (err.message.includes('Network') || err.message.includes('timeout'))) {
+        console.log('Retrying dashboard load...');
+        setTimeout(() => loadDashboardData(1), 1000);
+        return;
+      }
+
       setError(err.message);
     } finally {
       setLoading(false);

@@ -56,10 +56,14 @@ const Assets: React.FC = () => {
   const [clients, setClients] = useState<{client_id: string, name: string}[]>([]);
   const [sites, setSites] = useState<{site_id: string, name: string, client_id: string}[]>([]);
 
-  const fetchAssetsData = async () => {
-
+  const fetchAssetsData = async (retryCount = 0) => {
     try {
       setLoading(true);
+
+      // Add small delay on first load to ensure auth is ready
+      if (retryCount === 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
       if (user?.role === 'client_admin') {
         // Client admin sees only their organization's assets
@@ -120,8 +124,17 @@ const Assets: React.FC = () => {
         });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching assets:', error);
+
+      // Auto-retry once on network errors
+      if (retryCount === 0 && (error.message?.includes('Network') || error.message?.includes('timeout'))) {
+        console.log('Retrying assets load...');
+        setTimeout(() => fetchAssetsData(1), 1000);
+        return;
+      }
+
+      // Only show alert if retry also failed
       alert('Error al cargar información de equipos: ' + error);
     } finally {
       setLoading(false);

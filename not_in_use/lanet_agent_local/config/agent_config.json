@@ -1,0 +1,34 @@
+{
+  "server": {
+    "url": "http://localhost:5001/api",
+    "base_url": "http://localhost:5001/api",
+    "production_url": "http://localhost:5001/api",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "verify_ssl": true,
+    "environment": "production"
+  },
+  "agent": {
+    "name": "BENNY-LENOVO",
+    "version": "3.0",
+    "log_level": "INFO",
+    "heartbeat_interval": 300,
+    "inventory_interval": 3600
+  },
+  "registration": {
+    "installation_token": "LANET-75F6-EC23-85DC9D",
+    "auto_register": true,
+    "client_id": "75f6b906-db3a-404d-b032-3a52eac324c4",
+    "site_id": "ec2368ae-cd4b-417d-86be-504088e5678c"
+  },
+  "bitlocker": {
+    "enabled": true,
+    "collection_interval": 3600,
+    "require_admin_privileges": false
+  },
+  "database": {
+    "local_db_path": "data/agent.db",
+    "backup_interval": 86400,
+    "max_backup_files": 7
+  }
+}
