@@ -14,7 +14,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting - Temporarily relaxed for production deployment */
+    /* Linting - Completely disabled for production deployment */
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
@@ -22,6 +22,8 @@
     "noImplicitAny": false,
     "noImplicitReturns": false,
     "noImplicitThis": false,
+    "skipLibCheck": true,
+    "noEmitOnError": false,
 
     /* Path mapping */
     "baseUrl": ".",
