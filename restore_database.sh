@@ -1,34 +1,68 @@
 #!/bin/bash
 
-echo "🔄 RESTAURANDO BASE DE DATOS DE DESARROLLO AL VPS..."
+# LANET Helpdesk V3 - Database Restoration Script
+# This script restores the database schema and data to the running PostgreSQL container
 
-# Crear directorio de backup
-mkdir -p /backup
+echo "🔄 Starting database restoration process..."
 
-# Verificar archivo de backup
-echo "📁 Verificando archivos en /backup/"
-ls -la /backup/
+# Check if PostgreSQL container is running
+if ! docker ps | grep -q "lanet-helpdesk-postgres"; then
+    echo "❌ PostgreSQL container is not running. Please start it first."
+    exit 1
+fi
 
-# Restaurar base de datos completa con RLS y RBAC
-echo "🗄️ Restaurando base de datos completa con RLS, RBAC y UTF-8..."
-export PGPASSWORD="Poikl55+*"
+echo "✅ PostgreSQL container is running"
 
-# Detener conexiones activas
-echo "🔌 Cerrando conexiones activas..."
-docker exec lanet-helpdesk-db psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'lanet_helpdesk' AND pid <> pg_backend_pid();"
+# Wait for PostgreSQL to be ready
+echo "⏳ Waiting for PostgreSQL to be ready..."
+sleep 10
 
-# Restaurar desde backup completo (incluye DROP/CREATE DATABASE)
-echo "📥 Restaurando desde backup completo..."
-docker exec -i lanet-helpdesk-db psql -U postgres < /backup/backup_complete_rls_rbac_20250715_094016.sql
+# Restore schema
+echo "📋 Restoring database schema..."
+docker exec -i lanet-helpdesk-postgres psql -U postgres -d lanet_helpdesk < database/clean_schema.sql
 
-echo "✅ Base de datos restaurada exitosamente con RLS y RBAC!"
+if [ $? -eq 0 ]; then
+    echo "✅ Schema restored successfully"
+else
+    echo "❌ Schema restoration failed"
+    exit 1
+fi
 
-# Verificar usuarios y roles
-echo "👥 Verificando usuarios en la base de datos..."
-docker exec lanet-helpdesk-db psql -U postgres -d lanet_helpdesk -c "SELECT email, role, active FROM users LIMIT 5;"
+# Restore RLS policies
+echo "🔒 Restoring RLS policies..."
+docker exec -i lanet-helpdesk-postgres psql -U postgres -d lanet_helpdesk < database/rls_policies.sql
 
-# Verificar RLS policies
-echo "🔒 Verificando políticas RLS..."
-docker exec lanet-helpdesk-db psql -U postgres -d lanet_helpdesk -c "SELECT schemaname, tablename, policyname FROM pg_policies WHERE schemaname = 'public' LIMIT 5;"
+if [ $? -eq 0 ]; then
+    echo "✅ RLS policies restored successfully"
+else
+    echo "❌ RLS policies restoration failed"
+    exit 1
+fi
 
-echo "🎉 ¡PROCESO COMPLETADO!"
+# Restore seed data
+echo "🌱 Restoring seed data..."
+docker exec -i lanet-helpdesk-postgres psql -U postgres -d lanet_helpdesk < database/seed_data.sql
+
+if [ $? -eq 0 ]; then
+    echo "✅ Seed data restored successfully"
+else
+    echo "❌ Seed data restoration failed"
+    exit 1
+fi
+
+echo "🎉 Database restoration completed successfully!"
+echo "📊 Checking database status..."
+
+# Check if tables were created
+TABLES=$(docker exec lanet-helpdesk-postgres psql -U postgres -d lanet_helpdesk -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")
+echo "📋 Tables created: $TABLES"
+
+# Check if users exist
+USERS=$(docker exec lanet-helpdesk-postgres psql -U postgres -d lanet_helpdesk -t -c "SELECT COUNT(*) FROM users;")
+echo "👥 Users in database: $USERS"
+
+# Check if clients exist
+CLIENTS=$(docker exec lanet-helpdesk-postgres psql -U postgres -d lanet_helpdesk -t -c "SELECT COUNT(*) FROM clients;")
+echo "🏢 Clients in database: $CLIENTS"
+
+echo "✅ Database restoration verification completed!"

@@ -12,10 +12,9 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Temporarily disable initialization scripts to debug container startup
-      # - ./database/clean_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      # - ./database/rls_policies.sql:/docker-entrypoint-initdb.d/02-rls.sql
-      # - ./database/seed_data.sql:/docker-entrypoint-initdb.d/03-seed.sql
+      - ./database/clean_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/rls_policies.sql:/docker-entrypoint-initdb.d/02-rls.sql
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/03-seed.sql
     ports:
       - "5432:5432"
     networks:
