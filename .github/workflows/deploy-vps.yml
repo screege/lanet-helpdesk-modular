@@ -75,7 +75,11 @@ jobs:
           # Stop existing containers gracefully
           echo "🛑 Stopping existing containers..."
           sudo docker-compose down --remove-orphans || true
-          
+
+          # Force remove any conflicting containers
+          echo "🧹 Force removing any conflicting containers..."
+          sudo docker rm -f lanet-helpdesk-frontend lanet-helpdesk-backend lanet-helpdesk-postgres lanet-helpdesk-redis lanet-helpdesk-sla-monitor lanet-helpdesk-email-processor 2>/dev/null || true
+
           # Clean up old images to save space
           echo "🧹 Cleaning up old Docker images..."
           sudo docker system prune -f || true
