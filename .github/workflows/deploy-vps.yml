@@ -67,14 +67,14 @@ jobs:
           sudo chown -R deploy:deploy ${{ env.DEPLOY_PATH }}
           
           # Create production environment if not exists
-          if [ ! -f deployment/docker/.env.production ]; then
+          if [ ! -f .env ]; then
             echo "📝 Creating production environment file..."
-            cp deployment/docker/.env.example deployment/docker/.env.production 2>/dev/null || true
+            cp .env.example .env 2>/dev/null || true
           fi
-          
+
           # Stop existing containers gracefully
           echo "🛑 Stopping existing containers..."
-          sudo docker-compose -f deployment/docker/docker-compose.yml down --remove-orphans || true
+          sudo docker-compose down --remove-orphans || true
           
           # Clean up old images to save space
           echo "🧹 Cleaning up old Docker images..."
@@ -86,7 +86,7 @@ jobs:
 
           # Build and start containers
           echo "🏗️ Building and starting containers..."
-          sudo docker-compose -f deployment/docker/docker-compose.yml up -d --build
+          sudo docker-compose up -d --build
 
           # Start SLA Monitor inside backend container
           echo "⚡ Starting SLA Monitor..."
@@ -101,11 +101,11 @@ jobs:
           echo "🔍 Running health checks..."
           
           # Check if containers are running
-          if sudo docker-compose -f deployment/docker/docker-compose.yml ps | grep -q "Up"; then
+          if sudo docker-compose ps | grep -q "Up"; then
             echo "✅ Containers are running"
           else
             echo "❌ Some containers failed to start"
-            sudo docker-compose -f deployment/docker/docker-compose.yml logs --tail=50
+            sudo docker-compose logs --tail=50
             exit 1
           fi
           
@@ -132,7 +132,7 @@ jobs:
         ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
           echo "📊 Post-deployment status:"
           echo "🐳 Docker containers:"
-          sudo docker-compose -f ${{ env.DEPLOY_PATH }}/deployment/docker/docker-compose.yml ps
+          sudo docker-compose -f ${{ env.DEPLOY_PATH }}/docker-compose.yml ps
           
           echo ""
           echo "💾 Disk usage:"
