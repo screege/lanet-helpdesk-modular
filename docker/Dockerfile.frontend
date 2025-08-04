@@ -24,8 +24,8 @@ COPY frontend/src ./src
 COPY frontend/public ./public
 COPY frontend/index.html ./
 
-# Build the application
-RUN npm run build
+# Build the application (skip TypeScript compilation for deployment)
+RUN npm run build:docker
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
