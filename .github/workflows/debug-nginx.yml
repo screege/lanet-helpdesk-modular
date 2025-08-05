@@ -1,0 +1,75 @@
+name: 🔍 Debug Nginx Specific Issues
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+env:
+  VPS_HOST: 104.168.159.24
+  VPS_PORT: 57411
+  VPS_USER: deploy
+  DEPLOY_PATH: /opt/lanet-helpdesk
+
+jobs:
+  debug-nginx:
+    name: 🔍 Nginx Specific Diagnostics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p ${{ env.VPS_PORT }} ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🔍 Nginx Specific Diagnostics
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+            set -e
+            
+            echo "🔍 NGINX SPECIFIC DIAGNOSTICS"
+            echo "================================================"
+            
+            echo "📋 Nginx Container Status:"
+            docker ps -a | grep nginx || echo "No nginx container found"
+            
+            echo ""
+            echo "📋 Nginx Container Logs (last 50 lines):"
+            docker logs --tail=50 lanet-helpdesk-nginx 2>&1 || echo "Cannot get nginx logs"
+            
+            echo ""
+            echo "📋 Nginx Configuration Test:"
+            docker exec lanet-helpdesk-nginx nginx -t 2>&1 || echo "Cannot test nginx config - container not running"
+            
+            echo ""
+            echo "📋 Nginx Configuration File:"
+            docker exec lanet-helpdesk-nginx cat /etc/nginx/conf.d/default.conf 2>&1 || echo "Cannot read nginx config - container not running"
+            
+            echo ""
+            echo "📋 Frontend Container Network Info:"
+            docker inspect lanet-helpdesk-frontend | grep -A 10 "NetworkSettings" || echo "Cannot inspect frontend container"
+            
+            echo ""
+            echo "📋 Network Connectivity Test from Nginx to Frontend:"
+            docker exec lanet-helpdesk-nginx ping -c 2 lanet-helpdesk-frontend 2>&1 || echo "Cannot ping from nginx to frontend"
+            
+            echo ""
+            echo "📋 Docker Network Info:"
+            docker network ls
+            docker network inspect lanet-network 2>&1 || echo "Cannot inspect lanet-network"
+            
+            echo ""
+            echo "📋 Host nginx.conf File:"
+            cat /opt/lanet-helpdesk/nginx/nginx.conf 2>&1 || echo "Cannot read host nginx.conf"
+            
+            echo ""
+            echo "📋 Docker Compose Nginx Service:"
+            cd /opt/lanet-helpdesk
+            docker-compose config | grep -A 20 "nginx:" || echo "Cannot get nginx service config"
+            
+            echo "================================================"
+            echo "✅ Nginx diagnostics completed!"
+          EOF
