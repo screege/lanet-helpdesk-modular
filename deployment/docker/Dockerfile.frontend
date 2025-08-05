@@ -10,8 +10,8 @@ RUN npm ci
 # Copy source code
 COPY frontend/ ./
 
-# Build the application
-RUN npm run build
+# Build the application (skip TypeScript compilation for production)
+RUN npm run build:docker
 
 # Production stage with Nginx
 FROM nginx:alpine
