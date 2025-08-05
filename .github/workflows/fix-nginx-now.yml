@@ -1,0 +1,39 @@
+name: 🔧 Fix Nginx NOW
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-nginx-immediately:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 🔧 Fix Nginx Content Issue RIGHT NOW
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -p 57411 104.168.159.24 >> ~/.ssh/known_hosts
+        
+        ssh -i ~/.ssh/id_ed25519 -p 57411 deploy@104.168.159.24 << 'EOF'
+          cd /opt/lanet-helpdesk
+          
+          echo "🔧 ARREGLANDO NGINX AHORA MISMO"
+          
+          # Ver qué está sirviendo
+          echo "Contenido actual:"
+          sudo docker exec lanet-helpdesk-frontend head -5 /usr/share/nginx/html/index.html
+          
+          # Reconstruir frontend
+          echo "Reconstruyendo frontend..."
+          sudo docker stop lanet-helpdesk-frontend
+          sudo docker rm lanet-helpdesk-frontend
+          sudo docker build -t docker-frontend -f deployment/docker/Dockerfile.frontend .
+          sudo docker-compose -f deployment/docker/docker-compose.yml up -d lanet-helpdesk-frontend
+          
+          sleep 10
+          
+          # Verificar
+          echo "Verificando:"
+          curl -I http://localhost
+          
+        EOF
