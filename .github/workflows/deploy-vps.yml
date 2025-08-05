@@ -74,7 +74,7 @@ jobs:
 
           # Stop existing containers gracefully
           echo "🛑 Stopping existing containers..."
-          sudo docker-compose down --remove-orphans || true
+          sudo docker-compose -f deployment/docker/docker-compose.yml down --remove-orphans || true
 
           # Force stop ALL Docker containers to free up ports
           echo "🛑 Force stopping ALL Docker containers..."
@@ -108,7 +108,7 @@ jobs:
 
           # Build and start containers
           echo "🏗️ Building and starting containers..."
-          sudo docker-compose up -d --build
+          sudo docker-compose -f deployment/docker/docker-compose.yml up -d --build
 
           # Start SLA Monitor inside backend container
           echo "⚡ Starting SLA Monitor..."
@@ -123,11 +123,11 @@ jobs:
           echo "🔍 Running health checks..."
           
           # Check if containers are running
-          if sudo docker-compose ps | grep -q "Up"; then
+          if sudo docker-compose -f deployment/docker/docker-compose.yml ps | grep -q "Up"; then
             echo "✅ Containers are running"
           else
             echo "❌ Some containers failed to start"
-            sudo docker-compose logs --tail=50
+            sudo docker-compose -f deployment/docker/docker-compose.yml logs --tail=50
             exit 1
           fi
           
@@ -136,6 +136,29 @@ jobs:
             echo "✅ Backend health check passed"
           else
             echo "⚠️ Backend health check failed, but continuing..."
+          fi
+
+          # Configure SSL automatically
+          echo "🔒 Configuring SSL with Let's Encrypt..."
+          if [ -f "deployment/setup_ssl.sh" ]; then
+            chmod +x deployment/setup_ssl.sh
+            sudo ./deployment/setup_ssl.sh || echo "⚠️ SSL setup failed, but application is running on HTTP"
+          else
+            echo "⚠️ SSL setup script not found"
+            # Manual SSL setup fallback
+            if command -v certbot &> /dev/null; then
+              if [ ! -d "/etc/letsencrypt/live/helpdesk.lanet.mx" ]; then
+                echo "📜 Obtaining SSL certificate..."
+                sudo docker-compose -f deployment/docker/docker-compose.yml stop frontend || true
+                sudo certbot certonly --standalone -d helpdesk.lanet.mx --non-interactive --agree-tos --email screege@hotmail.com || echo "⚠️ SSL certificate failed"
+                sudo docker-compose -f deployment/docker/docker-compose.yml up -d frontend || true
+              else
+                echo "✅ SSL certificate already exists"
+              fi
+            else
+              echo "📦 Installing certbot..."
+              sudo apt update && sudo apt install -y certbot
+            fi
           fi
           
           # Check frontend
