@@ -82,7 +82,7 @@ jobs:
 
           # Force remove any conflicting containers
           echo "🧹 Force removing any conflicting containers..."
-          sudo docker rm -f lanet-helpdesk-frontend lanet-helpdesk-backend lanet-helpdesk-postgres lanet-helpdesk-redis lanet-helpdesk-sla-monitor lanet-helpdesk-email-processor 2>/dev/null || true
+          sudo docker rm -f lanet-helpdesk-frontend lanet-helpdesk-backend lanet-helpdesk-postgres lanet-helpdesk-redis lanet-helpdesk-sla-monitor lanet-helpdesk-email-processor lanet-helpdesk-nginx 2>/dev/null || true
 
           # Remove any containers using port 5432
           echo "🔍 Removing any containers using port 5432..."

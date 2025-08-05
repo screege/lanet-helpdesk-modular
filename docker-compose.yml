@@ -123,9 +123,25 @@ services:
       context: .
       dockerfile: docker/Dockerfile.frontend
     container_name: lanet-helpdesk-frontend
-    ports:
-      - "5173:80"
+    # Remove external port exposure - nginx will handle this
     depends_on:
+      - backend
+    networks:
+      - lanet-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: lanet-helpdesk-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
       - backend
     networks:
       - lanet-network
