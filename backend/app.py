@@ -78,14 +78,19 @@ def create_app(config_name='development'):
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
-    # Initialize extensions - CORS for frontend (supports multiple ports)
+    # Initialize extensions - CORS for frontend (supports multiple environments)
+    # Get CORS origins from environment variable or use development defaults
+    cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175')
+    origins_list = [origin.strip() for origin in cors_origins.split(',')]
+
     CORS(app,
-         origins=['http://localhost:5173', 'http://127.0.0.1:5173',
-                 'http://localhost:5174', 'http://127.0.0.1:5174',
-                 'http://localhost:5175', 'http://127.0.0.1:5175'],
+         origins=origins_list,
          allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
          supports_credentials=True)
+
+    # Log CORS configuration for debugging
+    print(f"🌐 CORS configured with origins: {origins_list}", flush=True)
     jwt = JWTManager(app)
     
     # Initialize core managers

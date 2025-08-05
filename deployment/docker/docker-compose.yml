@@ -34,6 +34,7 @@ services:
       FLASK_ENV: production
       UPLOAD_FOLDER: /app/uploads
       REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: https://helpdesk.lanet.mx,http://localhost:5173,http://127.0.0.1:5173
       SMTP_HOST: mail.compushop.com.mx
       SMTP_PORT: 587
       SMTP_USERNAME: ti@compushop.com.mx
