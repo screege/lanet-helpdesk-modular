@@ -66,11 +66,10 @@ jobs:
           # Set proper permissions
           sudo chown -R deploy:deploy ${{ env.DEPLOY_PATH }}
           
-          # Create production environment if not exists
-          if [ ! -f .env ]; then
-            echo "📝 Creating production environment file..."
-            cp .env.example .env 2>/dev/null || true
-          fi
+          # Create production environment files
+          echo "📝 Creating production environment files..."
+          cp .env.example .env 2>/dev/null || true
+          cp deployment/docker/.env.production deployment/docker/.env 2>/dev/null || true
 
           # Stop existing containers gracefully
           echo "🛑 Stopping existing containers..."
