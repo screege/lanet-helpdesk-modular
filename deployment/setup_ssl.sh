@@ -58,6 +58,7 @@ fi
 
 # Detener frontend temporalmente para obtener certificado
 log "🛑 Deteniendo frontend temporalmente..."
+cd /opt/lanet-helpdesk
 docker-compose -f deployment/docker/docker-compose.yml stop frontend || true
 
 # Obtener certificado SSL
@@ -80,6 +81,20 @@ if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
 fi
 
 log "✅ Certificado SSL obtenido exitosamente"
+
+# Actualizar configuración nginx a SSL
+log "🔧 Actualizando configuración nginx a SSL..."
+cp /opt/lanet-helpdesk/deployment/docker/nginx-ssl.conf /opt/lanet-helpdesk/deployment/docker/nginx-http.conf
+
+# Actualizar docker-compose para usar SSL
+log "🔧 Actualizando docker-compose para SSL..."
+sed -i 's|nginx-http.conf|nginx-ssl.conf|g' /opt/lanet-helpdesk/deployment/docker/docker-compose.yml
+
+# Agregar montaje de certificados SSL
+log "🔧 Agregando montaje de certificados SSL..."
+if ! grep -q "letsencrypt" /opt/lanet-helpdesk/deployment/docker/docker-compose.yml; then
+    sed -i '/nginx-ssl.conf:ro/a\      - /etc/letsencrypt/live/helpdesk.lanet.mx/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro\n      - /etc/letsencrypt/live/helpdesk.lanet.mx/privkey.pem:/etc/ssl/private/privkey.pem:ro' /opt/lanet-helpdesk/deployment/docker/docker-compose.yml
+fi
 
 # Reiniciar frontend con SSL
 log "🚀 Reiniciando frontend con configuración SSL..."

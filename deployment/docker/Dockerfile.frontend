@@ -23,7 +23,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 RUN mkdir -p /etc/ssl/certs /etc/ssl/private
 
 # Copy nginx configuration (will be overridden by volume mount)
-COPY deployment/docker/nginx-ssl.conf /etc/nginx/conf.d/default.conf
+COPY deployment/docker/nginx-http.conf /etc/nginx/conf.d/default.conf
 
 # Expose ports
 EXPOSE 80 443
