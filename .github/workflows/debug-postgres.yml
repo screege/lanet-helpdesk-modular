@@ -1,0 +1,103 @@
+name: 🔍 Debug PostgreSQL Issues
+
+on:
+  workflow_dispatch:
+
+env:
+  VPS_HOST: 104.168.159.24
+  VPS_PORT: 57411
+  VPS_USER: deploy
+  DEPLOY_PATH: /opt/lanet-helpdesk
+
+jobs:
+  debug-postgres:
+    runs-on: ubuntu-latest
+    name: 🔍 Debug PostgreSQL Container Issues
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -p ${{ env.VPS_PORT }} ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: 🧪 Test SSH Connection
+      run: ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'SSH connection successful'"
+      
+    - name: 🔍 Debug PostgreSQL Container
+      run: |
+        ssh -i ~/.ssh/id_ed25519 -p ${{ env.VPS_PORT }} ${{ env.VPS_USER }}@${{ env.VPS_HOST }} << 'EOF'
+          set -e
+          
+          echo "🔍 PostgreSQL Container Diagnostics"
+          echo "=================================="
+          
+          cd /opt/lanet-helpdesk
+          
+          echo "📁 Checking .env files..."
+          echo "Root .env exists: $(test -f .env && echo 'YES' || echo 'NO')"
+          echo "Docker .env exists: $(test -f deployment/docker/.env && echo 'YES' || echo 'NO')"
+          echo "Docker .env.production exists: $(test -f deployment/docker/.env.production && echo 'YES' || echo 'NO')"
+          
+          if [ -f deployment/docker/.env ]; then
+            echo "📄 Docker .env content (first 10 lines):"
+            head -10 deployment/docker/.env
+          fi
+          
+          echo ""
+          echo "🐳 Docker Container Status:"
+          sudo docker ps -a --filter "name=lanet-helpdesk"
+          
+          echo ""
+          echo "🔍 PostgreSQL Container Logs (last 50 lines):"
+          sudo docker logs lanet-helpdesk-db --tail=50 2>&1 || echo "No PostgreSQL container logs available"
+          
+          echo ""
+          echo "🔍 Trying to start PostgreSQL container manually..."
+          sudo docker-compose -f deployment/docker/docker-compose.yml up -d lanet-helpdesk-db || echo "Failed to start PostgreSQL"
+          
+          echo ""
+          echo "⏳ Waiting 10 seconds for PostgreSQL to start..."
+          sleep 10
+          
+          echo ""
+          echo "🔍 PostgreSQL Container Status After Manual Start:"
+          sudo docker ps -a --filter "name=lanet-helpdesk-db"
+          
+          echo ""
+          echo "🔍 PostgreSQL Container Logs After Manual Start:"
+          sudo docker logs lanet-helpdesk-db --tail=30 2>&1 || echo "No logs available"
+          
+          echo ""
+          echo "🔍 PostgreSQL Health Check:"
+          sudo docker exec lanet-helpdesk-db pg_isready -U postgres 2>&1 || echo "PostgreSQL not ready"
+          
+          echo ""
+          echo "🔍 Environment Variables in PostgreSQL Container:"
+          sudo docker exec lanet-helpdesk-db env | grep -E "(POSTGRES|DATABASE)" 2>&1 || echo "No environment variables found"
+          
+          echo ""
+          echo "🔍 PostgreSQL Process Status:"
+          sudo docker exec lanet-helpdesk-db ps aux 2>&1 || echo "Cannot check processes"
+          
+          echo ""
+          echo "🔍 PostgreSQL Configuration Files:"
+          sudo docker exec lanet-helpdesk-db ls -la /var/lib/postgresql/data/ 2>&1 || echo "Cannot list PostgreSQL data directory"
+          
+          echo ""
+          echo "🔍 Disk Space:"
+          df -h
+          
+          echo ""
+          echo "🔍 Memory Usage:"
+          free -h
+          
+          echo ""
+          echo "🔍 Docker System Info:"
+          sudo docker system df
+          
+        EOF
